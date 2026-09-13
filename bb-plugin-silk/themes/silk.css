@@ -1,0 +1,144 @@
+/* Silk: neutral surfaces with a Notion-inspired blue accent. */
+:root {
+  --silk-stop: #dc454b;
+  --canvas: #ffffff;
+  --ink: #37352f;
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: #ffffff;
+  --card-foreground: var(--ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--ink);
+  --primary: #2383e2;
+  --primary-foreground: #ffffff;
+  --ring: var(--primary);
+  --timeline-accent: #176fbd;
+  --file-accent: var(--timeline-accent);
+  --secondary: #f1f1ef;
+  --secondary-foreground: var(--ink);
+  --accent: #eeeeec;
+  --accent-foreground: var(--ink);
+  --muted: #f1f1ef;
+  --muted-foreground: #73726e;
+  --subtle-foreground: #807f7a;
+  --readback-foreground: #73726e;
+  --border: #e5e5e3;
+  --sidebar: #f7f7f5;
+  --sidebar-foreground: var(--ink);
+  --sidebar-accent: #ebebea;
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: #e9e9e7;
+  --sidebar-ring: var(--primary);
+}
+.dark {
+  --silk-stop: var(--destructive);
+  --canvas: #131314;
+  --ink: #dededc;
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: #202021;
+  --card-foreground: var(--ink);
+  --popover: #202021;
+  --popover-foreground: var(--ink);
+  --primary: #2383e2;
+  --primary-foreground: #ffffff;
+  --ring: var(--primary);
+  --timeline-accent: #529fe9;
+  --file-accent: var(--timeline-accent);
+  --secondary: #262626;
+  --secondary-foreground: var(--ink);
+  --accent: #252525;
+  --accent-foreground: var(--ink);
+  --muted: #262626;
+  --muted-foreground: #a3a3a1;
+  --subtle-foreground: #858583;
+  --readback-foreground: #969694;
+  --border: #2b2b2b;
+  --sidebar: #0a0a0b;
+  --sidebar-foreground: #c7c7c5;
+  --sidebar-accent: #1d1d1e;
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: #202021;
+  --sidebar-ring: var(--primary);
+  --surface-raised-solid: #202021;
+}
+
+/* BB uses primary for tooltip surfaces and foreground for submit buttons.
+   Correct those semantic roles only while this palette is loaded. */
+[data-radix-popper-content-wrapper] > .bg-primary:has([role="tooltip"]) {
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+}
+[data-promptbox-submit-action][type="submit"],
+button:is([aria-label="Stop and transcribe recording"], [aria-label="Transcribing voice input"]) {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+[data-promptbox-submit-action][type="submit"]:hover,
+button[aria-label="Stop and transcribe recording"]:hover {
+  background-color: color-mix(in srgb, var(--primary) 90%, var(--foreground));
+}
+button[data-promptbox-submit-action][aria-label="Start voice input"] {
+  background-color: transparent;
+  color: var(--foreground);
+}
+button[data-promptbox-submit-action][aria-label="Start voice input"]:hover {
+  background-color: var(--state-hover);
+  color: var(--foreground);
+}
+.dark [data-promptbox-shell] .group\/promptbox {
+  background-color: #202021;
+}
+
+/* Thread selection uses state-active, not sidebar-accent. Keep the sidebar's
+   active and hover surfaces close to the sampled near-black background. */
+.dark [data-sidebar="sidebar"] {
+  --state-active: #1d1d1e;
+  --state-hover: #161617;
+}
+
+[data-promptbox-submit-action][aria-label="Stop run"] {
+  background-color: var(--silk-stop);
+  color: #ffffff;
+}
+[data-promptbox-submit-action][aria-label="Stop run"]:hover {
+  background-color: color-mix(in srgb, var(--silk-stop) 90%, var(--foreground));
+}
+
+/* BB's shared Skeleton uses the primary-tinted selection surface. */
+.animate-pulse.bg-surface-selected {
+  background-color: var(--muted);
+}
+
+/* Model picker section labels sit on the menu surface, not the page canvas. */
+.bg-popover:has([aria-label="Search models"], [aria-label="Reasoning"], [data-model-loading-row]) .sticky.bg-background {
+  background-color: var(--popover);
+}
+
+/* Native switches: a visible neutral track and white thumb in both modes. */
+button[role="switch"][aria-checked="false"] {
+  background-color: #d4d4d4;
+  border-color: #bdbdbd;
+}
+.dark button[role="switch"][aria-checked="false"] {
+  background-color: #343436;
+  border-color: #4b4b4d;
+}
+button[role="switch"][aria-checked="true"] {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+button[role="switch"] > span[aria-hidden][data-state] {
+  background-color: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / .2);
+}
+
+/* Keep desktop New thread at the bottom, including before plugin hydration. */
+div[class~="@container/page"]:has(#root-compose-prompt) > div:has(> [data-promptbox-shell]) {
+  min-height: 100%;
+  justify-content: flex-end;
+}
+
+/* Transcription is busy, not unavailable: retain the confirm action color. */
+button[aria-label="Transcribing voice input"]:disabled { opacity: 1; }

@@ -1,0 +1,287 @@
+import { it, expect, vi } from "vitest";
+import { EventEmitter } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { experimental_createHostEntryHarness } from "@get-bb/plugin-sdk/testing/host";
+const mock = vi.hoisted(() => ({
+  close: vi.fn(async () => {}),
+  send: vi.fn(async (_method: string, _params: any) => ({})),
+  evaluate: vi.fn(async () => "https://example.com"),
+  events: [] as string[],
+  commands: [] as string[][],
+}));
+vi.mock("../src/runtime", () => ({
+  ensureRuntime: async () => "/binary",
+  installed: async () => true,
+  runtimePath: () => "/binary",
+}));
+vi.mock("../src/managed", () => ({
+  managedEnv: () => ({}),
+  diagnostics: async () => ({}),
+  installManaged: async () => {},
+  launchManaged: async () => ({
+    endpoint: "ws://owned",
+    profile: "/owned/profile",
+    process: new EventEmitter(),
+    close: mock.close,
+  }),
+}));
+vi.mock("../src/process", () => ({
+  runProcess: async (_binary: string, args: string[]) => {
+    mock.commands.push(args);
+    return '{"success":true,"data":{}}';
+  },
+}));
+vi.mock("../src/cdp", () => ({
+  Cdp: {
+    connect: async () => ({
+      targetId: "managed",
+      send: mock.send,
+      evaluate: mock.evaluate,
+      close: () => mock.events.push("cdp-close"),
+    }),
+  },
+}));
+vi.mock("../src/bridge", () => ({
+  Bridge: {
+    open: () => {
+      throw Error("Managed mode must not use native bridge");
+    },
+  },
+}));
+import entry from "../host";
+it("owns managed Chrome, blocks viewer input during a job, and stops Chrome after pointer cancellation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "browse-managed-host-")),
+    h = experimental_createHostEntryHarness(entry, {
+      experimental_paths: { dataDir: root, tempDir: root },
+    });
+  async function wait(j: any) {
+    while (j.status === "running") {
+      await new Promise((r) => setTimeout(r, 5));
+      j = await h.experimental_call("job", { id: j.id });
+    }
+    return j;
+  }
+  mock.close.mockImplementation(async () => {
+    mock.events.push("browser-close");
+  });
+  mock.send.mockImplementation(async (_method: any, params: any) => {
+    if (params.type) mock.events.push(params.type);
+    return {};
+  });
+  try {
+    const j = await h.experimental_call("connect", {
+      id: "ab-managed-host",
+      mode: "managed",
+      expiresAt: Date.now() + 60000,
+    });
+    expect((await wait(j)).status).toBe("succeeded");
+    const running = await h.experimental_call("submit", {
+      id: "ab-managed-host",
+      operation: {
+        kind: "sequence",
+        steps: [
+          {
+            kind: "gesture",
+            strokes: [Array.from({ length: 100 }, (_, i) => ({ x: i, y: 10 }))],
+            intervalMs: 30,
+          },
+        ],
+      },
+    });
+    await expect(
+      h.experimental_call("input", {
+        id: "ab-managed-host",
+        input: { kind: "text", text: "conflict" },
+      }),
+    ).rejects.toThrow("busy");
+    await h.experimental_call("cancel", { id: running.id });
+    expect((await wait(running)).status).toBe("cancelled");
+    expect(mock.events.indexOf("browser-close")).toBeGreaterThan(
+      mock.events.indexOf("mouseReleased"),
+    );
+    expect(mock.close).toHaveBeenCalled();
+  } finally {
+    await h.experimental_dispose();
+    expect(h.experimental_getRetainedWorkerLeaseCount()).toBe(0);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("cancelling a completed job is harmless, and concurrent releases dispose the browser once", async () => {
+  const root = await mkdtemp(join(tmpdir(), "browse-completed-")),
+    h = experimental_createHostEntryHarness(entry, {
+      experimental_paths: { dataDir: root, tempDir: root },
+    });
+  mock.close.mockClear();
+  mock.events.length = 0;
+  try {
+    let j = await h.experimental_call("connect", {
+      id: "ab-completed-cancel",
+      mode: "managed",
+      expiresAt: Date.now() + 60000,
+    });
+    while (j.status === "running") {
+      await new Promise((r) => setTimeout(r, 5));
+      j = await h.experimental_call("job", { id: j.id });
+    }
+    expect(j.status).toBe("succeeded");
+    await h.experimental_call("cancel", { id: j.id });
+    expect(mock.close).not.toHaveBeenCalled();
+    expect(
+      (await h.experimental_call("inspect", { id: "ab-completed-cancel" }))
+        .status,
+    ).toBe("ready");
+    await Promise.all(
+      Array.from({ length: 5 }, () =>
+        h.experimental_call("release", { id: "ab-completed-cancel" }),
+      ),
+    );
+    const closing = mock.commands.filter((args) => args.at(-1) === "close");
+    expect(closing.length).toBeGreaterThan(0);
+    expect(closing.every((args) => !args.includes("--cdp"))).toBe(true);
+    expect(mock.close).toHaveBeenCalledOnce();
+    expect(h.experimental_getRetainedWorkerLeaseCount()).toBe(0);
+    expect(
+      (await h.experimental_call("inspect", { id: "ab-completed-cancel" }))
+        .status,
+    ).toBe("released");
+  } finally {
+    await h.experimental_dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("reserves a session ID before asynchronous filesystem work", async () => {
+  const root = await mkdtemp(join(tmpdir(), "browse-reserve-"));
+  const h = experimental_createHostEntryHarness(entry, {
+    experimental_paths: { dataDir: root, tempDir: root },
+  });
+  try {
+    const results = await Promise.allSettled(
+      Array.from({ length: 2 }, () =>
+        h.experimental_call("connect", {
+          id: "ab-same-id",
+          mode: "managed",
+          expiresAt: Date.now() + 60000,
+        }),
+      ),
+    );
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+    const result = results.find(
+      (r) => r.status === "fulfilled",
+    ) as PromiseFulfilledResult<any>;
+    let job = result.value;
+    while (job.status === "running") {
+      await new Promise((r) => setTimeout(r, 5));
+      job = await h.experimental_call("job", { id: job.id });
+    }
+    expect(job.status).toBe("succeeded");
+    await h.experimental_call("release", { id: "ab-same-id" });
+    expect(h.experimental_getRetainedWorkerLeaseCount()).toBe(0);
+  } finally {
+    await h.experimental_dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("uses a resized viewport for live frames and scroll coordinates", async () => {
+  const root = await mkdtemp(join(tmpdir(), "browse-viewport-"));
+  const h = experimental_createHostEntryHarness(entry, {
+    experimental_paths: { dataDir: root, tempDir: root },
+  });
+  mock.send.mockImplementation(async (method: string) =>
+    method === "Page.getLayoutMetrics"
+      ? {
+          cssVisualViewport: {
+            clientWidth: 390,
+            clientHeight: 600,
+            pageX: 0,
+            pageY: 500,
+          },
+        }
+      : method === "Page.captureScreenshot"
+        ? { data: "jpeg" }
+        : {},
+  );
+  try {
+    let j = await h.experimental_call("connect", {
+      id: "ab-viewport",
+      mode: "managed",
+      expiresAt: Date.now() + 60000,
+    });
+    while (j.status === "running") {
+      await new Promise((r) => setTimeout(r, 5));
+      j = await h.experimental_call("job", { id: j.id });
+    }
+    expect(j.status).toBe("succeeded");
+    expect(
+      await h.experimental_call("frame", { id: "ab-viewport" }),
+    ).toMatchObject({ data: "jpeg", width: 390, height: 600 });
+    expect(mock.send).toHaveBeenCalledWith(
+      "Page.captureScreenshot",
+      expect.objectContaining({
+        clip: { x: 0, y: 500, width: 390, height: 600, scale: 1 },
+      }),
+      true,
+      5000,
+    );
+    await h.experimental_call("input", {
+      id: "ab-viewport",
+      input: { kind: "scroll", deltaY: 300 },
+    });
+    expect(mock.send).toHaveBeenCalledWith(
+      "Input.dispatchMouseEvent",
+      expect.objectContaining({ type: "mouseWheel", x: 195, y: 300 }),
+    );
+  } finally {
+    await h.experimental_dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("closing an active job completes without the shutdown fallback delay", async () => {
+  const root = await mkdtemp(join(tmpdir(), "browse-close-active-"));
+  const h = experimental_createHostEntryHarness(entry, {
+    experimental_paths: { dataDir: root, tempDir: root },
+  });
+  mock.send.mockImplementation(async () => ({}));
+  try {
+    let j = await h.experimental_call("connect", {
+      id: "ab-close-active",
+      mode: "managed",
+      expiresAt: Date.now() + 60000,
+    });
+    while (j.status === "running") {
+      await new Promise((r) => setTimeout(r, 5));
+      j = await h.experimental_call("job", { id: j.id });
+    }
+    expect(j.status).toBe("succeeded");
+    j = await h.experimental_call("submit", {
+      id: "ab-close-active",
+      operation: {
+        kind: "sequence",
+        steps: [
+          {
+            kind: "gesture",
+            strokes: [Array.from({ length: 100 }, (_, i) => ({ x: i, y: 20 }))],
+            intervalMs: 30,
+          },
+        ],
+      },
+    });
+    expect(j.status).toBe("running");
+    const started = performance.now();
+    await h.experimental_call("release", { id: "ab-close-active" });
+    expect(performance.now() - started).toBeLessThan(1200);
+    expect((await h.experimental_call("job", { id: j.id })).status).toBe(
+      "cancelled",
+    );
+    expect(h.experimental_getRetainedWorkerLeaseCount()).toBe(0);
+  } finally {
+    await h.experimental_dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});

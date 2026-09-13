@@ -1,0 +1,14 @@
+**/node_modules/
+**/dist/
+**/.env
+**/.env.*
+**/secrets/
+**/host-data/
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/__pycache__/
+**/validation/artifacts/
+**/validation/recovery-*.json
+maintenance/recovery/
+maintenance/reports/

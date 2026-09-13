@@ -1,0 +1,404 @@
+.silk-home { position: relative; isolation: isolate; background: var(--background); }
+.silk-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; image-rendering: pixelated; object-fit: cover; opacity: 0; transition: opacity 240ms ease-out; }
+.silk-wallpaper[data-ready] { opacity: 1; }
+.silk-shield { position: absolute; inset: 0; z-index: -1; pointer-events: none; --shield-color: var(--background); background: linear-gradient(to bottom, color-mix(in srgb, var(--shield-color) 32%, transparent) 0%, color-mix(in srgb, var(--shield-color) 65%, transparent) 36%, color-mix(in srgb, var(--shield-color) 88%, transparent) 66%, var(--shield-color) 100%); }
+.dark .silk-shield { --shield-color: #000; background: linear-gradient(to bottom, rgb(0 0 0 / .46) 0%, rgb(0 0 0 / .72) 36%, rgb(0 0 0 / .91) 66%, #000 100%); }
+.silk-page { position: relative; z-index: 0; }
+.silk-shield { opacity: 1; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .silk-wallpaper, .silk-shield { transition: none; }
+}
+
+/* Hide the workspace launcher and its shortcut hint as one toolbar item. */
+span:has(> div > button[aria-label^="Open workspace in "]) {
+  display: none;
+}
+
+/* Keep environment details without the adjacent new-thread shortcut. */
+button[aria-label="New thread in this environment"] {
+  display: none;
+}
+
+/* Sidebar state artwork. BB retains its labels, state priority and hover controls. */
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Thread working"],[aria-label="Thread working with unsubmitted draft"],[aria-label="Workflow running"],[aria-label="Background agent running"],[aria-label="Background command running"],[aria-label="Plan mode active"],[aria-label="Goal active"])),
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread needs user input"]),
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Unread thread failed"],[aria-label="Queued message failed to send"])),
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Unread thread succeeded"]),
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread has a message waiting to send"]),
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread has unsubmitted draft"]) {
+  position: relative;
+}
+
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Thread working"],[aria-label="Thread working with unsubmitted draft"],[aria-label="Workflow running"],[aria-label="Background agent running"],[aria-label="Background command running"],[aria-label="Plan mode active"],[aria-label="Goal active"])) > *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread needs user input"]) > *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Unread thread failed"],[aria-label="Queued message failed to send"])) > *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Unread thread succeeded"]) > *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread has a message waiting to send"]) > *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread has unsubmitted draft"]) > * {
+  opacity: 0;
+  animation: none !important;
+}
+
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Thread working"],[aria-label="Thread working with unsubmitted draft"],[aria-label="Workflow running"],[aria-label="Background agent running"],[aria-label="Background command running"],[aria-label="Plan mode active"],[aria-label="Goal active"])) *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread needs user input"]) *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Unread thread failed"],[aria-label="Queued message failed to send"])) *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Unread thread succeeded"]) *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread has a message waiting to send"]) *,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread has unsubmitted draft"]) * {
+  animation: none !important;
+}
+
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Thread working"],[aria-label="Thread working with unsubmitted draft"],[aria-label="Workflow running"],[aria-label="Background agent running"],[aria-label="Background command running"],[aria-label="Plan mode active"],[aria-label="Goal active"]))::after,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread needs user input"])::after,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Unread thread failed"],[aria-label="Queued message failed to send"]))::after,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Unread thread succeeded"])::after,
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread has a message waiting to send"])::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background-color: var(--silk-status-color);
+  -webkit-mask: var(--silk-status-mask) center / contain no-repeat;
+  mask: var(--silk-status-mask) center / contain no-repeat;
+}
+
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Thread working"],[aria-label="Thread working with unsubmitted draft"],[aria-label="Workflow running"],[aria-label="Background agent running"],[aria-label="Background command running"],[aria-label="Plan mode active"],[aria-label="Goal active"])) {
+  --silk-status-color: var(--primary);
+  --silk-status-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2010%2010%22%3E%3Ccircle%20cx%3D%225%22%20cy%3D%225%22%20r%3D%224.25%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.5%22%20stroke-dasharray%3D%223.15%202.1907075%22%20transform%3D%22rotate%28-90%205%205%29%22%2F%3E%3C%2Fsvg%3E");
+}
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread needs user input"]) {
+  --silk-status-color: #d9ad42;
+  --silk-status-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2010%2010%22%3E%3Ccircle%20cx%3D%225%22%20cy%3D%225%22%20r%3D%224.25%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.5%22%20stroke-dasharray%3D%223.15%202.1907075%22%20transform%3D%22rotate%28-90%205%205%29%22%2F%3E%3C%2Fsvg%3E");
+}
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Unread thread failed"],[aria-label="Queued message failed to send"])) {
+  --silk-status-color: #e46666;
+  --silk-status-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2010%2010%22%3E%3Ccircle%20cx%3D%225%22%20cy%3D%225%22%20r%3D%224.25%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.5%22%2F%3E%3C%2Fsvg%3E");
+}
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Unread thread succeeded"]) {
+  --silk-status-color: #34b98b;
+  --silk-status-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2010%2010%22%3E%3Ccircle%20cx%3D%225%22%20cy%3D%225%22%20r%3D%224.25%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.5%22%2F%3E%3C%2Fsvg%3E");
+}
+:is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has([aria-label="Thread has a message waiting to send"]) {
+  --silk-status-color: #898989;
+  --silk-status-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2010%2010%22%3E%3Ccircle%20cx%3D%225%22%20cy%3D%225%22%20r%3D%224.25%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.5%22%2F%3E%3C%2Fsvg%3E");
+}
+
+[data-sidebar="sidebar"] :is(div,section):has(> a[data-sidebar-thread-id][aria-label$="(unsubmitted draft)"]):not(:hover, :active, .bb-sidebar-selected-row):not(:has(> a[aria-current="page"])) {
+  background-image: linear-gradient(90deg, #d4ac212e, #d4ac2118);
+}
+[data-sidebar="sidebar"] :is(div,section):has(> a[data-sidebar-thread-id][aria-label$="(unsubmitted draft)"]) [data-sidebar-thread-trailing-indicator]:not(:has([aria-label])) > * {
+  opacity: 0;
+}
+
+/* Compact provider artwork in the model selector; preserve the native hit area. */
+button[aria-label^="Provider, model and reasoning"] > .contents > span:has(> :is([data-provider-logo], [data-silk-provider])) {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+}
+
+/* Expanded Send has ml-1 in BB; Stop omitted it and shifted the adjacent mic. */
+[data-promptbox-submit-action][aria-label="Stop run"].size-auto {
+  margin-left: 4px;
+}
+
+/* Shared option-picker triggers need room around their content, including
+   model/provider, permission mode and other native option dropdowns. */
+button.w-fit.px-1:has(> span.contents) {
+  padding-inline: 8px;
+  gap: 6px;
+}
+
+/* Chevron artwork occupies half its SVG width. Compensate for the blank
+   right edge so the visible caret and leading content have balanced insets. */
+button.w-fit.px-1:has(> span.contents) > svg[data-icon="ChevronDown"] {
+  width: 12px;
+  height: 12px;
+  margin-right: -3px;
+}
+
+/* Context usage: Capy-sized ring (6px radius / 1.5px visible stroke).
+   Scale BB's original 6.5px paths together with their dash lengths, so the
+   percentage stays accurate without replacing its live usage calculation. */
+button[aria-label^="Context window "] > svg {
+  width: 16px;
+  height: 16px;
+}
+button[aria-label^="Context window "] > svg > circle {
+  stroke-width: 1.625;
+  transform-origin: 8px 8px;
+  transform: scale(0.9230769231);
+}
+button[aria-label^="Context window "] > svg > circle[stroke-dasharray] {
+  transform: rotate(-90deg) scale(0.9230769231);
+}
+
+/* Fit the context trigger inside the 24px footer instead of clipping a
+   32px circular hover surface with negative margins. */
+button[aria-label^="Context window "] {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  border-radius: 6px;
+}
+@media (max-width: 767px) and (pointer: coarse) {
+  button[aria-label^="Context window "] {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* Match BB's adjacent option button: immediate ghost hover and active surface. */
+button[aria-label^="Context window "] {
+  transition: none;
+}
+button[aria-label^="Context window "]:hover {
+  background-color: var(--state-hover);
+}
+button[aria-label^="Context window "][data-state="open"] {
+  background-color: var(--state-active);
+}
+
+/* Capy-style second line; BB still owns the row, selection and hover actions. */
+[data-sidebar="sidebar"] [data-silk-thread-row] {
+  position: relative;
+  height: 48px;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 20px 16px;
+  row-gap: 0;
+  align-items: center;
+  padding-block: 6px;
+}
+[data-sidebar="sidebar"] [data-silk-thread-row] > span:not(.silk-thread-meta) {
+  grid-row: 1;
+}
+.silk-thread-meta {
+  position: static;
+  grid-row: 2; grid-column: 1 / -1;
+  height: 16px;
+  display: flex; align-items: center; gap: 5px; min-width: 0;
+  color: var(--subtle-foreground); font-size: 11px; line-height: 16px;
+  pointer-events: none; white-space: nowrap;
+}
+.silk-thread-meta svg { width: 12px; height: 12px; flex-shrink: 0; }
+.silk-thread-location { overflow: hidden; text-overflow: ellipsis; }
+.silk-thread-meta time { flex-shrink: 0; }
+.silk-pin-slot { display: contents; }
+/* The extra pin action needs one more native action width on hover/focus. */
+@media (min-width: 768px), (pointer: fine) {
+  [data-sidebar="sidebar"] [data-silk-thread-row]:has(.silk-pin-slot):is(:hover, :has(:focus-visible), :has([data-sidebar-hover-actions-open="true"])) .bb-sidebar-hover-actions-inset {
+    padding-right: 0;
+    --silk-title-cover: 60px;
+  }
+}
+
+
+/* Stack the 20px title line and 16px metadata line without an extra gap. */
+[data-sidebar="sidebar"] [data-silk-thread-row] .bb-thread-title { line-height: 20px; }
+
+
+/* Sidebar icon actions stay visually quiet: hover brightens the glyph only. */
+[data-sidebar="sidebar"] [data-sidebar-row-controls] button,
+[data-sidebar="sidebar"] [data-sidebar-row-controls] button:is(:hover, :active, :focus-visible, [aria-pressed="true"], [data-state="open"]) {
+  background-color: transparent;
+}
+[data-sidebar="sidebar"] [data-sidebar-row-controls] button:is(:hover, :focus-visible, [data-state="open"]) {
+  color: var(--foreground);
+}
+.dark [data-sidebar="sidebar"] [data-sidebar-row-controls] button:is(:hover, :focus-visible, [data-state="open"]) {
+  color: #fff;
+}
+
+/* A pinned thread changes the action, not its resting visual emphasis. */
+[data-sidebar="sidebar"] [data-sidebar-row-controls] button[aria-pressed="true"]:not(:hover):not(:focus-visible):not([data-state="open"]) {
+  color: var(--subtle-foreground);
+}
+
+/* Keep the title stationary; fade its right edge instead of inserting ellipses.
+   On hover the fade ends before the extra pin/archive actions. */
+[data-sidebar="sidebar"] [data-silk-thread-row] .bb-thread-title {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  /* A mask creates a stacking context; leave clicks/double-clicks with BB's row link. */
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, #000 max(0px, calc(100% - var(--silk-title-cover, 0px) - 24px)), transparent max(0px, calc(100% - var(--silk-title-cover, 0px))));
+  mask-image: linear-gradient(to right, #000 max(0px, calc(100% - var(--silk-title-cover, 0px) - 24px)), transparent max(0px, calc(100% - var(--silk-title-cover, 0px))));
+}
+[data-sidebar="sidebar"] [data-silk-thread-row] .bb-thread-title > .truncate {
+  flex-shrink: 0;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Voice controls use the same corner radius as the native composer buttons. */
+button:is([aria-label="Cancel recording"], [aria-label="Cancel transcription"], [aria-label="Stop and transcribe recording"], [aria-label="Transcribing voice input"]) {
+  border-radius: var(--radius-md, 6px);
+}
+/* Provider artwork fills its existing host-sized slot, including 14px triggers. */
+svg[data-silk-provider] {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Shared menu glyphs retain BB's 16px artwork box with custom icon wrappers. */
+[role="menuitem"] > span[data-icon]:has(> svg[data-silk-icon]) {
+  width: 16px; height: 16px; flex-shrink: 0;
+}
+/* Thread search uses the same quiet surfaces and two-line rhythm as the sidebar. */
+[data-testid="command-palette"] {
+  background-color: var(--sidebar);
+  color: var(--sidebar-foreground);
+}
+[data-testid="command-palette"] [role="listbox"] .sticky {
+  background-color: var(--sidebar);
+  color: var(--subtle-foreground);
+}
+[data-testid="command-palette"] [role="option"][aria-selected="true"] {
+  background-color: var(--sidebar-accent);
+}
+[data-testid="command-palette"] [aria-label="Thread search results"] button[role="option"] {
+  padding-block: 6px; min-height: 48px; font-size: 13px;
+  align-items: flex-start;
+}
+[data-testid="command-palette"] [aria-label="Thread search results"] button[role="option"] > span:first-child > span:first-child {
+  line-height: 20px;
+  text-overflow: clip;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+[data-testid="command-palette"] [aria-label="Thread search results"] button[role="option"] > span:first-child > span + span {
+  margin-top: 0; font-size: 11px; line-height: 16px;
+  color: var(--subtle-foreground);
+}
+[data-testid="command-palette"] [aria-label="Thread search results"] button[role="option"] > span.inline-flex {
+  margin-top: 2px;
+}
+[data-testid="command-palette"] [aria-label="Thread search results"] button[role="option"] > span:first-child {
+  display: flex; flex-direction: column; gap: 0;
+}
+[data-testid="command-palette"] [aria-label="Thread search results"] button[role="option"] > span:first-child > span {
+  margin-block: 0;
+}
+[data-testid="command-palette"] button[role="option"]:has([aria-label="Thread has unsubmitted draft"], [aria-label="Thread working with unsubmitted draft"]):not(:hover, :active, [aria-selected="true"]) {
+  background-image: linear-gradient(#d4ac212e, #d4ac2118);
+}
+/* Customize navigation already provides a 16px slot; default icon wrappers
+   must fit that slot rather than overflow at their 24px fallback size. */
+[data-sidebar-navigation-customize-launch] > span:first-child > [data-icon] {
+  width: 16px;
+  height: 16px;
+  min-width: 0;
+  min-height: 0;
+  flex-shrink: 0;
+}
+/* Hide BB history while Silk is enabled. */
+[data-thread-toc] { display: none !important; }
+/* Keep the native editor open with a shorter starting height. */
+[data-promptbox] button[aria-label="Collapse prompt box"] {
+  display: none;
+}
+[data-promptbox]:not([data-promptbox-compact]) [data-promptbox-editor-scroll] {
+  min-height: 64px !important;
+  padding-right: 16px;
+}
+/* Outline does not change layout; only editing activates it, not footer menus. */
+[data-promptbox]:has([contenteditable="true"]:focus) {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+/* Keep the right-panel toggle artwork identical before and after opening. */
+button:is([aria-label^="Show right panel"], [aria-label^="Hide right panel"]) [data-icon] {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+}
+
+/* New-thread footer uses the same compact controls as the thread footer. */
+.silk-home :is(button[data-promptbox-project-control], button[aria-label="Machine"], button[aria-label="Permission mode"]) {
+  height: 24px;
+}
+.silk-home :is(button[data-promptbox-project-control], button[aria-label="Machine"]) [data-icon] {
+  width: 12px; height: 12px; min-width: 12px; min-height: 12px;
+}
+@media (max-width: 767px) and (pointer: coarse) {
+  .silk-home :is(button[data-promptbox-project-control], button[aria-label="Machine"], button[aria-label="Permission mode"]) {
+    height: 32px;
+  }
+}
+
+/* Keep desktop New thread at the bottom, including before plugin hydration. */
+div[class~="@container/page"]:has(#root-compose-prompt) > div:has(> [data-promptbox-shell]) {
+  min-height: 100%;
+  justify-content: flex-end;
+}
+
+/* Mirror BB's pinned panel-toggle position and native drag-region cutout. */
+.silk-background-header-action, .silk-background-header-cutout {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 28px;
+  height: 28px;
+  transform: translate3d(var(--silk-header-x, 12px), 0, 0);
+  transition: transform var(--panel-collapse-duration, 220ms) cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+.silk-background-header-action { z-index: 20; pointer-events: auto; }
+.silk-background-edit { width: 28px; height: 28px; app-region: no-drag; -webkit-app-region: no-drag; }
+@media (min-width: 768px) {
+  .silk-background-header-action, .silk-background-header-cutout {
+    transition-duration: 200ms;
+    transition-timing-function: linear;
+  }
+}
+@media (max-width: 767px) and (pointer: coarse) {
+  .silk-background-header-action, .silk-background-header-cutout { top: 6px; width: 36px; height: 36px; }
+  .silk-background-edit { width: 36px; height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silk-background-header-action, .silk-background-header-cutout {
+    transition: none;
+    will-change: auto;
+  }
+}
+
+/* Homepage recents share the sidebar's typography, title fade and status glyphs. */
+[data-root-compose-mobile-recents] > .sticky { position: static; background: transparent; }
+[data-root-compose-mobile-recents] > .sticky > :not(h2) { display: none; }
+[data-root-compose-mobile-recents] h2 { font-size: 13px; line-height: 20px; }
+[data-root-compose-mobile-recents] ul > li { margin-block: 0 2px; min-height: 48px; height: auto; }
+[data-root-compose-mobile-recents] li > a { min-height: 48px; height: auto; padding-block: 6px; gap: 8px; }
+[data-root-compose-mobile-recents] li:hover { background: var(--sidebar-accent); }
+[data-root-compose-mobile-recents] a > span.size-7 { width: 16px; height: 16px; border: 0; background: transparent; border-radius: 0; }
+[data-root-compose-mobile-recents] a > span.min-w-0 { display: flex; flex-direction: column; gap: 0; }
+[data-root-compose-mobile-recents] a > span.min-w-0 > * { margin: 0; }
+[data-root-compose-mobile-recents] a > span.min-w-0 > span:first-child { font-size: 13px; line-height: 20px; }
+[data-root-compose-mobile-recents] a > span.min-w-0 > span:first-child > span { font-size: inherit; line-height: inherit; font-weight: 400; width: 100%; text-overflow: clip; mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent); }
+[data-root-compose-mobile-recents] a > span.min-w-0 > span:nth-child(2) { font-size: 11px; line-height: 16px; }
+[data-silk-native-meta] { display: none !important; }
+[data-root-compose-mobile-recents] li:has([aria-label="Thread has unsubmitted draft"], [aria-label="Thread working with unsubmitted draft"]):not(:hover, :active, .bg-surface-selected):not(:has([aria-current="page"])) {
+  background-image: linear-gradient(90deg, #d4ac212e, #d4ac2118);
+}
+/* One square action size per composer layout, shared by home/thread and voice. */
+[data-promptbox] { --silk-action-size: 32px; }
+[data-promptbox] :is(button[aria-label="Prompt actions"], [data-promptbox-submit-action], button[aria-label="Start voice input"], button[aria-label="Cancel recording"], button[aria-label="Cancel transcription"], button[aria-label="Stop and transcribe recording"], button[aria-label="Transcribing voice input"]) {
+  width: var(--silk-action-size);
+  height: var(--silk-action-size);
+  min-width: var(--silk-action-size);
+  max-width: var(--silk-action-size);
+  min-height: var(--silk-action-size);
+  max-height: var(--silk-action-size);
+  flex: 0 0 var(--silk-action-size);
+  padding: 0;
+}

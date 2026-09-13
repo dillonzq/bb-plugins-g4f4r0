@@ -1,0 +1,919 @@
+import {
+  experimental_defineHostEntry,
+  type ExperimentalHostRpcContext,
+  type ExperimentalHostWorkerLease,
+} from "@get-bb/plugin-sdk";
+import { promises as fs } from "node:fs";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
+import {
+  hostContract,
+  VERSION,
+  type Job,
+  type Artifact,
+  type Operation,
+} from "./src/contracts";
+import {
+  diagnostics,
+  installManaged,
+  launchManaged,
+  managedEnv,
+  type ManagedBrowser,
+} from "./src/managed";
+import { downloadFromClick } from "./src/native-download";
+import { safeUrl } from "./src/policy";
+import { pruneJobHistory } from "./src/job-history";
+import { runProcess } from "./src/process";
+import { ensureRuntime, installed, runtimePath } from "./src/runtime";
+import { Cdp } from "./src/cdp";
+import { drawStrokes } from "./src/gesture";
+import { pngToPdf } from "./src/pdf";
+import { capturePng } from "./src/capture";
+import { commandOutput, recoverCommandOutput } from "./src/command-output";
+import { navigateHistory } from "./src/navigation";
+import { downloadExpression } from "./src/download";
+import { actOnElement } from "./src/element";
+import { runSequence } from "./src/sequence";
+import { observeExpression, deepQuerySource } from "./src/observe";
+import { Bridge } from "./src/bridge";
+import { validateCommand, redact } from "./src/policy";
+
+type LocalSession = {
+  id: string;
+  managed?: ManagedBrowser;
+  mode?: "managed" | "native";
+  framing?: boolean;
+  status: "connecting" | "ready" | "error" | "released";
+  error?: string;
+  recording: boolean;
+  recordingPath?: string;
+  artifactRoot: string;
+  targetId?: string;
+  endpoint: string;
+  expiresAt: number;
+  cdp?: Cdp;
+  bridge?: Bridge;
+  root: string;
+  binary?: string;
+  pinReady?: boolean;
+  retain: ExperimentalHostWorkerLease;
+  busy?: string;
+  closing?: Promise<void>;
+  pointerAction?: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+};
+type Task = { view: Job; controller: AbortController; promise: Promise<void> };
+const sessions = new Map<string, LocalSession>(),
+  jobs = new Map<string, Task>();
+function publicSession(s: LocalSession) {
+  return {
+    id: s.id,
+    status: s.status,
+    error: s.error,
+    recording: s.recording,
+    artifactRoot: s.artifactRoot,
+    targetId: s.targetId,
+    busy: s.busy,
+  };
+}
+function session(id: string) {
+  const s = sessions.get(id);
+  if (!s || s.closing)
+    throw new Error(
+      "Session is unavailable. Start a new connection to the existing tab.",
+    );
+  return s;
+}
+function task(id: string) {
+  const j = jobs.get(id);
+  if (!j)
+    throw new Error("Job not found (the browser worker may have restarted).");
+  return j;
+}
+function view(t: Task): Job {
+  return {
+    ...t.view,
+    durationMs: (t.view.endedAt ?? Date.now()) - t.view.startedAt,
+  };
+}
+function startJob(
+  kind: string,
+  ctx: ExperimentalHostRpcContext,
+  fn: (signal: AbortSignal, j: Job) => Promise<void>,
+  s?: LocalSession,
+  timeoutMs = 120000,
+): Job {
+  if (s?.busy)
+    throw new Error(
+      `Session is busy with job ${s.busy}. Poll it or cancel it first.`,
+    );
+  pruneJobHistory(jobs);
+  const id = randomUUID(),
+    controller = new AbortController(),
+    retain = ctx.experimental_retainWorker();
+  const j: Job = {
+    id,
+    sessionId: s?.id,
+    kind,
+    status: "running",
+    startedAt: Date.now(),
+    durationMs: 0,
+    artifacts: [],
+  };
+  if (s) s.busy = id;
+  const timeout = setTimeout(
+    () => controller.abort(new Error("Job timed out")),
+    timeoutMs,
+  );
+  const onAbort = () => {
+    if (s && kind !== "gesture" && !s.pointerAction) {
+      s.bridge?.close();
+      s.cdp?.close();
+      void s.managed?.close().catch(() => {});
+      s.status = "error";
+      s.error =
+        "Action cancelled. Reconnect to the existing tab before continuing.";
+    }
+  };
+  controller.signal.addEventListener("abort", onAbort, { once: true });
+  const abort = () => controller.abort();
+  ctx.lifecycle.signal.addEventListener("abort", abort, { once: true });
+  const t: Task = { view: j, controller, promise: Promise.resolve() };
+  jobs.set(id, t);
+  t.promise = (async () => {
+    try {
+      await fn(controller.signal, j);
+      controller.signal.throwIfAborted();
+      j.status = "succeeded";
+    } catch (e) {
+      j.status = controller.signal.aborted ? "cancelled" : "failed";
+      j.error = redact(e instanceof Error ? e.message : String(e), s?.endpoint);
+    } finally {
+      if (controller.signal.aborted && s && kind !== "gesture") {
+        s.bridge?.close();
+        s.cdp?.close();
+        s.status = "error";
+        s.error =
+          "Action cancelled. Reconnect to the existing tab before continuing.";
+      }
+      if (controller.signal.aborted && s?.managed && kind !== "gesture") {
+        await s.managed.close();
+        s.managed = undefined;
+      }
+      controller.signal.removeEventListener("abort", onAbort);
+      clearTimeout(timeout);
+      ctx.lifecycle.signal.removeEventListener("abort", abort);
+      j.endedAt = Date.now();
+      j.durationMs = j.endedAt - j.startedAt;
+      if (s) s.busy = undefined;
+      await retain.dispose();
+      if (
+        s &&
+        !s.closing &&
+        ((kind === "connect" && j.status !== "succeeded") ||
+          (controller.signal.aborted && kind !== "gesture"))
+      )
+        await release(s);
+      pruneJobHistory(jobs, j.id);
+    }
+  })();
+  return view(t);
+}
+async function cli(
+  s: LocalSession,
+  args: string[],
+  signal?: AbortSignal,
+  stdin?: string,
+  limit?: number,
+) {
+  if (s.cdp && (args[0] === "back" || args[0] === "forward"))
+    return navigateHistory(
+      s.cdp,
+      args[0],
+      signal ?? new AbortController().signal,
+    );
+  if (args[0] === "batch" && stdin) {
+    const commands: string[][] = JSON.parse(stdin);
+    if (commands.some((c) => c[0] === "back" || c[0] === "forward")) {
+      const results = [];
+      for (const command of commands) {
+        signal?.throwIfAborted();
+        try {
+          const result = JSON.parse(await cli(s, command, signal));
+          results.push({
+            command,
+            success: true,
+            result: result.data,
+            error: null,
+          });
+        } catch (error) {
+          results.push({
+            command,
+            success: false,
+            result: null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          break;
+        }
+      }
+      return JSON.stringify(results);
+    }
+  }
+  const config = join(s.root, "config.json");
+  const env = managedEnv(s.root);
+  for (const k of Object.keys(env)) {
+    if (k.startsWith("AGENT_BROWSER_") || k.startsWith("AI_GATEWAY_"))
+      delete env[k];
+  }
+  env.AGENT_BROWSER_NAMESPACE = "bb-agent-browser";
+  env.AGENT_BROWSER_RESTORE_SAVE = "never";
+  env.AGENT_BROWSER_DEFAULT_TIMEOUT = "25000";
+  env.AGENT_BROWSER_IDLE_TIMEOUT_MS = "1800000";
+  const out = await runProcess(
+    s.binary ?? runtimePath(s.root),
+    [
+      "--config",
+      config,
+      "--session",
+      s.id,
+      "--json",
+      s.pinReady ? "--pin-tab" : "--no-pin-tab",
+      ...(args[0] === "close" ? [] : ["--cdp", s.endpoint]),
+      ...args,
+    ],
+    { cwd: s.artifactRoot, env, signal, stdin, limit },
+  ).catch(recoverCommandOutput);
+  return redact(commandOutput(out), s.endpoint);
+}
+async function save(
+  s: LocalSession,
+  name: string,
+  data: Buffer,
+  mime: string,
+): Promise<Artifact> {
+  const path = join(s.artifactRoot, name);
+  await fs.writeFile(path, data, { mode: 0o600 });
+  return { id: name, name, path, mime, bytes: data.length };
+}
+async function files(
+  s: Pick<LocalSession, "artifactRoot">,
+): Promise<Artifact[]> {
+  const names = await fs.readdir(s.artifactRoot);
+  const result: Artifact[] = [];
+  for (const name of names) {
+    const path = join(s.artifactRoot, name),
+      stat = await fs.lstat(path);
+    if (stat.isFile() && !stat.isSymbolicLink())
+      result.push({
+        id: name,
+        name,
+        path,
+        bytes: stat.size,
+        mime: name.endsWith(".png")
+          ? "image/png"
+          : name.endsWith(".webm")
+            ? "video/webm"
+            : name.endsWith(".pdf")
+              ? "application/pdf"
+              : "application/octet-stream",
+      });
+  }
+  return result.slice(-200);
+}
+async function perform(
+  s: LocalSession,
+  op: Operation,
+  signal: AbortSignal,
+  j: Job,
+) {
+  if (s.status !== "ready" || Date.now() >= s.expiresAt)
+    throw new Error(
+      "Session is not ready or its control lease expired. Reconnect to the existing tab.",
+    );
+  switch (op.kind) {
+    case "sequence": {
+      await runSequence(op.steps, signal, j, (step, child) =>
+        perform(s, step, signal, child),
+      );
+      break;
+    }
+    case "element": {
+      s.pointerAction = op.action !== "fill";
+      try {
+        j.output = await actOnElement(s.cdp!, op, signal);
+      } finally {
+        s.pointerAction = false;
+      }
+      break;
+    }
+    case "observe": {
+      const raw = JSON.parse(
+        await cli(
+          s,
+          ["batch", "--bail"],
+          signal,
+          JSON.stringify([
+            ["snapshot", "-i"],
+            ["eval", observeExpression],
+          ]),
+        ),
+      );
+      const failed = raw.find((r: any) => !r.success);
+      if (failed) throw new Error(failed.error);
+      j.output = JSON.stringify({
+        accessibility: raw[0].result,
+        dom: raw[1].result?.result,
+      });
+      if (op.screenshot) {
+        const data = await capturePng(s.cdp!, false, {
+          recording: s.recording,
+        });
+        j.artifacts = [
+          await save(
+            s,
+            `${Date.now()}-observation.png`,
+            Buffer.from(data, "base64"),
+            "image/png",
+          ),
+        ];
+      }
+      break;
+    }
+    case "command":
+      validateCommand(op.args);
+      j.output = await cli(s, op.args, signal);
+      break;
+    case "batch":
+      op.commands.forEach(validateCommand);
+      j.output = await cli(
+        s,
+        ["batch", "--bail"],
+        signal,
+        JSON.stringify(op.commands),
+      );
+      {
+        const a = JSON.parse(j.output);
+        if (Array.isArray(a) && a.some((r) => r.success === false))
+          throw new Error(j.output);
+      }
+      break;
+    case "gesture":
+      s.pointerAction = true;
+      try {
+        j.output = await drawStrokes(s.cdp!, op, signal);
+      } finally {
+        s.pointerAction = false;
+      }
+      break;
+    case "screenshot": {
+      const data = await capturePng(s.cdp!, op.fullPage, {
+        recording: s.recording,
+      });
+      j.artifacts = [
+        await save(
+          s,
+          `${Date.now()}-screenshot.png`,
+          Buffer.from(data, "base64"),
+          "image/png",
+        ),
+      ];
+      j.output = op.fullPage
+        ? "Full page PNG saved."
+        : "Visible page PNG saved.";
+      break;
+    }
+    case "canvas": {
+      const encoded = await cli(
+        s,
+        [
+          "eval",
+          `(()=>{${deepQuerySource}const matches=deepQuery(${JSON.stringify(op.selector)});if(matches.length!==1)throw new Error('Selector must identify one canvas; found '+matches.length);const c=matches[0];if(!(c instanceof HTMLCanvasElement))throw new Error('Canvas not found');return c.toDataURL('image/png')})()`,
+        ],
+        signal,
+        undefined,
+        32 * 1024 * 1024,
+      );
+      const result = JSON.parse(encoded).data?.result;
+      if (
+        typeof result !== "string" ||
+        !result.startsWith("data:image/png;base64,")
+      )
+        throw new Error("Canvas did not return a PNG");
+      j.artifacts = [
+        await save(
+          s,
+          `${Date.now()}-canvas.png`,
+          Buffer.from(result.split(",")[1], "base64"),
+          "image/png",
+        ),
+      ];
+      j.output = "Original canvas PNG exported.";
+      break;
+    }
+    case "record":
+      if (op.action === "start") {
+        if (s.recording) throw new Error("Recording is already active.");
+        s.recordingPath = join(s.artifactRoot, `${Date.now()}-recording.webm`);
+        j.output = await cli(
+          s,
+          ["record", "start", s.recordingPath, "--fps", String(op.fps)],
+          signal,
+        );
+        s.recording = true;
+      } else {
+        if (!s.recording) throw new Error("No recording is active.");
+        j.output = await cli(s, ["record", "stop"], signal);
+        s.recording = false;
+        j.artifacts = (await files(s)).filter(
+          (a) => a.path === s.recordingPath,
+        );
+      }
+      break;
+    case "downloadClick": {
+      if (s.mode !== "managed")
+        throw new Error(
+          "Browser download buttons require managed mode. Use download for native-tab links.",
+        );
+      const dir = join(s.root, "downloads", s.id);
+      try {
+        const path = await downloadFromClick(
+          s.cdp!,
+          dir,
+          async () => {
+            s.pointerAction = true;
+            try {
+              await actOnElement(
+                s.cdp!,
+                {
+                  kind: "element",
+                  action: "click",
+                  selector: op.selector,
+                  waitMs: 3000,
+                },
+                signal,
+              );
+            } finally {
+              s.pointerAction = false;
+            }
+          },
+          signal,
+        );
+        const stat = await fs.stat(path);
+        if (stat.size > 128 * 1024 * 1024)
+          throw new Error("Download exceeds 128 MB");
+        const name = `${Date.now()}-${op.name}`,
+          destination = join(s.artifactRoot, name);
+        await fs.rename(path, destination);
+        await fs.chmod(destination, 0o600);
+        j.artifacts = (await files(s)).filter((a) => a.name === name);
+        j.output = "Browser download completed.";
+      } finally {
+        await fs.rm(dir, { recursive: true, force: true });
+      }
+      break;
+    }
+    case "download": {
+      let href: string | undefined;
+      if (/^@e\d+$/.test(op.selector)) {
+        const attr = JSON.parse(
+          await cli(s, ["get", "attr", op.selector, "href"], signal),
+        );
+        href = attr.data?.value ?? attr.data?.attribute;
+        if (typeof href !== "string" || !href)
+          throw new Error("Direct downloads require a link with href.");
+        // Upstream refs can belong to an iframe while eval always uses the top page.
+        if (!/^(https?:|blob:|data:)/i.test(href))
+          throw new Error(
+            "For relative download links, use a CSS selector in the top page so its base URL is resolved accurately.",
+          );
+      }
+      const data = await s.cdp!.evaluate(
+        downloadExpression(op.selector, href),
+        35000,
+      );
+      if (
+        typeof data !== "string" ||
+        !data.startsWith("data:") ||
+        !data.includes(";base64,")
+      )
+        throw new Error("Download did not return file data");
+      const mime = data.slice(5, data.indexOf(";base64,"));
+      j.artifacts = [
+        await save(
+          s,
+          `${Date.now()}-${op.name}`,
+          Buffer.from(data.slice(data.indexOf(",") + 1), "base64"),
+          mime || "application/octet-stream",
+        ),
+      ];
+      j.output =
+        "Link content saved through the authenticated page. Use downloadClick for managed browser download buttons.";
+      break;
+    }
+    case "pdf": {
+      if (s.mode === "managed") {
+        const { data } = await s.cdp!.send("Page.printToPDF", {
+          printBackground: true,
+          preferCSSPageSize: true,
+        });
+        j.artifacts = [
+          await save(
+            s,
+            `${Date.now()}-page.pdf`,
+            Buffer.from(data, "base64"),
+            "application/pdf",
+          ),
+        ];
+        j.output = "Browser PDF exported with selectable text.";
+        break;
+      }
+      const data = await capturePng(s.cdp!, true, { recording: s.recording });
+      const pdf = await pngToPdf(Buffer.from(data, "base64"));
+      j.artifacts = [
+        await save(
+          s,
+          `${Date.now()}-page.pdf`,
+          Buffer.from(pdf),
+          "application/pdf",
+        ),
+      ];
+      j.output =
+        "Page capture saved as an image-based PDF. Text is not selectable.";
+      break;
+    }
+  }
+}
+function release(s: LocalSession): Promise<void> {
+  if (s.closing) return s.closing;
+  if (s.status === "released") return Promise.resolve();
+  return (s.closing = closeSession(s));
+}
+async function closeSession(s: LocalSession) {
+  clearTimeout(s.timer);
+  if (s.busy) {
+    const t = task(s.busy);
+    t.controller.abort();
+    await Promise.race([t.promise, sleep(1800)]);
+  }
+  if (s.recording) {
+    await cli(s, ["record", "stop"], AbortSignal.timeout(2500)).catch(() => {});
+    s.recording = false;
+  }
+  s.status = "released";
+  if (s.managed)
+    await s.cdp?.send("Browser.close", {}, false, 1500).catch(() => {});
+  s.cdp?.close();
+  s.cdp = undefined;
+  // Close without --cdp: reconnecting to an already stopped Chrome aborts
+  // the close command and leaves the automation daemon running.
+  await cli(s, ["close"], AbortSignal.timeout(2000)).catch(() => {});
+  s.bridge?.close();
+  await s.managed?.close();
+  s.managed = undefined;
+  s.status = "released";
+  s.endpoint = "";
+  await s.retain.dispose();
+  sessions.delete(s.id);
+  s.bridge = undefined;
+}
+export default experimental_defineHostEntry({
+  contract: hostContract,
+  handlers: {
+    probe: async (_, ctx) => {
+      const root = ctx.experimental_paths.dataDir,
+        info = await diagnostics(root);
+      if (info.chromeRunnable)
+        try {
+          const browser = await launchManaged(
+            root,
+            `ab-check-${randomUUID()}`,
+            ctx.signal,
+          );
+          await browser.close();
+          // Chrome helpers can finish profile writes just after the main process exits.
+          // Cleanup failure must not turn a verified launch into a browser failure.
+          await fs
+            .rm(browser.profile, {
+              recursive: true,
+              force: true,
+              maxRetries: 5,
+              retryDelay: 200,
+            })
+            .catch(() => {});
+        } catch (e) {
+          info.chromeRunnable = false;
+          info.launchError = redact(String(e));
+        }
+      return { ...info, version: VERSION, installed: info.runtime };
+    },
+    setup: (input, ctx) =>
+      startJob(
+        "setup",
+        ctx,
+        async (signal, j) => {
+          if (
+            [...sessions.values()].some(
+              (s) =>
+                s.mode === "managed" &&
+                (s.managed || s.status === "connecting"),
+            )
+          )
+            throw new Error(
+              "Close managed browser sessions before updating their dependencies.",
+            );
+          await installManaged(
+            ctx.experimental_paths.dataDir,
+            input?.dependencies ?? true,
+            signal,
+          );
+          const info = await diagnostics(ctx.experimental_paths.dataDir);
+          if (!info.chromeRunnable)
+            throw new Error(
+              info.launchError ??
+                "Chrome installation did not produce a runnable executable",
+            );
+          j.output = JSON.stringify(info);
+        },
+        undefined,
+        600000,
+      ),
+    frame: async ({ id }) => {
+      const s = session(id);
+      if (s.status !== "ready" || !s.managed)
+        throw new Error("Browser is not ready");
+      if (s.framing) throw new Error("A frame is already being captured");
+      s.framing = true;
+      try {
+        const metrics = await s.cdp!.send("Page.getLayoutMetrics");
+        const viewport = metrics.cssVisualViewport ?? metrics.visualViewport;
+        const width = Math.round(viewport.clientWidth),
+          height = Math.round(viewport.clientHeight);
+        if (!(width > 0 && height > 0 && width <= 8192 && height <= 8192))
+          throw new Error(
+            "Viewport is too large for live viewing. Resize it to at most 8192 pixels per side.",
+          );
+        const { data } = await s.cdp!.send(
+          "Page.captureScreenshot",
+          {
+            format: "jpeg",
+            quality: 70,
+            captureBeyondViewport: false,
+            clip: {
+              x: viewport.pageX,
+              y: viewport.pageY,
+              width,
+              height,
+              scale: 1,
+            },
+          },
+          true,
+          5000,
+        );
+        const url = await s.cdp!.evaluate("location.href");
+        return { data, url, width, height };
+      } finally {
+        s.framing = false;
+      }
+    },
+    input: async ({ id, input }, ctx) => {
+      const s = session(id);
+      if (s.status !== "ready" || !s.managed)
+        throw new Error("Browser is not ready");
+      const j = startJob(
+        "viewer",
+        ctx,
+        async (signal, j) => {
+          switch (input.kind) {
+            case "click":
+              s.pointerAction = true;
+              try {
+                await drawStrokes(
+                  s.cdp!,
+                  {
+                    kind: "gesture",
+                    strokes: [[{ x: input.x, y: input.y }]],
+                    intervalMs: 0,
+                  },
+                  signal,
+                );
+              } finally {
+                s.pointerAction = false;
+              }
+              break;
+            case "scroll":
+              const metrics = await s.cdp!.send("Page.getLayoutMetrics");
+              const viewport =
+                metrics.cssVisualViewport ?? metrics.visualViewport;
+              await s.cdp!.send("Input.dispatchMouseEvent", {
+                type: "mouseWheel",
+                x: Math.floor(viewport.clientWidth / 2),
+                y: Math.floor(viewport.clientHeight / 2),
+                deltaX: 0,
+                deltaY: input.deltaY,
+              });
+              break;
+            case "text":
+              await s.cdp!.send("Input.insertText", { text: input.text });
+              break;
+            case "key":
+              await cli(s, ["press", input.key], signal);
+              break;
+            case "navigate":
+              await cli(s, ["open", safeUrl(input.url)], signal);
+              break;
+          }
+          j.output = "Viewer input completed.";
+        },
+        s,
+        30000,
+      );
+      await Promise.race([task(j.id).promise, sleep(400)]);
+      return view(task(j.id));
+    },
+    connect: async (input, ctx) => {
+      if (sessions.has(input.id)) throw new Error("Session already exists");
+      if (!/^ab-[a-z0-9-]+$/.test(input.id))
+        throw new Error("Invalid session ID");
+      const root = ctx.experimental_paths.dataDir;
+      const artifactRoot = join(root, "artifacts", input.id);
+      const s: LocalSession = {
+        id: input.id,
+        mode: input.mode,
+        status: "connecting",
+        recording: false,
+        artifactRoot,
+        endpoint: input.endpoint,
+        expiresAt: input.expiresAt,
+        root,
+        retain: ctx.experimental_retainWorker(),
+      };
+      sessions.set(s.id, s);
+      s.timer = setTimeout(
+        () => void release(s),
+        Math.max(1, s.expiresAt - Date.now()),
+      );
+      s.timer.unref();
+      return startJob(
+        "connect",
+        ctx,
+        async (signal, j) => {
+          try {
+            await fs.mkdir(artifactRoot, { recursive: true, mode: 0o700 });
+            // Exclusive creation avoids truncating a config another start is reading.
+            await fs
+              .writeFile(join(root, "config.json"), "{}", {
+                mode: 0o600,
+                flag: "wx",
+              })
+              .catch((e) => {
+                if (e.code !== "EEXIST") throw e;
+              });
+            s.binary = await ensureRuntime(root, signal);
+            signal.throwIfAborted();
+            if (input.mode === "managed") {
+              s.managed = await launchManaged(
+                root,
+                input.profileId ?? input.id,
+                signal,
+              );
+              s.endpoint = s.managed.endpoint;
+              s.managed.process.once("exit", () => {
+                if (s.status === "ready" || s.status === "connecting") {
+                  s.status = "error";
+                  s.error =
+                    "Browser process exited. Reconnect to reopen the profile.";
+                }
+              });
+            } else {
+              s.bridge = await Bridge.open(s.endpoint);
+              s.bridge.onDisconnect = () => {
+                if (s.status === "ready" || s.status === "connecting") {
+                  s.status = "error";
+                  s.error =
+                    "Browser control disconnected or was taken over. The tab is preserved; reconnect explicitly.";
+                }
+              };
+              s.endpoint = s.bridge.endpoint;
+            }
+            s.cdp = await Cdp.connect(s.endpoint, input.mode === "managed");
+            s.targetId = s.cdp.targetId;
+            s.cdp.onDisconnect = () => {
+              if (s.status !== "released") {
+                s.status = "error";
+                s.error = "Browser disconnected. Reconnect the session.";
+              }
+            };
+            if (input.mode === "managed") {
+              await s.cdp.send("Emulation.setDeviceMetricsOverride", {
+                width: 1280,
+                height: 800,
+                deviceScaleFactor: 1,
+                mobile: false,
+              });
+              await s.cdp.send(
+                "Browser.setDownloadBehavior",
+                { behavior: "deny" },
+                false,
+              );
+            }
+            j.output = await cli(s, ["connect", s.endpoint], signal);
+            await cli(s, ["tab", s.targetId!], signal);
+            s.pinReady = true;
+            if (input.mode === "managed" && input.url !== "about:blank")
+              await cli(s, ["open", safeUrl(input.url)], signal);
+            await cli(s, ["get", "title"], signal);
+            s.status = "ready";
+          } catch (e) {
+            s.status = "error";
+            s.error = redact(
+              e instanceof Error ? e.message : String(e),
+              s.endpoint,
+            );
+            s.cdp?.close();
+            await s.managed?.close();
+            s.managed = undefined;
+            j.output = JSON.stringify(s.bridge?.trace);
+            throw e;
+          }
+        },
+        s,
+        300000,
+      );
+    },
+    inspect: async ({ id }, ctx) => {
+      const s = sessions.get(id);
+      if (!s)
+        return {
+          id,
+          status: "released" as const,
+          recording: false,
+          artifactRoot: join(ctx.experimental_paths.dataDir, "artifacts", id),
+        };
+      return {
+        ...publicSession(s),
+        url:
+          s.status === "ready"
+            ? await s.cdp?.evaluate("location.href").catch(() => undefined)
+            : undefined,
+      };
+    },
+    submit: async ({ id, operation, timeoutMs }, ctx) => {
+      const s = session(id);
+      const j = startJob(
+        operation.kind === "command" ? operation.args[0] : operation.kind,
+        ctx,
+        (signal, j) => perform(s, operation, signal, j),
+        s,
+        timeoutMs,
+      );
+      await Promise.race([task(j.id).promise, sleep(400)]);
+      return view(task(j.id));
+    },
+    job: ({ id }) => view(task(id)),
+    cancel: async ({ id }) => {
+      const t = task(id);
+      if (t.view.status === "running") t.controller.abort();
+      return view(t);
+    },
+    release: async ({ id }) => {
+      const s = sessions.get(id);
+      if (s) await release(s);
+      return { released: true };
+    },
+    artifacts: ({ id }, ctx) => {
+      if (!/^ab-[a-z0-9-]+$/.test(id)) throw new Error("Invalid session ID");
+      return files(
+        sessions.get(id) ?? {
+          artifactRoot: join(ctx.experimental_paths.dataDir, "artifacts", id),
+        },
+      );
+    },
+    image: async ({ sessionId, artifactId }, ctx) => {
+      if (!/^ab-[a-z0-9-]+$/.test(sessionId))
+        throw new Error("Invalid session ID");
+      const s = sessions.get(sessionId) ?? {
+          artifactRoot: join(
+            ctx.experimental_paths.dataDir,
+            "artifacts",
+            sessionId,
+          ),
+        },
+        a = (await files(s)).find((a) => a.id === artifactId);
+      if (!a || a.mime !== "image/png")
+        throw new Error("PNG artifact not found");
+      if (a.bytes > 4 * 1024 * 1024)
+        throw new Error(
+          "Image too large for inline tool output. Use its artifact link.",
+        );
+      return {
+        base64: (await fs.readFile(a.path)).toString("base64"),
+        mime: a.mime,
+      };
+    },
+  },
+  dispose: async () => {
+    for (const t of jobs.values()) t.controller.abort();
+    await Promise.allSettled([...sessions.values()].map(release));
+  },
+});
