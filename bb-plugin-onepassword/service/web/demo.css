@@ -1,0 +1,19 @@
+#settings-tab {
+  display: none !important;
+}
+.demo-notice {
+  border-color: #5684c8;
+  margin-bottom: 32px;
+}
+.demo-notice strong {
+  color: #b7d3ff;
+}
+.demo-notice p {
+  max-width: 720px;
+}
+.demo-notice ol {
+  padding-left: 20px;
+}
+.demo-notice button {
+  margin-top: 8px;
+}

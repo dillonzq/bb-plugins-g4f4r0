@@ -48,6 +48,7 @@
     "test": "npm run test:unit",
     "test:e2e": "playwright test",
     "build:service": "npm run build --prefix service",
-    "check": "npm run typecheck && npm run test:unit && npm run build:service"
+    "check": "npm run typecheck && npm run test:unit && npm run build:service",
+    "test:demo": "playwright test --config playwright.demo.config.ts"
   }
 }

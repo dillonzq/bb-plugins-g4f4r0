@@ -8,6 +8,21 @@ The plugin provides a BB dashboard, agent tools, and `bb onepassword` commands. 
 
 Your passkey authorizes **this service**. It is not a native 1Password prompt approving a vault read. The service uses a restricted 1Password service account. Sync the service's passkey through 1Password to use it on supported devices; universal cross-device compatibility has not been established.
 
+## Try a live passkey demo first
+
+You can test the approval ceremony without a 1Password service account or isolated credential host. Build the service, create an authenticated BB Connect share, and start the separate demo entrypoint:
+
+```sh
+npm run build:service
+bb connect expose 43820 --json
+# Use the exact HTTPS URL returned above:
+ONEPASSWORD_DEMO_BB_SHARE=1 node service/dist/demo.js https://YOUR-DEMO-SHARE.getbb.app 43820
+```
+
+Open that URL using your own BB Connect session. Create a **demo** passkey (choose 1Password), unlock approvals, start the simulated Shopify request, and approve it. The demo blocks all account-token, mapping-write, and worker endpoints in the backend. It never contacts Shopify or resolves vault values. It runs for one hour, then deletes its temporary state and removes the share when `ONEPASSWORD_DEMO_BB_SHARE=1`. It does not change the installed plugin's production settings.
+
+Demo enrollment skips a manually entered bootstrap code because this temporary, credential-free site is protected by the BB Connect owner's sign-in. Do not expose it as an anonymous public service. A passkey saved in 1Password remains there until you delete it; its name is **BB 1Password approval demo**. `/demo/status` returns only demo progress, allowing your BB agent to confirm the result. Reproduce this flow with `npm run test:demo`.
+
 ## Start here
 
 1. Read [deployment](docs/DEPLOYMENT.md) and the [security model](SECURITY.md).

@@ -4,8 +4,8 @@ Local development verification on September 13, 2026:
 
 - Node 24.21.0, BB plugin SDK 0.4.87, Linux x64.
 - Root and service TypeScript checks pass.
-- 15 unit/integration tests pass across the service, worker process, BB backend, and BB frontend harness.
-- Two browser end-to-end tests pass with Chrome for Testing 153.0.8010.36.
+- 17 unit/integration tests pass across the service, worker process, BB backend, and BB frontend harness.
+- Three browser end-to-end tests pass with Chrome for Testing 153.0.8010.36.
 - BB production bundle and the separate service/browser bundles build successfully.
 - Root and service production dependency audits reported zero known vulnerabilities at verification time. This is not a security audit.
 
@@ -23,3 +23,5 @@ These tests do **not** establish:
 - Independent security review or marketplace publication readiness.
 
 Use `npm run check` and `npm run test:e2e` to reproduce the automated checks. See README for browser prerequisites. Live installed BB status and UI verification are recorded in the installation session; the fake-host tests alone do not prove host behavior.
+
+The separate disposable demo also passes enrollment, unlock, simulated request creation, actual WebAuthn approval, and rejection of account-token configuration after authentication. Its two backend tests prove that credential and worker routes remain blocked independently of the UI. The demo has not been enrolled on behalf of a real user.

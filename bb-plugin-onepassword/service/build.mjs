@@ -7,6 +7,7 @@ await build({
     "src/worker.ts",
     "src/init.ts",
     "src/fingerprint.ts",
+    "src/demo.ts",
   ],
   outdir: "dist",
   bundle: true,
@@ -24,6 +25,16 @@ await build({
   target: "es2022",
   minify: true,
 });
+await build({
+  entryPoints: ["web/demo.ts"],
+  outfile: "dist/public/demo.js",
+  bundle: true,
+  platform: "browser",
+  format: "esm",
+  target: "es2022",
+  minify: true,
+});
+await copyFile("web/demo.css", "dist/public/demo.css");
 await Promise.all(
   ["index.html", "style.css"].map((f) =>
     copyFile("web/" + f, "dist/public/" + f),
