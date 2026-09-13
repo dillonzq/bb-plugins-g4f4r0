@@ -1,12 +1,12 @@
 import { RiConnectorLine } from "./connector-icon";
-import { RiFocus2Line, RiStopFill, RiChat1Line, RiPlug2Line, RiSwap2Line, RiAddBoxLine, RiAddLine, RiAlertLine, RiAlignLeft, RiArchiveLine, RiArrowDownDoubleLine, RiArrowDownLine, RiArrowDownSLine, RiArrowGoBackLine, RiArrowGoForwardLine, RiArrowLeftRightLine, RiArrowLeftSLine, RiArrowRightLine, RiArrowRightSLine, RiArrowRightUpLine, RiArrowUpDoubleLine, RiArrowUpDownLine, RiArrowUpLine, RiArrowUpSLine, RiAttachmentLine, RiBarChartLine, RiBookOpenLine, RiBrainLine, RiBriefcaseLine, RiBrushLine, RiBugLine, RiCalendarCheckLine, RiCalendarLine, RiCalendarScheduleLine, RiChat3Line, RiChatNewLine, RiCheckLine, RiCheckboxBlankCircleLine, RiCheckboxBlankLine, RiCheckboxCircleLine, RiCloseCircleLine, RiCloseLine, RiCloudLine, RiCloudOffLine, RiCodeLine, RiCollapseDiagonalLine, RiCornerDownLeftLine, RiCornerDownRightLine, RiCupLine, RiDeleteBinLine, RiDiscordLine, RiDownloadLine, RiDraggable, RiEditLine, RiEqualizerLine, RiErrorWarningLine, RiExternalLinkLine, RiEyeLine, RiEyeOffLine, RiFileCopyLine, RiFileEditLine, RiFileLine, RiFileTextLine, RiFileUnknowLine, RiFlashlightLine, RiFlaskLine, RiFocus3Line, RiFolderAddLine, RiFolderLine, RiFolderOpenLine, RiFolderReduceLine, RiFolderSettingsLine, RiFolderTransferLine, RiFolderUnknowLine, RiFolderUploadLine, RiFullscreenExitLine, RiFullscreenLine, RiGitBranchLine, RiGitClosePullRequestLine, RiGitForkLine, RiGitMergeLine, RiGitPullRequestLine, RiGitRepositoryLine, RiGithubLine, RiGlobalLine, RiInboxArchiveLine, RiInboxUnarchiveLine, RiInformationLine, RiLayoutBottomLine, RiLayoutColumnLine, RiLayoutGridLine, RiLayoutRightLine, RiLayoutRowLine, RiListCheck, RiListUnordered, RiLoaderLine, RiLockLine, RiLockUnlockLine, RiMacbookLine, RiMailLine, RiMailOpenLine, RiMenuAddLine, RiMicLine, RiMoreLine, RiNodeTree, RiNotification3Line, RiPaletteLine, RiPauseLine, RiPlayLine, RiPlugLine, RiProhibitedLine, RiPushpinLine, RiPuzzle2Line, RiQuestionAnswerLine, RiQuestionLine, RiRepeatLine, RiRestartLine, RiRobotLine, RiSearchLine, RiSendPlaneLine, RiSettings3Line, RiShieldCheckLine, RiSideBarLine, RiSmartphoneLine, RiSortAsc, RiSparklingLine, RiStackLine, RiStarLine, RiTerminalBoxLine, RiTerminalLine, RiTextWrap, RiTimeLine, RiToolsLine, RiUnpinLine, RiUserAddLine, RiUserLine, RiWindowLine, RiZoomInLine, RiZoomOutLine } from "@remixicon/react";
+import { RiFocus2Line, RiStopFill, RiChat1Line, RiPlug2Line, RiSwap2Line, RiAddBoxLine, RiAddLine, RiAlertLine, RiAlignLeft, RiArchiveLine, RiArrowDownDoubleLine, RiArrowDownLine, RiArrowDownSLine, RiArrowGoBackLine, RiArrowGoForwardLine, RiArrowLeftRightLine, RiArrowLeftSLine, RiArrowRightLine, RiArrowRightSLine, RiArrowRightUpLine, RiArrowUpDoubleLine, RiArrowUpDownLine, RiArrowUpLine, RiArrowUpSLine, RiAttachmentLine, RiBarChartLine, RiBookOpenLine, RiBrain3Line, RiBriefcaseLine, RiBrushLine, RiBugLine, RiCalendarCheckLine, RiCalendarLine, RiCalendarScheduleLine, RiChat3Line, RiChatNewLine, RiCheckLine, RiCheckboxBlankCircleLine, RiCheckboxBlankLine, RiCheckboxCircleLine, RiCloseCircleLine, RiCloseLine, RiInstanceLine, RiCodeLine, RiCollapseDiagonalLine, RiCornerDownLeftLine, RiCornerDownRightLine, RiCupLine, RiDeleteBinLine, RiDiscordLine, RiDownloadLine, RiDraggable, RiEditLine, RiEqualizerLine, RiErrorWarningLine, RiExternalLinkLine, RiEyeLine, RiEyeOffLine, RiFileCopyLine, RiFileEditLine, RiFileLine, RiFileTextLine, RiFileUnknowLine, RiFlashlightLine, RiFlaskLine, RiFocus3Line, RiFolderAddLine, RiFolderLine, RiFolderOpenLine, RiFolderReduceLine, RiFolderSettingsLine, RiFolderTransferLine, RiFolderUnknowLine, RiFolderUploadLine, RiFullscreenExitLine, RiFullscreenLine, RiGitBranchLine, RiGitClosePullRequestLine, RiGitForkLine, RiGitMergeLine, RiGitPullRequestLine, RiGitRepositoryLine, RiGithubLine, RiGlobalLine, RiInboxArchiveLine, RiInboxUnarchiveLine, RiInformationLine, RiLayoutBottomLine, RiLayoutColumnLine, RiLayoutGridLine, RiLayoutRightLine, RiLayoutRowLine, RiListCheck, RiListUnordered, RiLoaderLine, RiLockLine, RiLockUnlockLine, RiMacbookLine, RiMailLine, RiMailOpenLine, RiMenuAddLine, RiMicLine, RiMoreLine, RiNodeTree, RiNotification3Line, RiPaletteLine, RiPauseLine, RiPlayLine, RiPlugLine, RiProhibitedLine, RiPushpinLine, RiPuzzle2Line, RiQuestionAnswerLine, RiQuestionLine, RiRepeatLine, RiRestartLine, RiRobotLine, RiSearchLine, RiSendPlaneLine, RiSettings3Line, RiShieldCheckLine, RiSideBarLine, RiSmartphoneLine, RiSortAsc, RiSparklingLine, RiStackLine, RiStarLine, RiTerminalBoxLine, RiTerminalLine, RiTextWrap, RiTimeLine, RiToolsLine, RiUnpinLine, RiUserAddLine, RiUserLine, RiWindowLine, RiZoomInLine, RiZoomOutLine } from "@remixicon/react";
 
 // Outlined artwork. Both loading names always use ri-loader-line.
 export const remixIcons = {
   AlertCircle: RiErrorWarningLine,
   AlertTriangle: RiAlertLine,
   Archive: RiArchiveLine,
-  Bot: RiRobotLine,
+  Bot: RiBrain3Line,
   Bug: RiBugLine,
   Check: RiCheckLine,
   ChevronDown: RiArrowDownSLine,
@@ -54,7 +54,7 @@ export const remixIcons = {
   Workflow: RiNodeTree,
   X: RiCloseLine,
   Zap: RiFlashlightLine,
-  AiBrain01: RiBrainLine,
+  AiBrain01: RiBrain3Line,
   AiBrowser: RiGlobalLine,
   AiContentGenerator01: RiSparklingLine,
   AlignLeft: RiAlignLeft,
@@ -71,7 +71,7 @@ export const remixIcons = {
   Beaker: RiFlaskLine,
   BellDot: RiNotification3Line,
   Browser: RiGlobalLine,
-  Brain: RiBrainLine,
+  Brain: RiBrain3Line,
   Calendar: RiCalendarLine,
   CalendarCheckOut02: RiCalendarCheckLine,
   ChartColumn: RiBarChartLine,
@@ -81,8 +81,8 @@ export const remixIcons = {
   CircleArrowShrink: RiCollapseDiagonalLine,
   Clean: RiBrushLine,
   Clock: RiTimeLine,
-  Cloud: RiCloudLine,
-  CloudOff: RiCloudOffLine,
+  Cloud: RiInstanceLine,
+  CloudOff: RiInstanceLine,
   Coffee: RiCupLine,
   Columns2: RiLayoutColumnLine,
   CornerDownLeft: RiArrowUpLine, // BB composer submit action.
@@ -115,7 +115,7 @@ export const remixIcons = {
   GitPullRequestClosed: RiGitClosePullRequestLine,
   Globe: RiGlobalLine,
   GridView: RiLayoutGridLine,
-  Laptop: RiCloudLine,
+  Laptop: RiInstanceLine,
   Layers: RiStackLine,
   Limitation: RiProhibitedLine,
   ListView: RiListUnordered,

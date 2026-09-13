@@ -53,6 +53,7 @@ Install Silk from a durable checkout or local plugin directory. Do not make a te
 | `app.css` | Handles component sizing, sidebar states, responsive layout, and small compatibility fixes. |
 | `themes/silk.css` | Defines the Silk palette and semantic button colors. |
 | `lib/homepage.ts` | Finds the native welcome and New thread pages, mounts the wallpaper, and positions the pencil control. |
+| `lib/homepage-header.ts` | Keeps the right toggle pinned while forwarding native panel actions, and positions the pencil through sidebar transitions. |
 | `lib/wallpaper.ts` | Prepares uploads and selects the photo or ambient renderer. |
 | `lib/photo.ts` | Runs the photo shader, resizes without reloading the image, and handles motion and WebGL fallback. |
 | `lib/photo-shaders.ts` | Attributed Aura/Paper image shaders and Aura's threshold-wave animation. |
@@ -91,7 +92,7 @@ New homepage behavior should follow the same pattern:
 
 For motion, animate `transform` or `opacity`. Match BB's duration and easing when an element moves with native UI. Add a `prefers-reduced-motion` fallback.
 
-The wallpaper pencil is a useful example. It uses BB's sidebar state, shares the native header spacing, and changes position with the same desktop and mobile timing as the sidebar.
+The wallpaper pencil follows the page's existing motion without a second transition. Its position is clamped beside the left toggle as the sidebar collapses. The homepage right toggle stays fixed across BB's native header handoff and forwards clicks to the current native action; leaving the homepage removes that presentation and restores the native controls.
 
 ## Adding a setting or RPC
 

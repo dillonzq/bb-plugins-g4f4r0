@@ -341,29 +341,28 @@ div[class~="@container/page"]:has(#root-compose-prompt) > div:has(> [data-prompt
   width: 28px;
   height: 28px;
   transform: translate3d(var(--silk-header-x, 12px), 0, 0);
-  transition: transform var(--panel-collapse-duration, 220ms) cubic-bezier(0.32, 0.72, 0, 1);
-  will-change: transform;
+  transition: none;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 .silk-background-header-action { z-index: 20; pointer-events: auto; }
 .silk-background-edit { width: 28px; height: 28px; app-region: no-drag; -webkit-app-region: no-drag; }
-@media (min-width: 768px) {
-  .silk-background-header-action, .silk-background-header-cutout {
-    transition-duration: 200ms;
-    transition-timing-function: linear;
-  }
-}
 @media (max-width: 767px) and (pointer: coarse) {
   .silk-background-header-action, .silk-background-header-cutout { top: 6px; width: 36px; height: 36px; }
   .silk-background-edit { width: 36px; height: 36px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .silk-background-header-action, .silk-background-header-cutout {
-    transition: none;
-    will-change: auto;
-  }
+/* Keep one homepage trigger pinned through native panel header handoffs. */
+body:has(.silk-home) button:is([aria-label^="Show right panel"], [aria-label^="Hide right panel"]):not([data-silk-panel-toggle]) {
+  visibility: hidden;
 }
+button.silk-panel-toggle {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  z-index: 45;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+button.silk-panel-toggle[hidden] { display: none; }
 
 /* Homepage recents share the sidebar's typography, title fade and status glyphs. */
 [data-root-compose-mobile-recents] > .sticky { position: static; background: transparent; }

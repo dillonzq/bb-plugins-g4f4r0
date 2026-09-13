@@ -1,6 +1,7 @@
 import { observeRoots } from "./observe-roots";
 import type { Config } from "./config";
 import { renderWallpaper } from "./wallpaper";
+import { mountHomepageHeader } from "./homepage-header";
 
 let current: Config | null = null;
 const listeners = new Set<() => void>();
@@ -65,41 +66,8 @@ export function mountHomepage(signal: AbortSignal) {
 
       const control = document.createElement("div"); control.className = "silk-background-header-action";
       const cutout = document.createElement("div"); cutout.className = "silk-background-header-cutout"; cutout.setAttribute("aria-hidden", "true");
-      let observedTrigger: HTMLElement | null = null;
-      let positionControl: (expanded?: boolean) => void = () => {};
-      const onSidebarToggle = () => positionControl(observedTrigger?.getAttribute("aria-expanded") !== "true");
-      const sidebarObserver = new MutationObserver(() => positionControl());
-      const observeTrigger = (trigger: HTMLElement | null) => {
-        if (trigger === observedTrigger) return;
-        observedTrigger?.removeEventListener("click", onSidebarToggle, true);
-        sidebarObserver.disconnect();
-        observedTrigger = trigger;
-        if (trigger) {
-          trigger.addEventListener("click", onSidebarToggle, true);
-          sidebarObserver.observe(trigger, { attributes: true, attributeFilter: ["aria-expanded"] });
-        }
-      };
-      positionControl = (expanded) => {
-        const strip = host.querySelector('[data-testid="root-compose-main-window-drag-strip"]');
-        if (strip && cutout.parentElement !== strip) strip.append(cutout);
-        if (!strip) cutout.remove();
-        const bounds = host.getBoundingClientRect();
-        const triggerElement = document.querySelector<HTMLElement>('[data-testid="app-desktop-sidebar-trigger"] [data-sidebar="trigger"], [data-testid="app-sidebar-trigger-overlay"] [data-sidebar="trigger"]');
-        observeTrigger(triggerElement);
-        const trigger = triggerElement?.getBoundingClientRect();
-        const sidebarOpen = expanded ?? triggerElement?.getAttribute("aria-expanded") === "true";
-        // The native desktop toggle includes the window-control inset. With
-        // the sidebar open, the homepage has its own left edge; when closed,
-        // convert the toggle's viewport coordinates into homepage coordinates.
-        const x = trigger && !sidebarOpen ? Math.max(12, trigger.right + 4 - bounds.left) : 12;
-        const left = `${Math.round(x * 100) / 100}px`;
-        const top = trigger ? `${Math.max(0, trigger.top - bounds.top)}px` : "10px";
-        control.style.top = top; cutout.style.top = top;
-        control.style.setProperty("--silk-header-x", left);
-        cutout.style.setProperty("--silk-header-x", left);
-      };
       host.append(control);
-      positionControl();
+      const disposeHeader = mountHomepageHeader(host, control, cutout);
       updateSlots([...slots, control]);
       window.dispatchEvent(new Event("silk:homepage-ready"));
 
@@ -114,7 +82,6 @@ export function mountHomepage(signal: AbortSignal) {
       const paint = () => {
         cancelAnimationFrame(paintFrame);
         paintFrame = requestAnimationFrame(() => {
-          positionControl();
           clearTimeout(paintTimer);
           if (config) {
             const next = config, fade = crossfade; crossfade = false;
@@ -125,7 +92,6 @@ export function mountHomepage(signal: AbortSignal) {
         });
       };
       const resize = new ResizeObserver(() => {
-        positionControl();
         // The photo renderer handles resizing without recreating its texture.
         // Only the procedural field needs a new renderer at this resolution.
         if (!config?.image) paint();
@@ -139,7 +105,7 @@ export function mountHomepage(signal: AbortSignal) {
           config = next; paint();
         },
         dispose() {
-          resize.disconnect(); observedTrigger?.removeEventListener("click", onSidebarToggle, true); sidebarObserver.disconnect();
+          resize.disconnect(); disposeHeader();
           updateSlots(slots.filter((slot) => slot !== control)); control.remove(); cutout.remove();
           cancelAnimationFrame(paintFrame); cancelAnimationFrame(styleFrame); clearTimeout(paintTimer); cancelPaint(); canvas.remove(); shield.remove();
           classes.forEach(([element, name]) => element.classList.remove(name));
