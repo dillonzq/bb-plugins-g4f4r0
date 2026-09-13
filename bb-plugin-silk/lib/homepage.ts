@@ -124,7 +124,12 @@ export function mountHomepage(signal: AbortSignal) {
           }
         });
       };
-      const resize = new ResizeObserver(paint);
+      const resize = new ResizeObserver(() => {
+        positionControl();
+        // Photos keep their full bitmap and follow the host's animated bounds
+        // through object-fit. Only the procedural field needs a new resolution.
+        if (!config?.image) paint();
+      });
       resize.observe(host);
       adoptStyles();
       attached.set(host, {

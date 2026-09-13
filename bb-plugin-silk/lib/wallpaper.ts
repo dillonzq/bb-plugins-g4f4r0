@@ -36,16 +36,21 @@ export function renderWallpaper(canvas: HTMLCanvasElement, config: Config, cross
   }
   decode(config.image).then((image) => {
     if (cancelled) return;
+    // Retain the whole image. CSS object-fit can then crop continuously during
+    // panel transitions without replacing an already-cropped bitmap afterward.
+    const resolution = Math.min(1, 2400 / image.naturalWidth, 1800 / image.naturalHeight);
+    const w = Math.max(1, Math.round(image.naturalWidth * resolution));
+    const h = Math.max(1, Math.round(image.naturalHeight * resolution));
     target.width = w; target.height = h;
     const context = target.getContext("2d", { willReadFrequently: true })!;
-    const scale = Math.max(w / image.width, h / image.height);
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
-    context.drawImage(image, (w - image.width * scale) / 2, (h - image.height * scale) / 2, image.width * scale, image.height * scale);
+    context.drawImage(image, 0, 0, w, h);
     const pixels = context.getImageData(0, 0, w, h), data = pixels.data;
     const cellsX = new Uint8Array(w), cellsY = new Uint8Array(h);
-    for (let x = 0; x < w; x++) cellsX[x] = Math.floor(x / w * cssWidth / 2) % 4;
-    for (let y = 0; y < h; y++) cellsY[y] = Math.floor(y / h * cssHeight / 2) % 4;
+    const displayScale = Math.max(cssWidth / w, cssHeight / h);
+    for (let x = 0; x < w; x++) cellsX[x] = Math.floor(x * displayScale / 2) % 4;
+    for (let y = 0; y < h; y++) cellsY[y] = Math.floor(y * displayScale / 2) % 4;
     const g0 = dark ? 0 : base[0], g1 = dark ? 0 : base[1], g2 = dark ? 0 : base[2];
     for (let y = 0, index = 0; y < h; y++) {
       const row = cellsY[y] * 4;

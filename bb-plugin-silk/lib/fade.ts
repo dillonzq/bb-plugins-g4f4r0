@@ -13,7 +13,11 @@ export function drawFade(context: CanvasRenderingContext2D, from: HTMLCanvasElem
   const remaining = 1 - (now - started) / FADE_MS;
   if (remaining <= 0) return false;
   context.globalAlpha = remaining * remaining * (3 - 2 * remaining);
-  context.drawImage(from, 0, 0, context.canvas.width, context.canvas.height);
+  // Image and ambient bitmaps can have different aspect ratios. Match the
+  // wallpaper's centered cover crop throughout the dissolve.
+  const scale = Math.max(context.canvas.width / from.width, context.canvas.height / from.height);
+  const width = from.width * scale, height = from.height * scale;
+  context.drawImage(from, (context.canvas.width - width) / 2, (context.canvas.height - height) / 2, width, height);
   context.globalAlpha = 1;
   return true;
 }
