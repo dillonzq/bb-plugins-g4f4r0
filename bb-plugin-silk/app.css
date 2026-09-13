@@ -347,6 +347,12 @@ div[class~="@container/page"]:has(#root-compose-prompt) > div:has(> [data-prompt
 }
 .silk-background-header-action { z-index: 20; pointer-events: auto; }
 .silk-background-edit { width: 28px; height: 28px; app-region: no-drag; -webkit-app-region: no-drag; }
+@media (max-width: 767px) {
+  /* Keep the mobile sidebar clear while its shelf is open. */
+  [data-sidebar-shelf="open"] :is(.silk-background-header-action, .silk-background-header-cutout) {
+    visibility: hidden;
+  }
+}
 @media (max-width: 767px) and (pointer: coarse) {
   .silk-background-header-action, .silk-background-header-cutout { top: 6px; width: 36px; height: 36px; }
   .silk-background-edit { width: 36px; height: 36px; }
