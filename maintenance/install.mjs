@@ -20,8 +20,8 @@ const inventory = JSON.parse(execFileSync('bb', ['plugin', 'list', '--json'], { 
 const current = inventory.find(p => p.id === id);
 if (current && !current.source.startsWith('path:')) throw Error('This helper only handles local path plugins.');
 function ensureBrowseIdle() {
-  if (id !== 'agent-browser' || current?.status !== 'running') return;
-  const sessions = JSON.parse(execFileSync('bb', ['agent-browser', 'list', '{}'], { encoding: 'utf8' }));
+  if (id !== 'browse' || current?.status !== 'running') return;
+  const sessions = JSON.parse(execFileSync('bb', ['browse', 'list', '{}'], { encoding: 'utf8' }));
   if (sessions.some(s => !['released', 'error'].includes(s.status))) throw Error('Browse has active sessions. Finish them before deploying.');
 }
 ensureBrowseIdle();

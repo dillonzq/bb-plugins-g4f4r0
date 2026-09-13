@@ -1,5 +1,5 @@
 {
-  "name": "bb-plugin-agent-browser",
+  "name": "bb-plugin-browse",
   "version": "0.1.0",
   "type": "module",
   "engines": {

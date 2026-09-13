@@ -1,13 +1,13 @@
 ---
-name: agent-browser
+name: browse
 description: Browse and automate Chromium on each BB thread’s execution host with Vercel Agent Browser. Includes dependency Settings and an on-demand live viewer; explicit native mode also controls BB desktop tabs. Use for navigation, forms, inspection, precise canvas strokes, screenshots, downloads, PNG/PDF export and recording.
 ---
 
 # Browse
 
-Browse is the plugin’s display name, powered by Vercel Agent Browser. Its stable CLI and tool identifiers remain `agent-browser` / `agent_browser_*`.
+Browse is the plugin ID and display name, powered by Vercel Agent Browser. Agent tools stay `agent_browser_*`. The CLI is `bb browse`.
 
-Use the four `agent_browser_*` tools, or `bb agent-browser` when tools are not in this session. This is the preferred browser controller. Managed mode launches Chromium on the current thread’s execution host; it follows the thread environment, not the BB client. Use native mode only for tasks explicitly involving an existing BB desktop tab. This plugin needs no browser service subscription, API key, or second model.
+Use the four `agent_browser_*` tools, or `bb browse` when tools are not in this session. This is the preferred browser controller. Managed mode launches Chromium on the current thread’s execution host; it follows the thread environment, not the BB client. Use native mode only for tasks explicitly involving an existing BB desktop tab. This plugin needs no browser service subscription, API key, or second model.
 
 ## Workflow
 
@@ -60,20 +60,20 @@ Browse registers only a Settings section: no global navigation entry or new-tab 
 
 ## Configuration
 
-`bb agent-browser probe` checks the current thread host. `bb agent-browser setup` installs dependencies there; poll the returned job using its hostId. Settings shows all enrolled machines, checks connected machines independently, and offers installation per machine without changing browser placement. `bb agent-browser machines` lists their connection status. `preferences` stores only the legacy native-mode machine hint. Browse remains visible in Installed plugins and has a dependency Settings page.
+`bb browse probe` checks the current thread host. `bb browse setup` installs dependencies there; poll the returned job using its hostId. Settings shows all enrolled machines, checks connected machines independently, and offers installation per machine without changing browser placement. `bb browse machines` lists their connection status. `preferences` stores only the legacy native-mode machine hint. Browse remains visible in Installed plugins and has a dependency Settings page.
 
 ## CLI fallback
 
-`bb agent-browser help` lists methods. Every method accepts one JSON argument; output is JSON. Pass JSON as one safely quoted argument, or generate arguments through a process API, never interpolate page content into shell code.
+`bb browse help` lists methods. Every method accepts one JSON argument; output is JSON. Pass JSON as one safely quoted argument, or generate arguments through a process API, never interpolate page content into shell code.
 
 ```
-bb agent-browser probe
-bb agent-browser start '{"url":"https://example.com"}'
-bb agent-browser list
-bb agent-browser reveal '{"id":"SESSION"}'
-bb agent-browser run '{"id":"SESSION","operation":{"kind":"command","args":["snapshot","-i"]}}'
-bb agent-browser job '{"hostId":"HOST","id":"JOB"}'
-bb agent-browser release '{"id":"SESSION"}'
+bb browse probe
+bb browse start '{"url":"https://example.com"}'
+bb browse list
+bb browse reveal '{"id":"SESSION"}'
+bb browse run '{"id":"SESSION","operation":{"kind":"command","args":["snapshot","-i"]}}'
+bb browse job '{"hostId":"HOST","id":"JOB"}'
+bb browse release '{"id":"SESSION"}'
 ```
 
 Artifacts live on the browser machine. Use returned preview links or BB host-aware file APIs to transfer them; do not treat a remote path as a server-local file. Links expire after one hour and can be refreshed with artifacts. Browser connection credentials never belong in reports, tools, user-facing files or published URLs.

@@ -2,15 +2,15 @@
 
 A browser automation plugin built around **Vercel Agent Browser 0.37.1**. By default, Browse launches Chromium on **the machine where your BB thread executes**. It works independently of the client device. Explicit native mode can also control BB desktop tabs.
 
-**Browse** is the plugin name; Vercel Agent Browser is its underlying automation engine. Existing `agent-browser` installation, CLI, skill and tool identifiers stay stable so saved sessions and artifacts remain accessible.
+**Browse** is the plugin name and ID (`browse`); Vercel Agent Browser is its underlying automation engine. Agent tools stay `agent_browser_*` so existing agent sessions keep working.
 
 No Browserbase, Browser Use Cloud, AI Gateway, Stagehand API, or second model is required. Your existing BB agent makes the decisions. Agent Browser and its local adapter execute them.
 
 ## Use it
 
-Browse runs through agent tools and the `bb agent-browser` CLI. It adds a dependency page in Settings and no global navigation entry or item in the thread panel’s new-tab menu. The plugin remains visible in BB’s Installed plugins management list.
+Browse runs through agent tools and the `bb browse` CLI. It adds a dependency page in Settings and no global navigation entry or item in the thread panel’s new-tab menu. The plugin remains visible in BB’s Installed plugins management list.
 
-Start with `bb agent-browser start '{"url":"https://example.com"}'` from a BB thread. Browse resolves that thread’s environment host. Run `probe` to check readiness, `setup` to install dependencies, and `reveal '{"id":"SESSION"}'` for a live viewer link. Settings lists all enrolled machines with independent checks and installation actions; offline machines are shown separately.
+Start with `bb browse start '{"url":"https://example.com"}'` from a BB thread. Browse resolves that thread’s environment host. Run `probe` to check readiness, `setup` to install dependencies, and `reveal '{"id":"SESSION"}'` for a live viewer link. Settings lists all enrolled machines with independent checks and installation actions; offline machines are shown separately.
 
 The viewer is a custom authenticated web view with periodic frames, clicking, typing/pasting, navigation keys and scrolling. It is available on demand and does not add a launcher. It is not BB’s native Electron browser surface. Closing the viewer leaves automation running. Relative viewer URLs resolve against the current BB web origin.
 
@@ -25,7 +25,7 @@ Agents get four tools:
 | `agent_browser_action`   | Inspection, commands, batches, shadow DOM controls, strokes and captures |
 | `agent_browser_job`      | Poll or cancel long actions                                              |
 
-Tools and the bundled skill become available when BB refreshes the agent session. The same functionality is available immediately through `bb agent-browser help`.
+Tools and the bundled skill become available when BB refreshes the agent session. The same functionality is available immediately through `bb browse help`.
 
 ## What improves browser use
 
@@ -106,7 +106,7 @@ npm run build
 bb plugin install . --yes
 ```
 
-After source changes: build, then `bb plugin reload agent-browser`. Reload releases active control, so reconnect existing tabs afterward.
+After source changes: build, then `bb plugin reload browse`. Reload releases active control, so reconnect existing tabs afterward.
 
 See [EDGE-VALIDATION.md](EDGE-VALIDATION.md) for the latest edge-case and speed checks, and [VALIDATION.md](VALIDATION.md) for actual test results and known limitations. The project uses only public BB SDK entrypoints.
 

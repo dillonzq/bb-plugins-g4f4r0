@@ -26,7 +26,7 @@ async function fixture(
   const calls: any[] = [];
   let inspected = 0;
   const { bb, harness } = createFakePluginHost({
-    pluginId: "agent-browser",
+    pluginId: "browse",
     sdk: {
       threads: { get: async () => ({ environmentId: "env_thread" }) as any },
       environments: {

@@ -4,7 +4,7 @@ import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {homedir} from 'node:os';
 import {randomUUID} from 'node:crypto';
-const root=join(homedir(),'.bb/plugins/agent-browser/host-data');
+const root=join(homedir(),'.bb/plugins/browse/host-data');
 const h=experimental_createHostEntryHarness(entry,{experimental_paths:{dataDir:root,tempDir:'/tmp'}});
 const rows:any[]=[];
 function check(name:string,ok:boolean,details:any={}){rows.push({name,pass:ok,...details});console.log(JSON.stringify(rows.at(-1)));if(!ok)throw Error(name);}

@@ -4,12 +4,12 @@ This is the permanent source directory for Browse, Beacon, Sidetree, and Silk on
 
 | Plugin | Stable ID | Source directory |
 | --- | --- | --- |
-| Browse | `agent-browser` | `bb-plugin-agent-browser` |
+| Browse | `browse` | `bb-plugin-browse` |
 | Beacon | `beacon` | `bb-plugin-beacon` |
 | Sidetree | `sidetree` | `bb-plugin-sidetree` |
 | Silk | `silk` | `bb-plugin-silk` |
 
-Browse's display name changed; its ID did not. Keep existing IDs when repairing or renaming plugins so settings and saved data stay associated with them.
+Keep these IDs when repairing plugins so settings and saved data stay associated with them.
 
 ## Change and deploy
 

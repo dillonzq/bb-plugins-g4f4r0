@@ -359,8 +359,8 @@ function BrowseSettings() {
           </p>
         </details>
         <p>
-          Also from the CLI: <code>bb agent-browser probe</code> and{" "}
-          <code>bb agent-browser setup</code>.
+          Also from the CLI: <code>bb browse probe</code> and{" "}
+          <code>bb browse setup</code>.
         </p>
       </div>
     </div>

@@ -14,7 +14,7 @@ Runs managed Chromium on each thread’s execution host using Vercel Agent Brows
 - `src/element.ts`, `src/sequence.ts`: guarded input and ordered local operations.
 - `src/download.ts`: bounded authenticated link exports.
 - `src/runtime.ts`: pinned, integrity-verified native binary provisioning.
-- `skills/agent-browser/SKILL.md`: agent workflow and commands.
+- `skills/browse/SKILL.md`: agent workflow and commands.
 - `tests/`: lifecycle, routing, protocol, cancellation and observation checks.
 
-Install locally with `bb plugin install . --yes`. Builds are in `dist/`. Keep BB’s native Browser enabled; the older Browser Automation plugin is a separate controller and should be disabled when adopting this one.
+Install locally with `bb plugin install . --yes`. Builds are in `dist/`. Keep BB’s native Browser enabled.
