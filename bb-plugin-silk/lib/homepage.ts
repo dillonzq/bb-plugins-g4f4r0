@@ -88,7 +88,10 @@ export function mountHomepage(signal: AbortSignal) {
         observeTrigger(triggerElement);
         const trigger = triggerElement?.getBoundingClientRect();
         const sidebarOpen = expanded ?? triggerElement?.getAttribute("aria-expanded") === "true";
-        const x = trigger ? (sidebarOpen ? trigger.left : trigger.right + 4) : 12;
+        // The native desktop toggle includes the window-control inset. With
+        // the sidebar open, the homepage has its own left edge; when closed,
+        // convert the toggle's viewport coordinates into homepage coordinates.
+        const x = trigger && !sidebarOpen ? Math.max(12, trigger.right + 4 - bounds.left) : 12;
         const left = `${Math.round(x * 100) / 100}px`;
         const top = trigger ? `${Math.max(0, trigger.top - bounds.top)}px` : "10px";
         control.style.top = top; cutout.style.top = top;
