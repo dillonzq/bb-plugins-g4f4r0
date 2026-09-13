@@ -126,8 +126,8 @@ export function mountHomepage(signal: AbortSignal) {
       };
       const resize = new ResizeObserver(() => {
         positionControl();
-        // Photos keep their full bitmap and follow the host's animated bounds
-        // through object-fit. Only the procedural field needs a new resolution.
+        // The photo renderer handles resizing without recreating its texture.
+        // Only the procedural field needs a new renderer at this resolution.
         if (!config?.image) paint();
       });
       resize.observe(host);

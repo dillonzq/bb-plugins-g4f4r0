@@ -1,8 +1,8 @@
 import type { Config } from "./config";
 import { animateAmbient } from "./ambient";
-import { drawFade, snapshot } from "./fade";
+import { snapshot } from "./fade";
+import { animatePhoto } from "./photo";
 
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 let decoded: { src: string; image: Promise<HTMLImageElement> } | null = null;
 
 function decode(src: string) {
@@ -16,9 +16,8 @@ function decode(src: string) {
 }
 
 export function renderWallpaper(canvas: HTMLCanvasElement, config: Config, crossfade = false): () => void {
-  let cancelled = false, fadeFrame = 0;
+  let cancelled = false, cancelPhoto = () => {};
   const from = crossfade ? snapshot(canvas) : null;
-  const target = config.image ? document.createElement("canvas") : canvas;
   const cssWidth = Math.max(1, canvas.clientWidth), cssHeight = Math.max(1, canvas.clientHeight);
   const resolution = Math.min(config.image ? 1 : 0.5, 2400 / cssWidth, 1800 / cssHeight);
   const w = Math.max(1, Math.round(cssWidth * resolution));
@@ -29,62 +28,21 @@ export function renderWallpaper(canvas: HTMLCanvasElement, config: Config, cross
   probe.fillRect(0, 0, 1, 1);
   const base = Array.from(probe.getImageData(0, 0, 1, 1).data);
   if (!config.image) {
-    target.width = w; target.height = h;
+    canvas.width = w; canvas.height = h;
     const dispose = animateAmbient(canvas, base, dark, from);
     canvas.dataset.ready = "";
     return dispose;
   }
   decode(config.image).then((image) => {
     if (cancelled) return;
-    // Retain the whole image. CSS object-fit can then crop continuously during
-    // panel transitions without replacing an already-cropped bitmap afterward.
-    const resolution = Math.min(1, 2400 / image.naturalWidth, 1800 / image.naturalHeight);
-    const w = Math.max(1, Math.round(image.naturalWidth * resolution));
-    const h = Math.max(1, Math.round(image.naturalHeight * resolution));
-    target.width = w; target.height = h;
-    const context = target.getContext("2d", { willReadFrequently: true })!;
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-    context.drawImage(image, 0, 0, w, h);
-    const pixels = context.getImageData(0, 0, w, h), data = pixels.data;
-    const cellsX = new Uint8Array(w), cellsY = new Uint8Array(h);
-    const displayScale = Math.max(cssWidth / w, cssHeight / h);
-    for (let x = 0; x < w; x++) cellsX[x] = Math.floor(x * displayScale / 2) % 4;
-    for (let y = 0; y < h; y++) cellsY[y] = Math.floor(y * displayScale / 2) % 4;
-    const g0 = dark ? 0 : base[0], g1 = dark ? 0 : base[1], g2 = dark ? 0 : base[2];
-    for (let y = 0, index = 0; y < h; y++) {
-      const row = cellsY[y] * 4;
-      for (let x = 0; x < w; x++, index += 4) {
-        const threshold = (BAYER[row + cellsX[x]] + 0.5) / 16;
-        const luminance = (data[index] * 0.2126 + data[index + 1] * 0.7152 + data[index + 2] * 0.0722) / 255;
-        const opacity = threshold < 0.18 + luminance * 0.64 ? 0.84 : 0.2688;
-        data[index] = g0 + (data[index] - g0) * opacity;
-        data[index + 1] = g1 + (data[index + 1] - g1) * opacity;
-        data[index + 2] = g2 + (data[index + 2] - g2) * opacity;
-        data[index + 3] = 255;
-      }
-    }
-    context.putImageData(pixels, 0, 0);
-    canvas.width = w; canvas.height = h;
-    const visible = canvas.getContext("2d")!;
-    visible.drawImage(target, 0, 0);
-    canvas.dataset.ready = "";
-    if (!from) return;
-    const started = performance.now();
-    drawFade(visible, from, started, started);
-    const step = (now: number) => {
-      if (cancelled) return;
-      visible.drawImage(target, 0, 0);
-      fadeFrame = drawFade(visible, from, started, now) ? requestAnimationFrame(step) : 0;
-    };
-    fadeFrame = requestAnimationFrame(step);
+    cancelPhoto = animatePhoto(canvas, image, from);
   }, () => {
     if (cancelled || canvas.hasAttribute("data-ready")) return;
     canvas.width = w; canvas.height = h;
     const visible = canvas.getContext("2d");
     if (visible) { visible.fillStyle = `rgb(${base.slice(0, 3).join(",")})`; visible.fillRect(0, 0, w, h); }
   });
-  return () => { cancelled = true; cancelAnimationFrame(fadeFrame); };
+  return () => { cancelled = true; cancelPhoto(); };
 }
 
 export async function prepareImage(file: File): Promise<string> {

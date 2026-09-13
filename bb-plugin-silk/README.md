@@ -18,6 +18,8 @@ Open BB's welcome launcher or **New thread** to see the Silk wallpaper. Use the 
 
 Silk processes uploads in the browser, converts them to WebP, and stores them in BB plugin KV. The original image does not enter the repository or leave the BB server.
 
+Photos use Aura's animated color dithering, with a consistent two-pixel texture on desktop and mobile. The effect pauses for reduced motion and hidden pages, and retains the source texture while panels resize. Browsers without WebGL show the original image. Attribution and licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 Disable Silk to restore BB's native icons and layout. Switch back to the default palette with:
 
 ```sh
@@ -51,7 +53,9 @@ Install Silk from a durable checkout or local plugin directory. Do not make a te
 | `app.css` | Handles component sizing, sidebar states, responsive layout, and small compatibility fixes. |
 | `themes/silk.css` | Defines the Silk palette and semantic button colors. |
 | `lib/homepage.ts` | Finds the native welcome and New thread pages, mounts the wallpaper, and positions the pencil control. |
-| `lib/wallpaper.ts` | Decodes, resizes, dithers, and draws uploaded wallpaper images. |
+| `lib/wallpaper.ts` | Prepares uploads and selects the photo or ambient renderer. |
+| `lib/photo.ts` | Runs the photo shader, resizes without reloading the image, and handles motion and WebGL fallback. |
+| `lib/photo-shaders.ts` | Attributed Aura/Paper image shaders and Aura's threshold-wave animation. |
 | `lib/ambient.ts` | Draws the animated fallback when no image is set. |
 | `lib/remix-icons.tsx` | Maps BB icon names to Remix Line artwork. |
 | `lib/icon-layout.ts` | Makes custom icon wrappers follow BB's native SVG sizing rules. |
