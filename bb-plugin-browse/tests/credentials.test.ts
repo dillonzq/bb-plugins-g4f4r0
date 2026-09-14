@@ -84,3 +84,51 @@ it("refuses a destination changed by an input handler before clicking", () => {
   expect(click).not.toHaveBeenCalled();
   expect((document.querySelector("#pass") as HTMLInputElement).value).toBe("");
 });
+it("fills unique fields inside an open shadow root", () => {
+  document.body.innerHTML =
+    '<form method="post"><div id="host"></div><div id="next" role="button">Continue</div></form>';
+  const shadow = document
+    .querySelector("#host")!
+    .attachShadow({ mode: "open" });
+  shadow.innerHTML = '<input id="email"><input id="pass" type="password">';
+  const binding = bindCredentialForm(fields, "#next"),
+    click = vi.fn();
+  binding.button.addEventListener("click", click);
+  expect(
+    fillCredentialForm.call(binding, ["dummy-user", "dummy-password"]),
+  ).toBe(true);
+  expect(click).toHaveBeenCalledTimes(1);
+  expect((shadow.querySelector("#pass") as HTMLInputElement).value).toBe(
+    "dummy-password",
+  );
+});
+it("accepts a >>> shadow selector and a role=button continue control", () => {
+  document.body.innerHTML =
+    '<form method="post"><div id="host"></div><div id="go" role="button">Continue</div></form>';
+  document.querySelector("#host")!.attachShadow({ mode: "open" }).innerHTML =
+    '<input id="email"><input id="pass" type="password">';
+  const binding = bindCredentialForm(
+    [
+      { selector: "#host >>> #email", kind: "username" },
+      { selector: "#host >>> #pass", kind: "password" },
+    ],
+    "#go",
+  );
+  expect(
+    fillCredentialForm.call(binding, ["dummy-user", "dummy-password"]),
+  ).toBe(true);
+});
+it("refuses two copies of the same field in different shadows", () => {
+  document.body.innerHTML =
+    '<form method="post"><div id="a"></div><div id="b"></div><button id="next" type="button">Go</button></form>';
+  document.querySelector("#a")!.attachShadow({ mode: "open" }).innerHTML =
+    '<input id="email"><input id="pass" type="password">';
+  document.querySelector("#b")!.attachShadow({ mode: "open" }).innerHTML =
+    '<input id="email"><input id="pass" type="password">';
+  expect(() => bindCredentialForm(fields, "#next")).toThrow(/unique/i);
+});
+it("refuses a continue link to another origin", () => {
+  document.body.innerHTML =
+    '<form method="post"><input id="email"><input id="pass" type="password"><a id="next" role="button" href="https://another.test/">Continue</a></form>';
+  expect(() => bindCredentialForm(fields, "#next")).toThrow();
+});

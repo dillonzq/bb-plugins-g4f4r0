@@ -29,16 +29,54 @@ export const bindCredentialFormSource = String.raw`function(fields, submitSelect
   if (url.username || url.password || !(url.protocol === "https:" ||
     (url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))))
     throw Error("Secure website required");
+  function deepQuery(root, selector) {
+    let current = [root];
+    const parts = String(selector).split(/\s*>>>\s*/);
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (!part) throw Error("A unique field is required");
+      const matches = current.flatMap(r => [...r.querySelectorAll(part)]);
+      if (i === parts.length - 1) return matches;
+      current = matches.map(e => e.shadowRoot).filter(Boolean);
+    }
+    return [];
+  }
   function unique(selector) {
-    const matches = document.querySelectorAll(selector);
+    const matches = [];
+    const pierce = /\s*>>>\s*/.test(selector);
+    function walk(root) {
+      if (pierce) matches.push.apply(matches, deepQuery(root, selector));
+      else {
+        matches.push.apply(matches, root.querySelectorAll(selector));
+        for (const e of root.querySelectorAll("*"))
+          if (e.shadowRoot) walk(e.shadowRoot);
+      }
+    }
+    walk(document);
     if (matches.length !== 1) throw Error("A unique field is required");
     return matches[0];
   }
   function visible(el) {
+    const view = el.ownerDocument.defaultView;
+    if (!view) return false;
     const box = el.getBoundingClientRect();
-    const style = getComputedStyle(el);
+    const style = view.getComputedStyle(el);
     return el.isConnected && box.width > 0 && box.height > 0 &&
       style.visibility === "visible" && style.display !== "none" && Number(style.opacity) > 0;
+  }
+  function disabled(el) {
+    return !!(el.disabled || el.getAttribute("aria-disabled") === "true");
+  }
+  function destination(el, fallback) {
+    return new URL(el || fallback, el?.baseURI || document.baseURI);
+  }
+  function isContinue(el) {
+    if (!visible(el) || disabled(el)) return false;
+    if (el instanceof HTMLAnchorElement && el.hasAttribute("href") &&
+      destination(el.href, url.href).origin !== url.origin) return false;
+    if (el instanceof HTMLButtonElement) return el.type !== "reset";
+    if (el instanceof HTMLInputElement) return el.type === "submit" || el.type === "button";
+    return el.getAttribute("role") === "button";
   }
   const nodes = fields.map(f => unique(f.selector));
   if (new Set(nodes).size !== nodes.length) throw Error("Duplicate field");
@@ -48,17 +86,21 @@ export const bindCredentialFormSource = String.raw`function(fields, submitSelect
     if (location.href !== href) throw Error("Page changed");
     nodes.forEach((node, i) => {
       if (unique(fields[i].selector) !== node || !(node instanceof HTMLInputElement) ||
-        !visible(node) || node.disabled || node.readOnly ||
+        !visible(node) || disabled(node) || node.readOnly ||
         !["text", "email", "password", "tel", "number"].includes(node.type) ||
         (fields[i].kind === "password" && node.type !== "password")) throw Error("Field changed");
-      if (node.form && (node.form.method !== "post" || new URL(node.form.action || href).origin !== url.origin)) throw Error("Form destination changed");
+      const page = node.ownerDocument.location.href;
+      if (node.form && (node.form.method !== "post" ||
+        destination(node.form.action || page, page).origin !== url.origin))
+        throw Error("Form destination changed");
     });
-    if (unique(submitSelector) !== button || !visible(button) ||
-      !(button instanceof HTMLButtonElement || (button instanceof HTMLInputElement && button.type === "submit")) ||
-      button.disabled) throw Error("Continue button changed");
-    if (button.formAction && new URL(button.formAction).origin !== url.origin) throw Error("Submit destination changed");
-    if (button.hasAttribute("formmethod") && button.formMethod !== "post") throw Error("Unsafe form method");
-    if (button.form && new URL(button.form.action || href).origin !== url.origin) throw Error("Submit destination changed");
+    if (unique(submitSelector) !== button || !isContinue(button)) throw Error("Continue button changed");
+    if (button.formAction && destination(button.formAction, href).origin !== url.origin)
+      throw Error("Submit destination changed");
+    if (button.hasAttribute && button.hasAttribute("formmethod") && button.formMethod !== "post")
+      throw Error("Unsafe form method");
+    if (button.form && destination(button.form.action || href, href).origin !== url.origin)
+      throw Error("Submit destination changed");
   }
   validate();
   return { nodes, button, validate, href, written: false };
@@ -94,34 +136,60 @@ export class CredentialBinding {
   ) {}
   static async prepare(cdp: Cdp, input: CredentialRequest) {
     const { frameTree } = await cdp.send("Page.getFrameTree");
-    const { executionContextId } = await cdp.send("Page.createIsolatedWorld", {
-      frameId: frameTree.frame.id,
-      worldName: "bb-credential-delivery",
-    });
-    const result = await cdp.send("Runtime.evaluate", {
-      expression: `(${bindCredentialFormSource})(${JSON.stringify(input.fields)},${JSON.stringify(input.submitSelector)})`,
-      contextId: executionContextId,
-      returnByValue: false,
-    });
-    if (result.exceptionDetails || !result.result?.objectId)
+    const frames: { id: string }[] = [];
+    (function walk(tree: {
+      frame: { id: string };
+      childFrames?: typeof tree[];
+    }) {
+      frames.push(tree.frame);
+      for (const child of tree.childFrames ?? []) walk(child);
+    })(frameTree);
+    const expression = `(${bindCredentialFormSource})(${JSON.stringify(input.fields)},${JSON.stringify(input.submitSelector)})`;
+    const found: { objectId: string; origin: string }[] = [];
+    for (const frame of frames) {
+      let objectId: string | undefined;
+      try {
+        const { executionContextId } = await cdp.send(
+          "Page.createIsolatedWorld",
+          { frameId: frame.id, worldName: "bb-credential-delivery" },
+        );
+        const result = await cdp.send("Runtime.evaluate", {
+          expression,
+          contextId: executionContextId,
+          returnByValue: false,
+        });
+        if (result.exceptionDetails || !result.result?.objectId) continue;
+        const boundId = result.result.objectId;
+        objectId = boundId;
+        const bound = await cdp.send("Runtime.callFunctionOn", {
+          objectId: boundId,
+          functionDeclaration:
+            "function() { this.validate(); return new URL(this.href).origin; }",
+          returnByValue: true,
+        });
+        if (bound.exceptionDetails || typeof bound.result?.value !== "string") {
+          await cdp.send("Runtime.releaseObject", { objectId: boundId }).catch(() => {});
+          continue;
+        }
+        found.push({ objectId: boundId, origin: bound.result.value });
+      } catch {
+        if (objectId)
+          await cdp.send("Runtime.releaseObject", { objectId }).catch(() => {});
+      }
+    }
+    if (found.length !== 1) {
+      await Promise.all(
+        found.map((item) =>
+          cdp.send("Runtime.releaseObject", { objectId: item.objectId }).catch(
+            () => {},
+          ),
+        ),
+      );
       throw Error(
         "Login fields are unavailable or unsafe. Inspect the page and request again.",
       );
-    const objectId = result.result.objectId;
-    try {
-      const bound = await cdp.send("Runtime.callFunctionOn", {
-        objectId,
-        functionDeclaration:
-          "function() { this.validate(); return new URL(this.href).origin; }",
-        returnByValue: true,
-      });
-      if (bound.exceptionDetails || typeof bound.result?.value !== "string")
-        throw Error("Page changed");
-      return new CredentialBinding(cdp, objectId, bound.result.value);
-    } catch (error) {
-      await cdp.send("Runtime.releaseObject", { objectId }).catch(() => {});
-      throw error;
     }
+    return new CredentialBinding(cdp, found[0].objectId, found[0].origin);
   }
   async fill(values: string[]) {
     const result = await this.cdp.send("Runtime.callFunctionOn", {

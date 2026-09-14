@@ -82,7 +82,7 @@ Artifacts live on the browser machine. Use returned preview links or BB host-awa
 
 Use `browse_credentials` or `bb browse credentials` to request login fields from the user through BB's private input form. It uses the same SDK input mechanism as Secrets, without writing a dotenv file. Never ask for credentials in chat, put values in tool arguments, or use ordinary `fill` for a user's password.
 
-Inspect the page first. Pass unique CSS selectors for visible top-document input fields and the continue/submit button. Example:
+Inspect the page first. Pass unique CSS selectors for the visible fields and the continue control. Open shadow roots work with a plain id or with `host >>> input`. Login fields in an iframe are bound in that frame when they uniquely match. Example:
 
 ```sh
 bb browse credentials '{"id":"SESSION","purpose":"Sign in to the requested store","fields":[{"selector":"#email","label":"Email","kind":"username"},{"selector":"#password","label":"Password","kind":"password"}],"submitSelector":"button[type=submit]"}'
@@ -92,7 +92,7 @@ bb browse credentials '{"id":"SESSION","purpose":"Sign in to the requested store
 
 The private form lets the user choose a password manager through the device AutoFill. On iPhone, the form belongs to BB's domain, so they may need to manually select the intended login and choose Allow Once.
 
-Only managed sessions are supported. Stop recording first. The request holds the automation lock for at most five minutes, checks that the exact document, URL, fields and form destination have not changed, fills once, and clicks the requested button. It accepts HTTPS or loopback HTTP test pages. HTML forms must use same-origin POST. Iframes, shadow-root inputs, custom submit controls, and cross-origin form actions are not supported.
+Only managed sessions are supported. Stop recording first. The request holds the automation lock for at most five minutes, checks that the exact document, URL, fields and form destination have not changed, fills once, and clicks the requested control. It accepts HTTPS or loopback HTTP test pages. HTML forms must use same-origin POST. Continue may be a button, `input type=submit|button`, or `role=button`. Closed shadow roots, cross-origin form actions, and an off-origin continue link are not supported. Ambiguous matches across frames fail closed.
 
 Job output with `filled:true` confirms delivery and clicking, not successful authentication. Inspect the resulting page without reading password fields, console logs, network bodies, or credentials. For another login step, request a fresh form with kind `username`, `password`, or `one-time-code`. Never retry a timed-out submission blindly. CAPTCHA and other interactions require user takeover through the viewer.
 
