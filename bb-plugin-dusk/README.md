@@ -11,7 +11,7 @@ Install dependencies and the plugin from this directory:
 ```sh
 npm install
 bb plugin install .
-bb theme set plugin:dusk:dusk
+bb theme set plugin:dusk:default
 ```
 
 Open BB's welcome launcher or **New thread** to see the Dusk wallpaper. Use the pencil beside the sidebar toggle on either screen to choose, change, or remove it. Changes save immediately and apply to both screens.

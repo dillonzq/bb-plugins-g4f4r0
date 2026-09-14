@@ -16,7 +16,7 @@
     "app": "./app.tsx",
     "themes": [
       {
-        "id": "dusk",
+        "id": "default",
         "name": "Dusk",
         "description": "Soft charcoal surfaces with a Notion-inspired blue accent.",
         "css": "./themes/dusk.css"
