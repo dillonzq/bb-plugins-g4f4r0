@@ -5,9 +5,9 @@ description: Browse and automate Chromium on each BB thread’s execution host w
 
 # Browse
 
-Browse is the plugin ID and display name, powered by Vercel Agent Browser. Agent tools stay `agent_browser_*`. The CLI is `bb browse`.
+Browse is the plugin ID, CLI (`bb browse`), and agent tools (`browse_discover`, `browse_session`, `browse_action`, `browse_job`, `browse_credentials`). Vercel Agent Browser is the Chromium driver.
 
-Use the four `agent_browser_*` tools, or `bb browse` when tools are not in this session. This is the preferred browser controller. Managed mode launches headed Chromium on the current thread’s execution host; it follows the thread environment, not the BB client. The live page opens in the thread side panel. Use native mode only for tasks explicitly involving an existing BB desktop tab. This plugin needs no browser service subscription, API key, or second model.
+Use the `browse_*` tools, or `bb browse` when tools are not in this session. This is the preferred browser controller. Managed mode launches headed Chromium on the current thread’s execution host; it follows the thread environment, not the BB client. The live page opens in the thread side panel. Use native mode only for tasks explicitly involving an existing BB desktop tab. This plugin needs no browser service subscription, API key, or second model.
 
 ## Workflow
 
@@ -54,13 +54,13 @@ Capture:
 - `{"kind":"download","selector":"a#report","name":"report.csv"}` fetches a top-page link’s href through the authenticated page and saves it in session artifacts (up to 16 MB). CSS selectors support open shadow roots and resolve against document.baseURI. Accessibility refs require an absolute href to avoid resolving an iframe link against the wrong page. Supports accessible HTTP(S), blob and data URLs; CORS may block cross-origin files. For button-triggered downloads in managed mode, use `{"kind":"downloadClick","selector":"button#export","name":"report.csv"}`. It listens before one click, waits for one completed file (60 seconds, up to 128 MB), and saves it as an artifact. Native BB mode supports link fetches only.
 - `{"kind":"record","action":"start","fps":20}` and `{"kind":"record","action":"stop","fps":20}` produce WebM. Requires ffmpeg on the browser machine. Start before navigation/actions if asked to record the full sequence. Report unavailable if the actual browser cannot record.
 
-Long jobs return `running` with job ID and host ID. Poll with `agent_browser_job`; don't resubmit the action. Only one action runs per session. Stop with cancel, then poll until terminal. Per-job default deadline 120 seconds; maximum 600 seconds. Control lease lasts 30 minutes and is deliberately not silently reacquired after expiry or takeover.
+Long jobs return `running` with job ID and host ID. Poll with `browse_job`; don't resubmit the action. Only one action runs per session. Stop with cancel, then poll until terminal. Per-job default deadline 120 seconds; maximum 600 seconds. Control lease lasts 30 minutes and is deliberately not silently reacquired after expiry or takeover.
 
-Browse registers a thread-panel Browser tab. The live view opens when a managed session starts. It supports clicking, typing/pasting, keys and scrolling, with periodic frames while visible. Use agent actions for drag gestures, uploads and downloads. Viewer input shares the session lock and refuses competing automation.
+Browse registers a thread-panel Browser tab. The live view is a CDP JPEG screencast pushed over a plugin WebSocket (with HTTP frame fallback). It supports clicking, typing/pasting, keys and scrolling. Use agent actions for drag gestures, uploads and downloads. Viewer input shares the session lock and refuses competing automation.
 
 ## Configuration
 
-`bb browse probe` checks the current thread host. `bb browse setup` installs dependencies there; poll the returned job using its hostId. Settings shows all enrolled machines, checks connected machines independently (Chrome, Agent Browser, FFmpeg, and on Linux Xvfb/xkbcomp/keymap data), and offers installation per machine without changing browser placement. `bb browse machines` lists their connection status. `preferences` stores only the legacy native-mode machine hint. Browse remains visible in Installed plugins and has a dependency Settings page.
+`bb browse probe` checks the current thread host. `bb browse setup` installs dependencies there; poll the returned job using its hostId. Settings shows all enrolled machines, checks connected machines independently (Chrome, Browse engine, FFmpeg, and on Linux Xvfb/xkbcomp/keymap data), and offers installation per machine without changing browser placement. `bb browse machines` lists their connection status. `preferences` stores only the legacy native-mode machine hint. Browse remains visible in Installed plugins and has a dependency Settings page.
 
 ## CLI fallback
 
@@ -80,7 +80,7 @@ Artifacts live on the browser machine. Use returned preview links or BB host-awa
 
 ## Private browser login
 
-Use `agent_browser_credentials` or `bb browse credentials` to request login fields from the user through BB's private input form. It uses the same SDK input mechanism as Secrets, without writing a dotenv file. Never ask for credentials in chat, put values in tool arguments, or use ordinary `fill` for a user's password.
+Use `browse_credentials` or `bb browse credentials` to request login fields from the user through BB's private input form. It uses the same SDK input mechanism as Secrets, without writing a dotenv file. Never ask for credentials in chat, put values in tool arguments, or use ordinary `fill` for a user's password.
 
 Inspect the page first. Pass unique CSS selectors for visible top-document input fields and the continue/submit button. Example:
 

@@ -376,12 +376,12 @@ export default async function plugin(bb: BbPluginApi) {
         hostId,
       };
     },
-    frame: async ({ id }) => {
+    frame: async ({ id, after = 0 }) => {
       const s = get(id);
       await ensurePlacement(s);
       if (s.mode !== "managed" || s.status !== "ready")
         throw new Error("Managed browser is not ready. Reconnect the session.");
-      return host.call("frame", { id }, { hostId: s.hostId });
+      return host.call("frame", { id, after }, { hostId: s.hostId, timeoutMs: 20000 });
     },
     input: async (input) => {
       const s = get(input.id);
@@ -604,10 +604,47 @@ export default async function plugin(bb: BbPluginApi) {
   bb.http.route("GET", "/frame", async (c) => {
     c.header("Cache-Control", "no-store");
     try {
-      return c.json(await handlers.frame({ id: id.parse(c.req.query("id")) }));
+      const after = Number(c.req.query("after") ?? 0);
+      return c.json(
+        await handlers.frame({
+          id: id.parse(c.req.query("id")),
+          after: Number.isFinite(after) && after >= 0 ? Math.floor(after) : 0,
+        }),
+      );
     } catch (e) {
       return c.json({ error: redact(String(e)) }, 409);
     }
+  });
+  bb.http.experimental_websocket("/cast", (ctx) => {
+    const sid = ctx.url.searchParams.get("id");
+    let closed = false;
+    return {
+      onOpen: (socket) => {
+        void (async () => {
+          let after = 0;
+          while (!closed) {
+            try {
+              const frame = await handlers.frame({
+                id: id.parse(sid),
+                after,
+              });
+              if (closed) return;
+              if (frame.seq > after) {
+                socket.send(JSON.stringify(frame));
+                after = frame.seq;
+              } else await sleep(80);
+            } catch (e) {
+              if (!closed)
+                socket.send(JSON.stringify({ error: redact(String(e)) }));
+              return;
+            }
+          }
+        })();
+      },
+      onClose: () => {
+        closed = true;
+      },
+    };
   });
   bb.http.route("GET", "/viewer-job", async (c) => {
     c.header("Cache-Control", "no-store");
@@ -779,7 +816,7 @@ export default async function plugin(bb: BbPluginApi) {
     return s;
   }
   bb.agents.registerTool({
-    name: "agent_browser_credentials",
+    name: "browse_credentials",
     description:
       "Ask the user for login fields through a private BB form, then fill and continue in this thread's managed browser. Pass observed CSS selectors, never credential values. Supports username, password, and verification codes. The browser is locked during the request. Returns delivery status only; inspect afterward to verify login.",
     parameters: credentialRequest,
@@ -787,7 +824,7 @@ export default async function plugin(bb: BbPluginApi) {
       JSON.stringify(await requestCredentials(input, ctx.threadId, ctx.signal)),
   });
   bb.agents.registerTool({
-    name: "agent_browser_discover",
+    name: "browse_discover",
     description:
       "Discover connected machines, BB desktop instances, and this thread’s browser sessions. Managed browser execution follows the current thread host. Desktop instances are only for explicit native mode.",
     parameters: z.object({}),
@@ -800,7 +837,7 @@ export default async function plugin(bb: BbPluginApi) {
       }),
   });
   bb.agents.registerTool({
-    name: "agent_browser_session",
+    name: "browse_session",
     description:
       "Start Browse on this thread’s execution host (headed Chrome, default managed mode). Needs only a URL. The live page opens in the thread side panel. Reuses a live session at the same current URL in this thread without navigation; newTab:true forces a separate profile. Concurrent starts are serialized. Probe/setup check or install Chrome and recording dependencies on that host. Reveal focuses the live viewer. Release/close stop the managed browser, preserving its profile and artifacts. Reconnect relaunches its last URL with cookies/storage, not in-memory page state. Sessions last 30 minutes. Explicit mode:native attaches BB desktop tabs and requires hostId, instanceId, generation; native release preserves its tab.",
     parameters: z.object({
@@ -851,9 +888,9 @@ export default async function plugin(bb: BbPluginApi) {
     },
   });
   bb.agents.registerTool({
-    name: "agent_browser_action",
+    name: "browse_action",
     description:
-      "Inspect with observe for accessibility refs, open shadow DOM targets, bounds and optional screenshot. Use element click/fill/hover for >>> shadow selectors (top document). Run structured Agent Browser commands, command batches, or sequence steps to execute up to 50 understood operations in one local job with partial results on failure. Element actions wait up to waitMs (default 3000) for stable unobscured targets; fill avoids redundant pointer events. Snapshot -i gives refs; reuse refs only on unchanged pages. Use gesture with arrays of viewport CSS-pixel points for atomic continuous strokes. Capture screenshots, original canvas PNG, PDF, downloads, or record start/stop. Commands execute without another model or paid browser service. Results include elapsed time, artifacts and images. Long jobs return running; poll with agent_browser_job. Mutations are never blindly retried.",
+      "Inspect with observe for accessibility refs, open shadow DOM targets, bounds and optional screenshot. Use element click/fill/hover for >>> shadow selectors (top document). Run structured Browse commands, command batches, or sequence steps to execute up to 50 understood operations in one local job with partial results on failure. Element actions wait up to waitMs (default 3000) for stable unobscured targets; fill avoids redundant pointer events. Snapshot -i gives refs; reuse refs only on unchanged pages. Use gesture with arrays of viewport CSS-pixel points for atomic continuous strokes. Capture screenshots, original canvas PNG, PDF, downloads, or record start/stop. Commands execute without another model or paid browser service. Results include elapsed time, artifacts and images. Long jobs return running; poll with browse_job. Mutations are never blindly retried.",
     parameters: z.object({
       id,
       operation,
@@ -874,7 +911,7 @@ export default async function plugin(bb: BbPluginApi) {
     },
   });
   bb.agents.registerTool({
-    name: "agent_browser_job",
+    name: "browse_job",
     description:
       "Poll or cancel an asynchronous browser job. Cancellation stops the command and releases any held pointer in a continuous gesture. Poll until terminal status before issuing another action.",
     parameters: z.object({
@@ -894,11 +931,11 @@ export default async function plugin(bb: BbPluginApi) {
   });
   bb.agents.configure(() => ({
     tools: [
-      "agent_browser_credentials",
-      "agent_browser_discover",
-      "agent_browser_session",
-      "agent_browser_action",
-      "agent_browser_job",
+      "browse_credentials",
+      "browse_discover",
+      "browse_session",
+      "browse_action",
+      "browse_job",
     ],
     skills: ["browse"],
     instructions:

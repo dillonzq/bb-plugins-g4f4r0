@@ -1,7 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 export async function pngToPdf(png: Uint8Array): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  doc.setProducer("Agent Browser for BB");
+  doc.setProducer("Browse for BB");
   doc.setTitle("Browser page capture");
   const img = await doc.embedPng(png);
   const width = 595.28,

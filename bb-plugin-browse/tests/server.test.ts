@@ -109,6 +109,14 @@ async function fixture(
           recording: false,
           artifactRoot: "/private/artifacts/session",
         };
+      if (call.method === "frame")
+        return {
+          data: "qq",
+          url: "https://example.com/",
+          width: 1280,
+          height: 800,
+          seq: input.after ? input.after : 1,
+        };
       if (call.method === "submit")
         return {
           id: "job_run",
@@ -184,7 +192,7 @@ describe("BB browser lifecycle", () => {
     const r: any = await f.harness.behavior.callRpc("start", { ...base });
     const result: any = await f.harness.behavior
       .callAgentTool(
-        "agent_browser_action",
+        "browse_action",
         {
           id: r.session.id,
           operation: { kind: "command", args: ["snapshot", "-i"] },
@@ -238,6 +246,18 @@ describe("Thread-host routing", () => {
       threadId: "thread_one",
       action: "spotlight",
     });
+    const ws = await f.harness.behavior.experimental_openWebSocket(
+      `/cast?id=${r.session.id}`,
+    );
+    const deadline = Date.now() + 2000;
+    while (!ws.sent.length && Date.now() < deadline)
+      await new Promise((res) => setTimeout(res, 20));
+    expect(JSON.parse(String(ws.sent[0]))).toMatchObject({
+      data: "qq",
+      seq: 1,
+      width: 1280,
+    });
+    await ws.close();
     await f.harness.lifecycle.dispose();
     expect(f.release).not.toHaveBeenCalled();
   });

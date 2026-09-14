@@ -62,7 +62,7 @@ export class Bridge {
               error: {
                 code: -32000,
                 message:
-                  "Manage browser tabs through the Agent Browser session API.",
+                  "Manage browser tabs through the Browse session API.",
               },
             }),
           );

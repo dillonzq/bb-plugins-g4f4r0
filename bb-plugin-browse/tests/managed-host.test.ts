@@ -8,6 +8,14 @@ const mock = vi.hoisted(() => ({
   close: vi.fn(async () => {}),
   send: vi.fn(async (_method: string, _params: any) => ({})),
   evaluate: vi.fn(async () => "https://example.com"),
+  startLiveCast: vi.fn(async () => {}),
+  stopLiveCast: vi.fn(async () => {}),
+  nextLiveFrame: vi.fn(async () => ({
+    data: "jpeg",
+    width: 1280,
+    height: 800,
+    seq: 1,
+  })),
   events: [] as string[],
   commands: [] as string[][],
 }));
@@ -39,6 +47,9 @@ vi.mock("../src/cdp", () => ({
       targetId: "managed",
       send: mock.send,
       evaluate: mock.evaluate,
+      startLiveCast: mock.startLiveCast,
+      stopLiveCast: mock.stopLiveCast,
+      nextLiveFrame: mock.nextLiveFrame,
       close: () => mock.events.push("cdp-close"),
     }),
   },
@@ -192,6 +203,12 @@ it("uses a resized viewport for live frames and scroll coordinates", async () =>
   const h = experimental_createHostEntryHarness(entry, {
     experimental_paths: { dataDir: root, tempDir: root },
   });
+  mock.nextLiveFrame.mockResolvedValue({
+    data: "jpeg",
+    width: 390,
+    height: 600,
+    seq: 1,
+  });
   mock.send.mockImplementation(async (method: string) =>
     method === "Page.getLayoutMetrics"
       ? {
@@ -202,9 +219,7 @@ it("uses a resized viewport for live frames and scroll coordinates", async () =>
             pageY: 500,
           },
         }
-      : method === "Page.captureScreenshot"
-        ? { data: "jpeg" }
-        : {},
+      : {},
   );
   try {
     let j = await h.experimental_call("connect", {
@@ -219,15 +234,9 @@ it("uses a resized viewport for live frames and scroll coordinates", async () =>
     expect(j.status).toBe("succeeded");
     expect(
       await h.experimental_call("frame", { id: "ab-viewport" }),
-    ).toMatchObject({ data: "jpeg", width: 390, height: 600 });
-    expect(mock.send).toHaveBeenCalledWith(
-      "Page.captureScreenshot",
-      expect.objectContaining({
-        clip: { x: 0, y: 500, width: 390, height: 600, scale: 1 },
-      }),
-      true,
-      5000,
-    );
+    ).toMatchObject({ data: "jpeg", width: 390, height: 600, seq: 1 });
+    expect(mock.startLiveCast).toHaveBeenCalled();
+    expect(mock.nextLiveFrame).toHaveBeenCalled();
     await h.experimental_call("input", {
       id: "ab-viewport",
       input: { kind: "scroll", deltaY: 300 },

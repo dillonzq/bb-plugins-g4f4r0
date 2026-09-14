@@ -125,7 +125,7 @@ function MachineDependencies({
         : "Not checked",
     },
     {
-      name: "Agent Browser",
+      name: "Browse engine",
       icon: "Terminal",
       ready: info?.installed,
       version: info?.installed ? info.version : null,

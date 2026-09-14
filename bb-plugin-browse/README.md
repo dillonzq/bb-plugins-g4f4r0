@@ -2,9 +2,9 @@
 
 A browser automation plugin built around **Vercel Agent Browser 0.37.1**. By default, Browse launches Chromium on **the machine where your BB thread executes**. It works independently of the client device. Explicit native mode can also control BB desktop tabs.
 
-**Browse** is the plugin name and ID (`browse`); Vercel Agent Browser is its underlying automation engine. Agent tools stay `agent_browser_*` so existing agent sessions keep working.
+**Browse** is the plugin name, ID (`browse`), CLI (`bb browse`), and agent tools (`browse_session`, `browse_action`, `browse_job`, `browse_discover`, `browse_credentials`). Vercel Agent Browser is the Chromium driver.
 
-No Browserbase, Browser Use Cloud, AI Gateway, Stagehand API, or second model is required. Your existing BB agent makes the decisions. Agent Browser and its local adapter execute them.
+No Browserbase, Browser Use Cloud, AI Gateway, Stagehand API, or second model is required. Your existing BB agent makes the decisions. Browse and its local Chromium driver execute them.
 
 ## Use it
 
@@ -12,7 +12,7 @@ Browse runs through agent tools and the `bb browse` CLI. It adds a dependency pa
 
 Start with `bb browse start '{"url":"https://example.com"}'` from a BB thread. Browse resolves that thread’s environment host and opens headed Chrome. The live page appears in the thread panel. Run `probe` to check readiness and `setup` to install dependencies, including Xvfb, xkbcomp, and XKB keymap data on Linux hosts without a display. Settings lists all enrolled machines with independent checks and installation actions; offline machines are shown separately.
 
-The viewer is a custom authenticated web view with periodic frames, clicking, typing/pasting, navigation keys and scrolling. It opens automatically when a managed session starts. It is not BB’s native Electron browser surface. Relative viewer URLs resolve against the current BB web origin.
+The viewer is a custom authenticated web view. It streams JPEG screencast frames from headed Chrome over a plugin WebSocket, with clicking, typing/pasting, navigation keys and scrolling. It opens automatically when a managed session starts. It is not BB’s native Electron browser surface. Relative viewer URLs resolve against the current BB web origin.
 
 `mode:"native"` retains the existing desktop backend and requires fresh hostId, instanceId and generation. The legacy preferredHost applies only to native discovery; it never changes managed placement.
 
@@ -20,11 +20,11 @@ Agents get five tools:
 
 | Tool                     | Purpose                                                                  |
 | ------------------------ | ------------------------------------------------------------------------ |
-| `agent_browser_discover` | Machines, desktops, and this thread’s sessions                           |
-| `agent_browser_session`  | Attach/create, tabs, setup, reveal, release, explicit close, files       |
-| `agent_browser_action`   | Inspection, commands, batches, shadow DOM controls, strokes and captures |
-| `agent_browser_credentials` | Private user form → bound browser login, with device AutoFill |
-| `agent_browser_job`      | Poll or cancel long actions                                              |
+| `browse_discover` | Machines, desktops, and this thread’s sessions                           |
+| `browse_session`  | Attach/create, tabs, setup, reveal, release, explicit close, files       |
+| `browse_action`   | Inspection, commands, batches, shadow DOM controls, strokes and captures |
+| `browse_credentials` | Private user form → bound browser login, with device AutoFill |
+| `browse_job`      | Poll or cancel long actions                                              |
 
 Tools and the bundled skill become available when BB refreshes the agent session. The same functionality is available immediately through `bb browse help`.
 
@@ -32,7 +32,7 @@ Tools and the bundled skill become available when BB refreshes the agent session
 
 Browse can request username, password, or verification-code fields through BB's private input UI, using the same SDK mechanism as the built-in Secrets plugin. Device password managers such as 1Password can fill this form. No vault connection or service account is required. Environment-variable requests still use Secrets.
 
-Use `agent_browser_credentials`, or `bb browse credentials` with the session ID, purpose, field selectors/labels/kinds, and `submitSelector`. See the bundled skill for an example. The request locks an idle managed browser for up to five minutes, binds to the original document and fields, then fills and clicks once. Values are excluded from its result and job history, and are not written to dotenv files. Existing input nodes are cleared after delivery. Cancellation before filling preserves the page.
+Use `browse_credentials`, or `bb browse credentials` with the session ID, purpose, field selectors/labels/kinds, and `submitSelector`. See the bundled skill for an example. The request locks an idle managed browser for up to five minutes, binds to the original document and fields, then fills and clicks once. Values are excluded from its result and job history, and are not written to dotenv files. Existing input nodes are cleared after delivery. Cancellation before filling preserves the page.
 
 The first version supports top-document inputs and a standard button, HTTPS or loopback HTTP fixtures, and same-origin POST forms. Stop recording before requesting. Unsupported forms and page changes fail closed. A delivery result is not proof of successful login; inspect the following page. Browser/host access remains trusted: destination scripts can retain submitted values, and this feature does not isolate secrets from arbitrary browser scripting or shell access.
 
@@ -81,7 +81,7 @@ The pinned engine is integrity verified. Its browser installer downloads Chrome 
 {"kind":"record","action":"stop","fps":20}
 ```
 
-`element` actions use the top document and open shadow roots. For ordinary iframes, use Agent Browser’s `frame` command and regular locator commands in that frame. Upstream `eval`, DOM observations, and canvas exports use the top page; verify iframe values with `get value` or an explicit same-origin frame lookup. Gesture points remain relative to the top viewport; account for iframe offsets. Closed shadow roots and cross-origin frame restrictions can limit inspection/export.
+`element` actions use the top document and open shadow roots. For ordinary iframes, use the engine’s `frame` command and regular locator commands in that frame. Upstream `eval`, DOM observations, and canvas exports use the top page; verify iframe values with `get value` or an explicit same-origin frame lookup. Gesture points remain relative to the top viewport; account for iframe offsets. Closed shadow roots and cross-origin frame restrictions can limit inspection/export.
 
 `sequence` runs up to 50 known operations in one local job, stopping on the first failure and reporting completed step indexes, durations, and artifacts. It never retries completed steps. Use small sequences between decisions:
 

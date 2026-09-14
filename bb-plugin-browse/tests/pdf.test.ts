@@ -12,5 +12,5 @@ it("exports a valid PDF containing the captured image", async () => {
   const doc = await PDFDocument.load(bytes, { updateMetadata: false });
   expect(doc.getPageCount()).toBe(1);
   expect(doc.getPage(0).getSize()).toEqual({ width: 595.28, height: 841.89 });
-  expect(doc.getProducer()).toBe("Agent Browser for BB");
+  expect(doc.getProducer()).toBe("Browse for BB");
 });

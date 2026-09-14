@@ -45,7 +45,7 @@ export function validateCommand(args: string[]) {
   for (const a of args) {
     if (forbidden.test(a) || a === "-p")
       throw new Error(
-        "Connection and runtime flags are managed by Agent Browser.",
+        "Connection and runtime flags are managed by Browse.",
       );
   }
   if (args[0] === "get" && args[1] === "cdp-url")

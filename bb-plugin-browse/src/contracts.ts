@@ -195,12 +195,16 @@ export const hostContract = defineRpcContract({
     output: job,
   },
   frame: {
-    input: z.object({ id }),
+    input: z.object({
+      id,
+      after: z.number().int().min(0).max(1_000_000_000).default(0),
+    }),
     output: z.object({
       data: z.string(),
       url: z.string(),
       width: z.number(),
       height: z.number(),
+      seq: z.number(),
     }),
   },
   input: { input: z.object({ id, input: viewerInput }), output: job },

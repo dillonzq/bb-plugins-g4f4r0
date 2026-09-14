@@ -1,4 +1,24 @@
 import WebSocket from "ws";
+
+export type LiveFrame = {
+  data: string;
+  width: number;
+  height: number;
+  seq: number;
+};
+
+export function liveFrameFromEvent(params: any, seq: number): LiveFrame {
+  const md = params?.metadata ?? {};
+  const width = Math.round(Number(md.deviceWidth)) || 1280;
+  const height = Math.round(Number(md.deviceHeight)) || 800;
+  return {
+    data: String(params?.data ?? ""),
+    width: Math.min(8192, Math.max(1, width)),
+    height: Math.min(8192, Math.max(1, height)),
+    seq,
+  };
+}
+
 export class Cdp {
   private ws: WebSocket;
   private serial = 0;
@@ -20,6 +40,14 @@ export class Cdp {
   onDisconnect?: () => void;
   private frameListener?: (params: any) => void;
   private frameFailure?: () => void;
+  private casting = false;
+  private seq = 0;
+  private latest?: LiveFrame;
+  private waiters = new Set<{
+    after: number;
+    resolve: (f: LiveFrame) => void;
+    reject: (e: Error) => void;
+  }>();
   sessionId?: string;
   targetId?: string;
   private constructor(endpoint: string) {
@@ -33,7 +61,7 @@ export class Cdp {
       }
       if (m.method)
         for (const listener of this.listeners) listener(m.method, m.params);
-      if (m.method === "Page.screencastFrame") this.frameListener?.(m.params);
+      if (m.method === "Page.screencastFrame") this.onScreencast(m.params);
       const p = this.pending.get(m.id);
       if (p) {
         clearTimeout(p.timer);
@@ -144,7 +172,71 @@ export class Cdp {
       );
     return r.result.value;
   }
+  private onScreencast(params: any) {
+    if (this.casting) {
+      void this.send("Page.screencastFrameAck", {
+        sessionId: params.sessionId,
+      }).catch(() => {});
+      this.latest = liveFrameFromEvent(params, ++this.seq);
+      for (const w of [...this.waiters])
+        if (this.latest.seq > w.after) {
+          this.waiters.delete(w);
+          w.resolve(this.latest);
+        }
+      return;
+    }
+    this.frameListener?.(params);
+  }
+  async startLiveCast() {
+    if (this.casting) return;
+    this.casting = true;
+    try {
+      await this.send("Page.startScreencast", {
+        format: "jpeg",
+        quality: 55,
+        maxWidth: 1280,
+        maxHeight: 800,
+        everyNthFrame: 1,
+      });
+    } catch (e) {
+      this.casting = false;
+      throw e;
+    }
+  }
+  async stopLiveCast() {
+    if (!this.casting) return;
+    this.casting = false;
+    await this.send("Page.stopScreencast").catch(() => {});
+  }
+  async nextLiveFrame(after = 0, timeoutMs = 8000): Promise<LiveFrame> {
+    if (!this.casting) await this.startLiveCast();
+    if (this.latest && this.latest.seq > after) return this.latest;
+    return new Promise((resolve, reject) => {
+      const waiter = { after, resolve, reject };
+      const timer = setTimeout(() => {
+        this.waiters.delete(waiter);
+        if (this.latest) resolve(this.latest);
+        else
+          reject(
+            new Error(
+              "No live frame yet. Keep the managed browser running and retry.",
+            ),
+          );
+      }, timeoutMs);
+      waiter.resolve = (f) => {
+        clearTimeout(timer);
+        resolve(f);
+      };
+      waiter.reject = (e) => {
+        clearTimeout(timer);
+        reject(e);
+      };
+      this.waiters.add(waiter);
+    });
+  }
   async captureFrame(): Promise<string> {
+    const resume = this.casting;
+    if (resume) await this.stopLiveCast();
     let timer: ReturnType<typeof setTimeout>;
     const frame = new Promise<any>((resolve, reject) => {
       this.frameListener = resolve;
@@ -176,12 +268,17 @@ export class Cdp {
       this.frameListener = undefined;
       this.frameFailure = undefined;
       await this.send("Page.stopScreencast").catch(() => {});
+      if (resume) await this.startLiveCast().catch(() => {});
     }
   }
   private fail() {
     this.onDisconnect?.();
     this.onDisconnect = undefined;
     this.frameFailure?.();
+    this.casting = false;
+    for (const w of this.waiters)
+      w.reject(new Error("Browser disconnected; the tab has been preserved."));
+    this.waiters.clear();
     for (const p of this.pending.values()) {
       clearTimeout(p.timer);
       p.reject(new Error("Browser disconnected; the tab has been preserved."));

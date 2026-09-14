@@ -579,6 +579,7 @@ async function closeSession(s: LocalSession) {
     s.recording = false;
   }
   s.status = "released";
+  await s.cdp?.stopLiveCast().catch(() => {});
   if (s.managed)
     await s.cdp?.send("Browser.close", {}, false, 1500).catch(() => {});
   s.cdp?.close();
@@ -728,45 +729,16 @@ export default experimental_defineHostEntry({
         undefined,
         600000,
       ),
-    frame: async ({ id }) => {
+    frame: async ({ id, after = 0 }) => {
       const s = session(id);
-      if (s.status !== "ready" || !s.managed)
+      if (s.status !== "ready" || !s.managed || !s.cdp)
         throw new Error("Browser is not ready");
-      if (s.framing) throw new Error("A frame is already being captured");
       if (s.credential)
         throw new Error("Browser is waiting for private credential input.");
-      s.framing = true;
-      try {
-        const metrics = await s.cdp!.send("Page.getLayoutMetrics");
-        const viewport = metrics.cssVisualViewport ?? metrics.visualViewport;
-        const width = Math.round(viewport.clientWidth),
-          height = Math.round(viewport.clientHeight);
-        if (!(width > 0 && height > 0 && width <= 8192 && height <= 8192))
-          throw new Error(
-            "Viewport is too large for live viewing. Resize it to at most 8192 pixels per side.",
-          );
-        const { data } = await s.cdp!.send(
-          "Page.captureScreenshot",
-          {
-            format: "jpeg",
-            quality: 70,
-            captureBeyondViewport: false,
-            clip: {
-              x: viewport.pageX,
-              y: viewport.pageY,
-              width,
-              height,
-              scale: 1,
-            },
-          },
-          true,
-          5000,
-        );
-        const url = await s.cdp!.evaluate("location.href");
-        return { data, url, width, height };
-      } finally {
-        s.framing = false;
-      }
+      await s.cdp.startLiveCast();
+      const live = await s.cdp.nextLiveFrame(after);
+      const url = await s.cdp.evaluate("location.href");
+      return { ...live, url };
     },
     input: async ({ id, input }, ctx) => {
       const s = session(id);
@@ -915,6 +887,8 @@ export default experimental_defineHostEntry({
             if (input.mode === "managed" && input.url !== "about:blank")
               await cli(s, ["open", safeUrl(input.url)], signal);
             await cli(s, ["get", "title"], signal);
+            if (input.mode === "managed")
+              await s.cdp.startLiveCast().catch(() => {});
             s.status = "ready";
           } catch (e) {
             s.status = "error";
