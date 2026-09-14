@@ -1,5 +1,8 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap");
+
 /* Silk: neutral surfaces with a Notion-inspired blue accent. */
 :root {
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --silk-stop: #dc454b;
   --canvas: #ffffff;
   --ink: #37352f;
@@ -160,3 +163,12 @@ div[class~="@container/page"]:has(#root-compose-prompt) > div:has(> [data-prompt
 
 /* Transcription is busy, not unavailable: retain the confirm action color. */
 button[aria-label="Transcribing voice input"]:disabled { opacity: 1; }
+
+.font-mono,
+code,
+kbd,
+samp,
+pre,
+.cm-scroller {
+  font-size: 13px;
+}
