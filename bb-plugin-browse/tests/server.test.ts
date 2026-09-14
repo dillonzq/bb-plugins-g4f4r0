@@ -87,7 +87,7 @@ async function fixture(
             ...base,
             leaseId: "private-lease",
             tabIds: ["tab_new"],
-            controllerLabel: "Agent Browser",
+            controllerLabel: "Browse",
             expiresAt: Date.now() + 1800000,
           };
         },

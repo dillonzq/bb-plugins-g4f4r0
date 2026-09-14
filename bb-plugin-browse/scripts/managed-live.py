@@ -13,7 +13,7 @@ def wait(j):
 def http(route,data=None,origin=None):
  headers={'Content-Type':'application/json'} if data else {}
  if origin:headers['Origin']=origin
- req=urllib.request.Request(args.base_url.rstrip('/')+'/api/v1/plugins/agent-browser/http/'+route,data=json.dumps(data).encode() if data else None,headers=headers)
+ req=urllib.request.Request(args.base_url.rstrip('/')+'/api/v1/plugins/browse/http/'+route,data=json.dumps(data).encode() if data else None,headers=headers)
  with urllib.request.urlopen(req,timeout=30) as f:return json.load(f)
 try:
  suite.js('managed download fixture',"document.body.innerHTML='<input id=viewer><button id=download>Download</button><h1>Managed PDF test</h1>';window.clicks=0;document.querySelector('#download').onclick=()=>{window.clicks++;let a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['managed browser download ✓'],{type:'text/plain'}));a.download='original.txt';a.click()};localStorage.setItem('browse-persistence','retained');true")

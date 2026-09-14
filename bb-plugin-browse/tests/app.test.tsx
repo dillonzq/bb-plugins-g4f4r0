@@ -12,7 +12,7 @@ function health(hostId: string) {
     hostId,
     platform: "linux",
     arch: "x64",
-    version: "0.37.1",
+    version: "4.1.0",
     installed: true,
     ffmpeg: true,
     chromeInstalled: true,

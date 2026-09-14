@@ -27,14 +27,12 @@ import {
 import { downloadFromClick } from "./src/native-download";
 import { safeUrl } from "./src/policy";
 import { pruneJobHistory } from "./src/job-history";
-import { runProcess } from "./src/process";
-import { ensureRuntime, installed, runtimePath } from "./src/runtime";
+import { StagehandDriver } from "./src/stagehand";
+import { Recorder } from "./src/recorder";
 import { Cdp } from "./src/cdp";
 import { drawStrokes } from "./src/gesture";
 import { pngToPdf } from "./src/pdf";
 import { capturePng } from "./src/capture";
-import { commandOutput, recoverCommandOutput } from "./src/command-output";
-import { navigateHistory } from "./src/navigation";
 import { downloadExpression } from "./src/download";
 import { actOnElement } from "./src/element";
 import { runSequence } from "./src/sequence";
@@ -64,8 +62,8 @@ type LocalSession = {
   cdp?: Cdp;
   bridge?: Bridge;
   root: string;
-  binary?: string;
-  pinReady?: boolean;
+  driver?: StagehandDriver;
+  recorder?: Recorder;
   retain: ExperimentalHostWorkerLease;
   busy?: string;
   closing?: Promise<void>;
@@ -205,72 +203,43 @@ function startJob(
   })();
   return view(t);
 }
-async function cli(
+async function command(
   s: LocalSession,
   args: string[],
   signal?: AbortSignal,
   stdin?: string,
   limit?: number,
 ) {
-  if (s.cdp && (args[0] === "back" || args[0] === "forward"))
-    return navigateHistory(
-      s.cdp,
-      args[0],
-      signal ?? new AbortController().signal,
-    );
+  if (!s.driver) throw new Error("Stagehand is not connected.");
   if (args[0] === "batch" && stdin) {
-    const commands: string[][] = JSON.parse(stdin);
-    if (commands.some((c) => c[0] === "back" || c[0] === "forward")) {
-      const results = [];
-      for (const command of commands) {
-        signal?.throwIfAborted();
-        try {
-          const result = JSON.parse(await cli(s, command, signal));
-          results.push({
-            command,
-            success: true,
-            result: result.data,
-            error: null,
-          });
-        } catch (error) {
-          results.push({
-            command,
-            success: false,
-            result: null,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          break;
-        }
+    const results = [];
+    for (const step of JSON.parse(stdin) as string[][]) {
+      try {
+        const result = JSON.parse(await command(s, step, signal));
+        results.push({
+          command: step,
+          success: true,
+          result: result.data,
+          error: null,
+        });
+      } catch (e) {
+        results.push({
+          command: step,
+          success: false,
+          result: null,
+          error: redact(String(e), s.endpoint),
+        });
+        break;
       }
-      return JSON.stringify(results);
     }
+    return JSON.stringify(results);
   }
-  const config = join(s.root, "config.json");
-  const env = managedEnv(s.root);
-  for (const k of Object.keys(env)) {
-    if (k.startsWith("AGENT_BROWSER_") || k.startsWith("AI_GATEWAY_"))
-      delete env[k];
-  }
-  env.AGENT_BROWSER_NAMESPACE = "bb-agent-browser";
-  env.AGENT_BROWSER_RESTORE_SAVE = "never";
-  env.AGENT_BROWSER_DEFAULT_TIMEOUT = "25000";
-  env.AGENT_BROWSER_IDLE_TIMEOUT_MS = String(SESSION_TTL_MS);
-  const out = await runProcess(
-    s.binary ?? runtimePath(s.root),
-    [
-      "--config",
-      config,
-      "--session",
-      s.id,
-      "--json",
-      s.pinReady ? "--pin-tab" : "--no-pin-tab",
-      ...(args[0] === "close" ? [] : ["--cdp", s.endpoint]),
-      ...args,
-    ],
-    { cwd: s.artifactRoot, env, signal, stdin, limit },
-  ).catch(recoverCommandOutput);
-  return redact(commandOutput(out), s.endpoint);
+  const output = await s.driver.execute(args, signal);
+  if (output.length > (limit ?? 2 * 1024 * 1024))
+    throw new Error("Output exceeds limit. Scope the query before retrying.");
+  return redact(output, s.endpoint);
 }
+
 async function save(
   s: LocalSession,
   name: string,
@@ -326,7 +295,13 @@ async function perform(
     case "element": {
       s.pointerAction = op.action !== "fill";
       try {
-        j.output = await actOnElement(s.cdp!, op, signal);
+        j.output = await s.driver!.element(
+          op.action,
+          op.selector,
+          op.value,
+          op.waitMs,
+          signal,
+        );
       } finally {
         s.pointerAction = false;
       }
@@ -334,7 +309,7 @@ async function perform(
     }
     case "observe": {
       const raw = JSON.parse(
-        await cli(
+        await command(
           s,
           ["batch", "--bail"],
           signal,
@@ -367,11 +342,11 @@ async function perform(
     }
     case "command":
       validateCommand(op.args);
-      j.output = await cli(s, op.args, signal);
+      j.output = await command(s, op.args, signal);
       break;
     case "batch":
       op.commands.forEach(validateCommand);
-      j.output = await cli(
+      j.output = await command(
         s,
         ["batch", "--bail"],
         signal,
@@ -409,7 +384,7 @@ async function perform(
       break;
     }
     case "canvas": {
-      const encoded = await cli(
+      const encoded = await command(
         s,
         [
           "eval",
@@ -440,15 +415,19 @@ async function perform(
       if (op.action === "start") {
         if (s.recording) throw new Error("Recording is already active.");
         s.recordingPath = join(s.artifactRoot, `${Date.now()}-recording.webm`);
-        j.output = await cli(
-          s,
-          ["record", "start", s.recordingPath, "--fps", String(op.fps)],
-          signal,
+        s.recorder = await Recorder.start(
+          s.cdp!,
+          s.recordingPath,
+          op.fps,
+          managedEnv(s.root),
         );
+        j.output = "Recording started.";
         s.recording = true;
       } else {
         if (!s.recording) throw new Error("No recording is active.");
-        j.output = await cli(s, ["record", "stop"], signal);
+        await s.recorder?.stop();
+        s.recorder = undefined;
+        j.output = "Recording saved.";
         s.recording = false;
         j.artifacts = (await files(s)).filter(
           (a) => a.path === s.recordingPath,
@@ -500,9 +479,9 @@ async function perform(
     }
     case "download": {
       let href: string | undefined;
-      if (/^@e\d+$/.test(op.selector)) {
+      if (/^@/.test(op.selector)) {
         const attr = JSON.parse(
-          await cli(s, ["get", "attr", op.selector, "href"], signal),
+          await command(s, ["get", "attr", op.selector, "href"], signal),
         );
         href = attr.data?.value ?? attr.data?.attribute;
         if (typeof href !== "string" || !href)
@@ -591,7 +570,7 @@ async function closeSession(s: LocalSession) {
     await Promise.race([t.promise, sleep(1800)]);
   }
   if (s.recording) {
-    await cli(s, ["record", "stop"], AbortSignal.timeout(2500)).catch(() => {});
+    await s.recorder?.stop().catch(() => {});
     s.recording = false;
   }
   s.status = "released";
@@ -600,9 +579,8 @@ async function closeSession(s: LocalSession) {
     await s.cdp?.send("Browser.close", {}, false, 1500).catch(() => {});
   s.cdp?.close();
   s.cdp = undefined;
-  // Close without --cdp: reconnecting to an already stopped Chrome aborts
-  // the close command and leaves the automation daemon running.
-  await cli(s, ["close"], AbortSignal.timeout(2000)).catch(() => {});
+  await s.driver?.close().catch(() => {});
+  s.driver = undefined;
   s.bridge?.close();
   await s.managed?.close();
   s.managed = undefined;
@@ -798,10 +776,10 @@ export default experimental_defineHostEntry({
               await s.cdp!.send("Input.insertText", { text: input.text });
               break;
             case "key":
-              await cli(s, ["press", input.key], signal);
+              await command(s, ["press", input.key], signal);
               break;
             case "navigate":
-              await cli(s, ["open", safeUrl(input.url)], signal);
+              await command(s, ["open", safeUrl(input.url)], signal);
               break;
           }
           j.output = "Viewer input completed.";
@@ -846,7 +824,7 @@ export default experimental_defineHostEntry({
               .catch((e) => {
                 if (e.code !== "EEXIST") throw e;
               });
-            s.binary = await ensureRuntime(root, signal);
+
             signal.throwIfAborted();
             if (input.mode === "managed") {
               s.managed = await launchManaged(
@@ -895,12 +873,25 @@ export default experimental_defineHostEntry({
                 false,
               );
             }
-            j.output = await cli(s, ["connect", s.endpoint], signal);
-            await cli(s, ["tab", s.targetId!], signal);
-            s.pinReady = true;
+            try {
+              s.driver = await StagehandDriver.connect(
+                root,
+                s.endpoint,
+                s.cdp,
+                signal,
+              );
+            } catch (e) {
+              if (input.mode !== "managed")
+                throw new Error(
+                  "Stagehand requires extension-capable Chrome. This native desktop connection could not load it. Start a managed Browse session on the same host (separate login). " +
+                    redact(String(e), s.endpoint),
+                );
+              throw e;
+            }
+            j.output = "Stagehand connected to the selected page.";
             if (input.mode === "managed" && input.url !== "about:blank")
-              await cli(s, ["open", safeUrl(input.url)], signal);
-            await cli(s, ["get", "title"], signal);
+              await command(s, ["open", safeUrl(input.url)], signal);
+            await command(s, ["get", "title"], signal);
             if (input.mode === "managed")
               await s.cdp.startLiveCast().catch(() => {});
             s.status = "ready";

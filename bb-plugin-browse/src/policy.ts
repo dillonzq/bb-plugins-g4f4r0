@@ -23,7 +23,6 @@ const commands = new Set([
   "wait",
   "get",
   "is",
-  "find",
   "eval",
   "set",
   "network",
@@ -32,7 +31,6 @@ const commands = new Set([
   "dialog",
   "console",
   "errors",
-  "diff",
   "a11y",
 ]);
 const forbidden =

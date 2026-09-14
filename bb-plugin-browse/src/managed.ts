@@ -3,7 +3,12 @@ import { join, delimiter } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { runProcess } from "./process";
-import { ensureRuntime, installed, runtimePath } from "./runtime";
+import {
+  installed,
+  chromeExecutable,
+  installChrome,
+  stagehandExtensionOrigin,
+} from "./runtime";
 
 export function managedEnv(root: string) {
   const env = { ...process.env };
@@ -34,30 +39,17 @@ export async function diagnostics(root: string) {
     launchError: string | undefined;
   const env = managedEnv(root);
   if (runtime) {
-    let out: string;
-    try {
-      out = await runProcess(
-        runtimePath(root),
-        ["doctor", "--offline", "--quick", "--json"],
-        { env, signal: AbortSignal.timeout(15000) },
-      );
-    } catch (e) {
-      out = e instanceof Error ? e.message : String(e);
-    }
-    try {
-      const info = JSON.parse(out).checks?.find(
-        (c: any) => c.id === "chrome.installed",
-      );
-      chromePath = info?.message?.match(/ at (.+?)(?: \(version .*)?$/)?.[1];
-    } catch {}
+    chromePath = await chromeExecutable(root);
     if (chromePath)
       try {
+        await fs.access(chromePath);
         chromeVersion = await runProcess(chromePath, ["--version"], {
           env,
           signal: AbortSignal.timeout(10000),
         });
       } catch (e) {
-        launchError = e instanceof Error ? e.message : String(e);
+        launchError = String(e);
+        chromePath = undefined;
       }
   }
   const ffmpeg = await runProcess("ffmpeg", ["-version"], {
@@ -137,8 +129,7 @@ export async function installManaged(
       "Close managed browsers and wait for dependency checks before updating dependencies.",
     );
   install = (async () => {
-    const binary = await ensureRuntime(root, signal);
-    await runProcess(binary, ["install"], { env: managedEnv(root), signal });
+    await installChrome(root, signal);
     if (dependencies && process.platform === "linux") {
       const dir = join(root, "linux-deps"),
         archives = join(dir, "archives"),
@@ -174,11 +165,13 @@ export async function installManaged(
     install = undefined;
   }
 }
-export function chromeArgs(profile: string) {
+export function chromeArgs(profile: string, extensionOrigin?: string) {
   return [
     "--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port=0",
     `--user-data-dir=${profile}`,
+    "--enable-unsafe-extension-debugging",
+    ...(extensionOrigin ? [`--remote-allow-origins=${extensionOrigin}`] : []),
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-dev-shm-usage",
@@ -401,11 +394,15 @@ async function launchBrowser(
   await fs.mkdir(profile, { recursive: true, mode: 0o700 });
   await fs.rm(join(profile, "DevToolsActivePort"), { force: true });
   const display = await acquireDisplay(root, managedEnv(root), signal);
-  const child = spawn(info.chromePath, chromeArgs(profile), {
-    env: display.env,
-    stdio: ["ignore", "ignore", "pipe"],
-    windowsHide: true,
-  });
+  const child = spawn(
+    info.chromePath,
+    chromeArgs(profile, stagehandExtensionOrigin(root)),
+    {
+      env: display.env,
+      stdio: ["ignore", "ignore", "pipe"],
+      windowsHide: true,
+    },
+  );
   let stderr = "";
   child.stderr?.on(
     "data",

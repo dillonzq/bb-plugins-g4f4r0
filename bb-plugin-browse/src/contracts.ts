@@ -1,7 +1,7 @@
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { credentialRequest, credentialValues } from "./credentials";
-export const VERSION = "0.37.1";
+export const VERSION = "4.1.0";
 export const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 export const NATIVE_LEASE_TTL_MS = 30 * 60 * 1000;
 export const CREDENTIAL_TIMEOUT_MS = 300000;

@@ -1,89 +1,125 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 import { runProcess } from "./process";
-import { VERSION } from "./contracts";
-const INTEGRITY =
-  "NDojTSXrIq7zS090T0VwI1uzBryZWvewgxXvS0swj8/5GGnziBZLmyhEkfETO8n4n3DsJpZbZkq9F/MV2rIQKw==";
-export function binaryName() {
-  let os: string = process.platform;
-  if (
-    os === "linux" &&
-    (process.report?.getReport() as any)?.header?.glibcVersionRuntime ===
-      undefined
-  )
-    os = "linux-musl";
-  const arch =
-    process.platform === "win32" && process.arch === "arm64"
-      ? "x64"
-      : process.arch;
-  return `agent-browser-${os}-${arch}${process.platform === "win32" ? ".exe" : ""}`;
-}
+import manifest from "../runtime/package.json";
+import lock from "../runtime/package-lock.json";
+import type * as StagehandSdk from "@browserbasehq/stagehand";
+
+const revision = createHash("sha256")
+  .update(JSON.stringify(lock))
+  .digest("hex")
+  .slice(0, 12);
+export const CHROME_VERSION = "153.0.8010.36";
 export function runtimePath(root: string) {
-  return join(root, "runtime", VERSION, binaryName());
+  return join(
+    root,
+    "runtime",
+    `stagehand-${manifest.dependencies["@browserbasehq/stagehand"]}-${revision}`,
+  );
 }
 export async function installed(root: string) {
   try {
-    await fs.access(runtimePath(root));
+    await fs.access(join(runtimePath(root), ".ready"));
     return true;
   } catch {
     return false;
   }
 }
-let setup: Promise<string> | undefined;
+const installs = new Map<string, Promise<string>>();
 export async function ensureRuntime(
   root: string,
   signal: AbortSignal,
 ): Promise<string> {
+  const [major,minor]=process.versions.node.split(".").map(Number);
+  if(major<22 || (major===22 && minor<18))throw new Error("Stagehand requires Node 22.18 or newer on this host.");
   if (await installed(root)) return runtimePath(root);
-  if (setup) return setup;
-  setup = (async () => {
-    const dir = join(root, "runtime", VERSION),
-      temp = join(root, "runtime", `install-${randomUUID()}`);
-    await fs.mkdir(temp, { recursive: true, mode: 0o700 });
-    try {
-      const response = await fetch(
-        `https://registry.npmjs.org/agent-browser/-/agent-browser-${VERSION}.tgz`,
-        { signal },
-      );
-      if (!response.ok || !response.body)
-        throw new Error(`Runtime download failed (${response.status})`);
-      const archive = join(temp, "package.tgz");
-      const file = await fs.open(archive, "wx", 0o600);
-      const hash = createHash("sha512");
-      let bytes = 0;
-      try {
-        for await (const chunk of response.body as any) {
-          bytes += chunk.byteLength;
-          if (bytes > 180 * 1024 * 1024)
-            throw new Error("Unexpected runtime archive size");
-          hash.update(chunk);
-          await file.write(chunk);
-        }
-      } finally {
-        await file.close();
-      }
-      if (hash.digest("base64") !== INTEGRITY)
-        throw new Error("Runtime integrity check failed");
-      await runProcess(
-        "tar",
-        ["-xzf", archive, "-C", temp, `package/bin/${binaryName()}`],
-        { signal },
-      );
-      await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-      await fs.chmod(join(temp, "package", "bin", binaryName()), 0o700);
-      await fs.rename(
-        join(temp, "package", "bin", binaryName()),
-        runtimePath(root),
-      );
-      return runtimePath(root);
-    } finally {
-      await fs.rm(temp, { recursive: true, force: true });
-    }
+  const active = installs.get(root);
+  if (active) return active;
+  const promise = (async () => {
+    const dir = runtimePath(root);
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    await fs.writeFile(join(dir, "package.json"), JSON.stringify(manifest), {
+      mode: 0o600,
+    });
+    await fs.writeFile(join(dir, "package-lock.json"), JSON.stringify(lock), {
+      mode: 0o600,
+    });
+    await runProcess(
+      process.platform === "win32" ? "npm.cmd" : "npm",
+      ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+      { cwd: dir, signal },
+    );
+    await fs.writeFile(join(dir, ".ready"), revision, { mode: 0o600 });
+    return dir;
   })();
+  installs.set(root, promise);
   try {
-    return await setup;
+    return await promise;
   } finally {
-    setup = undefined;
+    installs.delete(root);
   }
+}
+export async function stagehandSdk(
+  root: string,
+  signal: AbortSignal,
+): Promise<typeof StagehandSdk> {
+  const dir = await ensureRuntime(root, signal);
+  return import(
+    pathToFileURL(
+      join(dir, "node_modules/@browserbasehq/stagehand/dist/index.mjs"),
+    ).href
+  );
+}
+export async function browserInstaller(
+  root: string,
+  signal: AbortSignal,
+): Promise<any> {
+  const dir = await ensureRuntime(root, signal);
+  return import(
+    pathToFileURL(join(dir, "node_modules/@puppeteer/browsers/lib/main.js"))
+      .href
+  );
+}
+export async function chromeExecutable(
+  root: string,
+): Promise<string | undefined> {
+  if (!(await installed(root))) return;
+  const api = await browserInstaller(root, AbortSignal.timeout(15000));
+  return api.computeExecutablePath({
+    cacheDir: join(root, "browsers"),
+    browser: api.Browser.CHROME,
+    buildId: CHROME_VERSION,
+  });
+}
+export async function installChrome(root: string, signal: AbortSignal) {
+  const api = await browserInstaller(root, signal);
+  signal.throwIfAborted();
+  await api.install({
+    cacheDir: join(root, "browsers"),
+    browser: api.Browser.CHROME,
+    buildId: CHROME_VERSION,
+  });
+  signal.throwIfAborted();
+}
+
+export function stagehandExtensionOrigin(root: string) {
+  const path = join(
+    runtimePath(root),
+    "node_modules/@browserbasehq/stagehand/dist/extension",
+  );
+  // Chromium derives unpacked extension ids from the absolute extension path.
+  const hash = createHash("sha256")
+    .update(
+      process.platform === "win32"
+        ? path[0].toUpperCase() + path.slice(1)
+        : path,
+    )
+    .digest("hex")
+    .slice(0, 32);
+  return (
+    "chrome-extension://" +
+    [...hash].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join("")
+  );
 }

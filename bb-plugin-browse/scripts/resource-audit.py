@@ -5,7 +5,7 @@ ROOT=Path(__file__).resolve().parents[1]
 args=argparse.ArgumentParser();args.add_argument("--cycles",type=int,default=10);args.add_argument("--output",default="resource-audit.json");options=args.parse_args()
 rows=[];owned=[];samples=[];known_daemon_pids=set()
 def call(m,v):
- r=subprocess.run(['bb','agent-browser',m,json.dumps(v)],capture_output=True,text=True,timeout=40)
+ r=subprocess.run(['bb','browse',m,json.dumps(v)],capture_output=True,text=True,timeout=40)
  if r.returncode:raise RuntimeError(r.stderr)
  return json.loads(r.stdout)
 def check(name,ok,**data):
@@ -22,10 +22,7 @@ def action(r,expr):
  j=call('run',{'id':r['session']['id'],'operation':{'kind':'command','args':['eval',expr]}})
  return wait({'session':r['session'],'job':j})
 def processes():
- daemon_pids=known_daemon_pids
- for sid in owned:
-  try:daemon_pids.add(int((Path.home()/".agent-browser/namespaces/bb-agent-browser/run"/(sid+".pid")).read_text()))
-  except (OSError,ValueError):pass
+ daemon_pids=set() # Stagehand runs inside the shared host worker, not a per-session daemon.
  procs={}
  for p in Path('/proc').iterdir():
   if not p.name.isdigit():continue
@@ -33,7 +30,7 @@ def processes():
    cmd=(p/'cmdline').read_bytes().replace(b'\0',b' ').decode(errors='replace');status=(p/'status').read_text();ppid=int(next(x.split()[1] for x in status.splitlines() if x.startswith('PPid:')))
    procs[int(p.name)]=(ppid,cmd)
   except (OSError,StopIteration):pass
- roots={pid for pid,(_,cmd) in procs.items() if (cmd.split(' ',1)[0].endswith('/chrome') and any('--user-data-dir='+str(Path.home()/'.bb/plugins/agent-browser/host-data/profiles'/sid)+' ' in cmd for sid in owned)) or (pid in daemon_pids and cmd.split(' ',1)[0].endswith('/agent-browser-linux-x64'))}
+ roots={pid for pid,(_,cmd) in procs.items() if (cmd.split(' ',1)[0].endswith('/chrome') and any('--user-data-dir='+str(Path.home()/'.bb/plugins/browse/host-data/profiles'/sid)+' ' in cmd for sid in owned))}
  ids=set(roots)
  for _ in range(8):ids.update(pid for pid,(parent,_) in procs.items() if parent in ids)
  pss=0

@@ -13,7 +13,7 @@ class Browser:
     @staticmethod
     def call(method, value=None):
         result = subprocess.run(
-            ["bb", "agent-browser", method, json.dumps(value or {})],
+            ["bb", "browse", method, json.dumps(value or {})],
             capture_output=True, text=True, check=True,
         )
         return json.loads(result.stdout)

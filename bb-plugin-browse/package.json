@@ -7,7 +7,7 @@
   },
   "bb": {
     "name": "Browse",
-    "description": "Browser automation on each thread’s machine, with live viewing and recording.",
+    "description": "Stagehand browser automation on each thread\u2019s machine, with live viewing and recording.",
     "branding": {
       "icon": "Globe"
     },
@@ -19,7 +19,8 @@
     "zod": "^4.3.6",
     "ws": "8.21.3",
     "pdf-lib": "1.17.1",
-    "@radix-ui/react-slot": "1.3.3"
+    "@radix-ui/react-slot": "1.3.3",
+    "@browserbasehq/stagehand": "4.1.0"
   },
   "scripts": {
     "check": "tsc --noEmit",

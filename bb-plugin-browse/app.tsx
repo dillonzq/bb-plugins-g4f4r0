@@ -126,7 +126,7 @@ function MachineDependencies({
         : "Not checked",
     },
     {
-      name: "Browse engine",
+      name: "Stagehand engine",
       icon: "Terminal",
       ready: info?.installed,
       version: info?.installed ? info.version : null,

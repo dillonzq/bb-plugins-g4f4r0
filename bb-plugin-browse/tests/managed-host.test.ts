@@ -18,6 +18,16 @@ const mock = vi.hoisted(() => ({
   })),
   events: [] as string[],
   commands: [] as string[][],
+  driverClose: vi.fn(async () => {}),
+}));
+vi.mock("../src/stagehand", () => ({
+  StagehandDriver: {
+    connect: async () => ({
+      execute: async () => '{"success":true,"data":{}}',
+      element: async () => '{"success":true,"data":{}}',
+      close: mock.driverClose,
+    }),
+  },
 }));
 vi.mock("../src/runtime", () => ({
   ensureRuntime: async () => "/binary",
@@ -149,9 +159,7 @@ it("cancelling a completed job is harmless, and concurrent releases dispose the 
         h.experimental_call("release", { id: "ab-completed-cancel" }),
       ),
     );
-    const closing = mock.commands.filter((args) => args.at(-1) === "close");
-    expect(closing.length).toBeGreaterThan(0);
-    expect(closing.every((args) => !args.includes("--cdp"))).toBe(true);
+    expect(mock.driverClose).toHaveBeenCalled();
     expect(mock.close).toHaveBeenCalledOnce();
     expect(h.experimental_getRetainedWorkerLeaseCount()).toBe(0);
     expect(

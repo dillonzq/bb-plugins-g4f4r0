@@ -16,7 +16,7 @@ try:
  artifacts=call('artifacts',{'id':s['id']});edge=next(a for a in artifacts if a['name'].endswith('-edge.txt'))
  suite.action('upload saved text file',{'kind':'command','args':['upload','#file',edge['path']]})
  suite.js('uploaded file byte contents',"(async()=>{if(await document.querySelector('#file').files[0].text()!=='edge download ✓\\n')throw new Error('Upload bytes mismatch');return true})()")
- suite.action('dialog accept',{'kind':'batch','commands':[['eval',"setTimeout(()=>window.dialogAnswer=confirm('Agent Browser test'),100);true"],['wait','200'],['dialog','accept']]})
+ suite.action('dialog accept',{'kind':'batch','commands':[['eval',"setTimeout(()=>window.dialogAnswer=confirm('Browse Stagehand test'),100);true"],['wait','200'],['dialog','accept']]})
  suite.verify('confirmation result accepted','dialogAnswer===true')
  suite.js('pointer events instrumentation',"window.pointerEvents=[];document.addEventListener('mousedown',()=>pointerEvents.push('down'));document.addEventListener('mouseup',()=>pointerEvents.push('up'));true")
  job=call('run',{'id':s['id'],'operation':{'kind':'sequence','steps':[{'kind':'gesture','strokes':[[{'x':10+i,'y':10} for i in range(150)]],'intervalMs':30},{'kind':'command','args':['eval','window.shouldNotRun=true']}]}})

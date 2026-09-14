@@ -1093,7 +1093,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.agents.registerTool({
     name: "browse_discover",
     description:
-      "Discover connected machines, BB desktop instances, and this thread’s browser sessions. Managed Chrome defaults to the thread host; explicit hostId selects another connected host. Reports browser capabilities; connected service tools must be discovered separately before opening a login page.",
+      "Discover connected machines, BB desktop instances, and this thread’s browser sessions. Managed Chrome defaults to the thread host; explicit hostId selects another connected host. Uses Stagehand 4.1.0 without model inference. Reports browser capabilities; connected service tools must be discovered separately before opening a login page.",
     parameters: z.object({}),
     execute: async (_, ctx) =>
       JSON.stringify({
@@ -1107,7 +1107,7 @@ export default async function plugin(bb: BbPluginApi) {
             lifetimeMinutes: 480,
           },
           native: {
-            requires: "connected BB Desktop instance",
+            requires: "connected BB Desktop instance with Stagehand extension installation and extension debugging support; otherwise use managed Chrome on that host",
             remoteViewer:
               "requires desktop screencast support; visible desktop tab may be necessary",
             secureCredentials: true,
@@ -1125,7 +1125,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.agents.registerTool({
     name: "browse_session",
     description:
-      "Start a browser visible in this thread's BB side panel. Managed Chrome defaults to the thread host; hostId explicitly selects any connected machine. Needs only a URL. Reuses this thread's session at the same URL on that host; newTab:true creates a separate profile. Existing sessions stay on their host when a thread moves. Reconnect reopens the same profile on the same host, losing unsaved DOM. Reveal requests a panel handoff and reports visible-frame acknowledgments without claiming your client saw it. Managed control lasts eight hours; native leases last 30 minutes. Both support private browse_credentials. Native mode requires fresh hostId, instanceId and generation from discovery; reconnect refreshes generation and preserves the tab. Release preserves native tabs and stops managed Chrome. Reload stops managed Chrome.",
+      "Start a browser visible in this thread's BB side panel. Managed Chrome defaults to the thread host; hostId explicitly selects any connected machine. Needs only a URL. Reuses this thread's session at the same URL on that host; newTab:true creates a separate profile. Existing sessions stay on their host when a thread moves. Reconnect reopens the same profile on the same host, losing unsaved DOM. Reveal requests a panel handoff and reports visible-frame acknowledgments without claiming your client saw it. Managed control lasts eight hours; native leases last 30 minutes. Both support private browse_credentials. Native mode also requires Stagehand extension support; use managed mode on the same host if unavailable. Native mode requires fresh hostId, instanceId and generation from discovery; reconnect refreshes generation and preserves the tab. Release preserves native tabs and stops managed Chrome. Reload stops managed Chrome.",
     parameters: z.object({
       action: z.enum([
         "start",
