@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useBbNavigate, useRealtime, useRealtimeConnectionState, useRpc, useSettings } from "@get-bb/plugin-sdk/app";
+import { useRealtime, useRealtimeConnectionState, useRpc, useSettings } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { rpcContract } from "../server";
 import { PRESSURE_CHANNEL } from "../lib/pressure";
@@ -7,9 +7,13 @@ import { createAlertReceiver } from "../lib/alert-receiver";
 import { pressureAlertCopy, TEST_ALERT_COPY } from "../lib/alert-copy";
 
 const CURSOR_KEY = "beacon-pressure-cursor-v2";
+let openStatus = () => {};
+export function bindStatusOpener(open: () => void) {
+  openStatus = open;
+}
+
 function ActiveNotifications() {
   const rpc = useRpc<typeof rpcContract>();
-  const navigate = useBbNavigate();
   const connection = useRealtimeConnectionState();
   const previousConnection = useRef(connection);
   const receiver = useRef<ReturnType<typeof createAlertReceiver> | null>(null);
@@ -20,7 +24,7 @@ function ActiveNotifications() {
       toast.warning(TEST_ALERT_COPY.title, {
         id: "beacon-pressure-test", description: TEST_ALERT_COPY.description,
         duration: 20_000, closeButton: true,
-        action: { label: "Open Status", onClick: () => navigate.toPluginPanel("status") },
+        action: { label: "Open Status", onClick: () => openStatus() },
       });
       return;
     }
@@ -38,7 +42,7 @@ function ActiveNotifications() {
       const { title, description } = pressureAlertCopy(notice);
       (recovered ? toast.success : toast.warning)(title, {
         id: `beacon-pressure-${notice.metric}`, description, duration: 12_000,
-        action: { label: "Open Status", onClick: () => navigate.toPluginPanel("status") },
+        action: { label: "Open Status", onClick: () => openStatus() },
       });
     }, (cursor) => { try { sessionStorage.setItem(CURSOR_KEY, JSON.stringify(cursor)); } catch { /* In-memory deduplication still applies. */ } });
     receiver.current = nextReceiver;
@@ -68,7 +72,7 @@ function ActiveNotifications() {
       toast.dismiss("beacon-pressure-memory");
       toast.dismiss("beacon-pressure-test");
     };
-  }, [rpc, navigate]);
+  }, [rpc]);
 
   useEffect(() => {
     if (connection === "connected" && previousConnection.current !== "connected") sync.current();

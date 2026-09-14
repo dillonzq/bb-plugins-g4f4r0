@@ -1,6 +1,6 @@
 # Beacon for BB
 
-Beacon adds the **Status** page to BB. It shows CPU, memory, disk, network, processes, and runtime details for the machine running the BB server.
+Beacon adds a **Status** popover to BB's sidebar footer. It shows CPU, memory, disk, network, processes, and runtime details for the machine running the BB server.
 
 The dashboard collects data while you look at it. An optional background monitor checks CPU and memory, records diagnostics, and sends in-app alerts when usage stays high. The two collectors run independently.
 
@@ -19,7 +19,7 @@ bb plugin install .
 
 The manifest requires BB 0.43 or newer and Plugin SDK 0.4.87 or newer. Development currently pins SDK 0.4.87. Tests import TypeScript directly and have been verified with Node 24.21.0.
 
-Open **Status** in the sidebar. The installed plugin is named **Beacon**.
+Open **Status** from the gauge button in the sidebar footer. The installed plugin is named **Beacon**.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
@@ -87,21 +87,21 @@ The process collector runs `ps` with a 1.5-second timeout and a 512 KiB output l
 
 ## How the dashboard works
 
-1. `app.tsx` registers Status and renders BB-themed cards, meters, charts, and the process table.
+1. `app.tsx` registers Status and renders a compact stacked popover: meters, recent-sample bar strips, top processes, and uptime.
 2. `useServerSnapshot` checks panel intersection, document visibility, and page lifecycle events. It starts polling only while the panel is visible.
 3. The poller calls `metrics_snapshot` through BB's typed RPC client. Requests run one at a time. Late results from a hidden or disposed view are ignored.
 4. The server's demand sampler shares one collection across concurrent viewers and CLI calls. Recent results are cached for the configured interval.
-5. Hiding the panel drops its snapshot and unmounts its charts. The server releases cached data, history, and counter baselines after its idle grace period.
+5. Hiding the panel drops its snapshot and unmounts its view. The server releases cached data, history, and counter baselines after its idle grace period.
 
 The grace period is the greater of 15 seconds and twice the configured interval. At the default interval it is 15 seconds; at the maximum it is two minutes. The expiry timer runs once. It does not start another collection.
 
 History contains at most 72 points. Reopening after expiry starts fresh, so CPU and network readings need a second sample. Background logs do not refill chart history. A second visible viewer can keep the shared history alive after you leave the page.
 
-Visible request failures back off from 5 seconds to a maximum of 60 seconds. Hiding the page cancels retries. An RPC already running on the server may finish after the client hides, but its result cannot restore the hidden charts.
+Visible request failures back off from 5 seconds to a maximum of 60 seconds. Hiding the page cancels retries. An RPC already running on the server may finish after the client hides, but its result cannot restore the hidden view.
 
 ### UI conventions
 
-The UI uses vendored shadcn components, BB theme tokens, Recharts, and BB's native Sonner toasts. React and host-provided libraries are shared through BB's plugin build.
+The UI uses vendored shadcn components, BB theme tokens, and BB's native Sonner toasts. React and host-provided libraries are shared through BB's plugin build.
 
 Cards use sentence-case titles and shared padding constants. Desktop detail rows use a 1.618-to-1 column split; smaller screens stack the panels. Runtime rows have equal heights. Loading and counter warmup use skeletons.
 
@@ -184,7 +184,7 @@ Loaded code and database handles still have a baseline memory cost. Stopping tim
 | File | Responsibility |
 | --- | --- |
 | [server.ts](server.ts) | Settings, Zod contracts, system readers, health assessment, RPC and CLI registration, lifecycle cleanup. |
-| [app.tsx](app.tsx) | Status registration, dashboard layout, formatting, charts, meters, and skeletons. |
+| [app.tsx](app.tsx) | Status popover registration, layout, formatting, meters, bar strips, and skeletons. |
 | [hooks/use-server-snapshot.ts](hooks/use-server-snapshot.ts) | Visibility detection and React snapshot state. |
 | [lib/visible-poller.ts](lib/visible-poller.ts) | Serialized client requests, backoff, and stale-response protection. |
 | [lib/demand-sampler.ts](lib/demand-sampler.ts) | Shared server collection, cache, and idle expiry. |
@@ -204,7 +204,7 @@ Loaded code and database handles still have a baseline memory cost. Stopping tim
 2. Add its reader to `collect`. Keep platform checks, timeouts, and output limits close to the read. Pass the abort signal to APIs that support it. Do not start a timer inside a reader.
 3. If it uses counter deltas, keep a baseline and clear it in the demand sampler's `reset` callback. Reject counter resets and invalid elapsed time.
 4. If it needs a chart, update the history schema and collected points. Keep the 72-point limit. Do not store full snapshots in history.
-5. Render it in `app.tsx` with the existing card, formatting, and loading conventions. Preserve `min-w-0`, table width limits, and mobile stacking.
+5. Render it in `app.tsx` with the existing card, formatting, and loading conventions. Keep it a single stacked row; the popover is narrow by design.
 6. Add parsing and lifecycle tests. Cover missing data, platform fallback, idle expiry, and late results after disposal.
 
 A new dashboard field does not belong in the background monitor by default. Add it there only if unattended alerting needs it and the read is cheap enough to run while nobody is watching.
