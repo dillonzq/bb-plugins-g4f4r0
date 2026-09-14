@@ -52,6 +52,7 @@ Install Dusk from a durable checkout or local plugin directory. Do not make a te
 | `server.ts` | Stores wallpaper settings and fetches message timestamps for sidebar ages. |
 | `app.css` | Handles component sizing, sidebar states, responsive layout, and small compatibility fixes. |
 | `themes/dusk.css` | Defines the Dusk palette and semantic button colors. |
+| `themes/dusk-dark.json` / `dusk-light.json` | VS Code tokens for BB code views and Sidetree. |
 | `lib/homepage.ts` | Finds the native welcome and New thread pages, mounts the wallpaper, and positions the pencil control. |
 | `lib/homepage-header.ts` | Keeps the right toggle pinned while forwarding native panel actions, and positions the pencil through sidebar transitions. |
 | `lib/wallpaper.ts` | Prepares uploads and selects the photo or ambient renderer. |

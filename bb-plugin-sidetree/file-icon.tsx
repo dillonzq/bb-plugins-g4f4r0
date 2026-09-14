@@ -1,6 +1,11 @@
 import { cn } from "./lib/utils";
 import { ICONS } from "./icons";
 
+export function fileIconSrc(token: string): string {
+  const svg = ICONS[token] ?? ICONS.default;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 function Glyph({
   name,
   className,
@@ -8,11 +13,10 @@ function Glyph({
   name: string;
   className?: string;
 }) {
-  const svg = ICONS[name] ?? ICONS.default;
   return (
     <img
       alt=""
-      src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
+      src={fileIconSrc(name)}
       className={cn("size-4 shrink-0", className)}
       draggable={false}
     />

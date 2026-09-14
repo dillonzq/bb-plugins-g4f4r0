@@ -15,9 +15,11 @@ import { Input } from "./components/ui/input";
 import { Skeleton } from "./components/ui/skeleton";
 import { FileGlyph, FolderGlyph } from "./file-icon";
 import { FileOpener } from "./opener";
+import { SourceRenderer } from "./source-renderer";
+import { ScrollEdgeFades, useOverflowEdges } from "./scroll-fade";
 import { cn } from "./lib/utils";
 import type { Entry, Root, rpcContract } from "./server";
-import { fileIconToken, OPENER_EXTENSIONS } from "./tree";
+import { fileIconToken, OPENER_EXTENSIONS, defaultFolderToOpen } from "./tree";
 
 type Rpc = ReturnType<typeof useRpc<typeof rpcContract>>;
 
@@ -119,6 +121,7 @@ function TreeLevel({
   depth,
   expanded,
   onToggle,
+  onAutoOpen,
   cache,
 }: {
   rpc: Rpc;
@@ -128,6 +131,7 @@ function TreeLevel({
   depth: number;
   expanded: Set<string>;
   onToggle: (path: string) => void;
+  onAutoOpen: (path: string) => void;
   cache: Map<string, Entry[]>;
 }) {
   const [entries, setEntries] = useState<Entry[] | null>(
@@ -157,6 +161,12 @@ function TreeLevel({
       cancelled = true;
     };
   }, [cache, relativePath, rpc, threadId]);
+
+  useEffect(() => {
+    if (depth !== 0 || entries === null) return;
+    const folder = defaultFolderToOpen(entries);
+    if (folder !== null) onAutoOpen(folder);
+  }, [depth, entries, onAutoOpen]);
 
   if (error !== null) {
     return (
@@ -200,6 +210,7 @@ function TreeLevel({
                   depth={depth + 1}
                   expanded={expanded}
                   onToggle={onToggle}
+                  onAutoOpen={onAutoOpen}
                   cache={cache}
                 />
               ) : null}
@@ -267,6 +278,9 @@ function FilterHits({
 function FilesPanel({ threadId }: { threadId: string }) {
   const rpc = useRpc<typeof rpcContract>();
   const cache = useRef(new Map<string, Entry[]>());
+  const scroller = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const edges = useOverflowEdges(scroller, content);
   const [root, setRoot] = useState<Root | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([""]));
@@ -333,9 +347,18 @@ function FilesPanel({ threadId }: { threadId: string }) {
     });
   }, []);
 
+  const onAutoOpen = useCallback((path: string) => {
+    setExpanded((current) => {
+      if (current.has(path)) return current;
+      const next = new Set(current);
+      next.add(path);
+      return next;
+    });
+  }, []);
+
   if (error !== null && root === null) {
     return (
-      <p role="alert" className="p-2.5 text-sm text-destructive">
+      <p role="alert" className="px-4 py-2.5 text-sm text-destructive">
         {error}
       </p>
     );
@@ -343,7 +366,7 @@ function FilesPanel({ threadId }: { threadId: string }) {
   const filtering = filter.trim() !== "";
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-1.5 p-1.5">
+    <div className="flex h-full min-h-0 flex-col gap-1.5 px-4 pt-0.5 pb-1.5">
       <div className="relative min-w-0 shrink-0">
         <Icon
           name="Search"
@@ -397,29 +420,39 @@ function FilesPanel({ threadId }: { threadId: string }) {
           </Button>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        {root === null ? (
-          <TreeSkeleton rows={8} />
-        ) : filtering ? (
-          searchError !== null ? (
-            <StatusLine tone="destructive">{searchError}</StatusLine>
-          ) : searching && hits === null ? (
-            <TreeSkeleton rows={6} />
-          ) : (
-            <FilterHits environmentId={root.environmentId} entries={hits ?? []} />
-          )
-        ) : (
-          <TreeLevel
-            rpc={rpc}
-            threadId={threadId}
-            environmentId={root.environmentId}
-            relativePath=""
-            depth={0}
-            expanded={expanded}
-            onToggle={onToggle}
-            cache={cache.current}
-          />
-        )}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div ref={scroller} className="h-full overflow-auto">
+          <div ref={content}>
+            {root === null ? (
+              <TreeSkeleton rows={8} />
+            ) : filtering ? (
+              searchError !== null ? (
+                <StatusLine tone="destructive">{searchError}</StatusLine>
+              ) : searching && hits === null ? (
+                <TreeSkeleton rows={6} />
+              ) : (
+                <FilterHits environmentId={root.environmentId} entries={hits ?? []} />
+              )
+            ) : (
+              <TreeLevel
+                rpc={rpc}
+                threadId={threadId}
+                environmentId={root.environmentId}
+                relativePath=""
+                depth={0}
+                expanded={expanded}
+                onToggle={onToggle}
+                onAutoOpen={onAutoOpen}
+                cache={cache.current}
+              />
+            )}
+          </div>
+        </div>
+        <ScrollEdgeFades
+          above={edges.above}
+          below={edges.below}
+          color="var(--background)"
+        />
       </div>
     </div>
   );
@@ -428,8 +461,6 @@ function FilesPanel({ threadId }: { threadId: string }) {
 const HIDDEN = "data-sidetree-hide";
 const ACTIONS = "data-sidetree-actions";
 const STYLE_ID = "sidetree-host-chrome";
-const OPEN_IN_EDITOR =
-  'button[aria-label="Open in editor"], button[aria-label^="Open in editor ("]';
 const PREVIEW_ACTIONS = [
   'button[aria-label="Refresh file"]',
   'button[aria-label="Refreshing file"]',
@@ -464,52 +495,26 @@ function pinPreviewActionsRight(): void {
 }
 
 function hideHostChrome(): () => void {
-  const hide = () => {
-    const inputs = document.querySelectorAll(
-      'input[role="combobox"][aria-label^="Search files"], input[placeholder="No searchable source"]',
-    );
-    for (const input of inputs) {
-      if (input instanceof HTMLElement && input.hasAttribute("data-sidetree-search")) {
-        continue;
-      }
-      markHidden(input.parentElement);
-    }
-    for (const button of document.querySelectorAll(OPEN_IN_EDITOR)) {
-      markHidden(button);
-    }
+  const hideMenus = () => {
     for (const item of document.querySelectorAll('[role="menuitem"]')) {
       const label = item.textContent?.trim() ?? "";
-      if (label === "Open externally" || label === "Open in") {
+      if (label === "Open externally") {
         markHidden(item);
       }
     }
     pinPreviewActionsRight();
   };
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (
-      !(event.metaKey || event.ctrlKey) ||
-      event.altKey ||
-      event.shiftKey ||
-      event.key.toLowerCase() !== "o"
-    ) {
-      return;
-    }
-    if (document.querySelector(OPEN_IN_EDITOR) === null) return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
   document.getElementById(STYLE_ID)?.remove();
   const style = document.createElement("style");
   style.id = STYLE_ID;
-  style.textContent = `[${ACTIONS}]{margin-left:auto}`;
+  style.textContent = `[${ACTIONS}]{margin-left:auto}
+*:has(>input[role="combobox"][aria-label^="Search files"]:not([data-sidetree-search])),
+*:has(>input[placeholder="No searchable source"]){display:none!important}`;
   document.head.appendChild(style);
-  hide();
-  const observer = new MutationObserver(hide);
-  observer.observe(document.body, { childList: true, subtree: true });
-  document.addEventListener("keydown", onKeyDown, true);
+  hideMenus();
+  document.addEventListener("pointerdown", hideMenus, true);
   return () => {
-    observer.disconnect();
-    document.removeEventListener("keydown", onKeyDown, true);
+    document.removeEventListener("pointerdown", hideMenus, true);
     style.remove();
     for (const node of document.querySelectorAll(`[${HIDDEN}]`)) {
       if (node instanceof HTMLElement) {
@@ -539,8 +544,14 @@ export default definePluginApp((app) => {
   });
   app.slots.fileOpener({
     id: "file",
-    title: "Sidetree",
+    title: "Editor",
     extensions: OPENER_EXTENSIONS,
     component: FileOpener,
+  });
+  app.slots.experimental_sourceCodeRenderer({
+    id: "source",
+    title: "Editor",
+    description: "CodeMirror source preview",
+    component: SourceRenderer,
   });
 });

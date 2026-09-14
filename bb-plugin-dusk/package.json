@@ -19,7 +19,11 @@
         "id": "default",
         "name": "Dusk",
         "description": "Soft charcoal surfaces with a Notion-inspired blue accent.",
-        "css": "./themes/dusk.css"
+        "css": "./themes/dusk.css",
+        "codeTheme": {
+          "dark": "./themes/dusk-dark.json",
+          "light": "./themes/dusk-light.json"
+        }
       }
     ]
   },

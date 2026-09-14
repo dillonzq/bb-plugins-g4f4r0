@@ -3,9 +3,11 @@ import { test } from "node:test";
 import {
   assertAbsoluteHostPath,
   compareEntries,
+  defaultFolderToOpen,
   fileIconToken,
   folderIconName,
   isImagePath,
+  isMarkdownPath,
   isInsideRoot,
   joinRoot,
   languageIdForPath,
@@ -43,6 +45,26 @@ test("directories sort before files", () => {
   );
 });
 
+test("default folder opens only when it is the sole root entry", () => {
+  assert.equal(
+    defaultFolderToOpen([
+      { kind: "directory", relativePath: "bb-plugin-sidetree" },
+    ]),
+    "bb-plugin-sidetree",
+  );
+  assert.equal(
+    defaultFolderToOpen([
+      { kind: "directory", relativePath: "a" },
+      { kind: "directory", relativePath: "b" },
+    ]),
+    null,
+  );
+  assert.equal(
+    defaultFolderToOpen([{ kind: "file", relativePath: "README.md" }]),
+    null,
+  );
+});
+
 test("opener extensions are unique lowercase tokens", () => {
   assert.equal(new Set(OPENER_EXTENSIONS).size, OPENER_EXTENSIONS.length);
   for (const ext of OPENER_EXTENSIONS) {
@@ -77,4 +99,11 @@ test("language ids follow filename and extension", () => {
   assert.equal(languageIdForPath("README.md"), "md");
   assert.equal(languageIdForPath("Dockerfile"), "dockerfile");
   assert.equal(languageIdForPath("notes.txt"), null);
+});
+
+test("pretty markdown is .md and .markdown only", () => {
+  assert.equal(isMarkdownPath("README.md"), true);
+  assert.equal(isMarkdownPath("docs/guide.markdown"), true);
+  assert.equal(isMarkdownPath("page.mdx"), false);
+  assert.equal(isMarkdownPath("src/app.ts"), false);
 });

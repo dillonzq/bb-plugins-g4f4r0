@@ -44,6 +44,17 @@ export function compareEntries(
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
+/** Open the workspace checkout when it is the only root entry. */
+export function defaultFolderToOpen(
+  entries: readonly { kind: Kind; relativePath: string }[],
+): string | null {
+  const [entry] = entries;
+  if (entries.length !== 1 || entry === undefined || entry.kind !== "directory") {
+    return null;
+  }
+  return entry.relativePath;
+}
+
 export function folderIconName(open: boolean): "FolderOpen" | "Folder" {
   return open ? "FolderOpen" : "Folder";
 }
@@ -170,6 +181,12 @@ const IMAGE_EXT = new Set([
 
 export function isImagePath(path: string): boolean {
   return IMAGE_EXT.has(fileExt(path));
+}
+
+/** Pretty Markdown editor. `.mdx` stays in the code editor. */
+export function isMarkdownPath(path: string): boolean {
+  const ext = fileExt(path);
+  return ext === "md" || ext === "markdown";
 }
 
 const HIGHLIGHT_EXT = new Set([
