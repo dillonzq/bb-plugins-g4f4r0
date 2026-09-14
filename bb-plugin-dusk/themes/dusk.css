@@ -76,14 +76,14 @@
 /* Match Sidetree's editor selection across the whole Dusk surface. */
 ::selection,
 *::selection {
-  background: color-mix(in srgb, var(--primary) 24%, transparent) !important;
+  background: color-mix(in srgb, var(--primary) 20%, transparent) !important;
   color: var(--primary) !important;
   -webkit-text-fill-color: var(--primary) !important;
 }
 
 ::-moz-selection,
 *::-moz-selection {
-  background: color-mix(in srgb, var(--primary) 24%, transparent) !important;
+  background: color-mix(in srgb, var(--primary) 20%, transparent) !important;
   color: var(--primary) !important;
 }
 
