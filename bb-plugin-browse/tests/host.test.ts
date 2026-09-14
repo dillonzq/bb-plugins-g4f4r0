@@ -18,6 +18,9 @@ vi.mock("../src/stagehand", () => ({
     }),
   },
 }));
+vi.mock("../src/managed", () => ({
+  launchManaged: async () => ({ endpoint: "ws://private", process: { once: () => {} }, close: async () => mock.events.push("chrome-close") }),
+}));
 vi.mock("../src/runtime", () => ({
   ensureRuntime: async () => "/binary",
   installed: async () => true,
@@ -172,4 +175,31 @@ it("streams native frames and accepts viewer input without extending the desktop
     await h.experimental_dispose();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("expires idle managed Chrome despite frame polling, and renews on actual input", async () => {
+  const root = await mkdtemp(join(tmpdir(), "browse-idle-"));
+  const h = experimental_createHostEntryHarness(entry, { experimental_paths: { dataDir: root, tempDir: root } });
+  mock.send.mockResolvedValue({});
+  mock.evaluate.mockResolvedValue("https://example.com");
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  try {
+    let j = await h.experimental_call("connect", { id: "ab-idle-test", mode: "managed", endpoint: "", url: "https://example.com", expiresAt: Date.now() + 900000 });
+    while (j.status === "running") { await new Promise<void>(r => setImmediate(r)); j = await h.experimental_call("job", { id: j.id }); }
+    expect(j.status).toBe("succeeded");
+    const before = await h.experimental_call("inspect", { id: "ab-idle-test" });
+    await vi.advanceTimersByTimeAsync(840000);
+    await h.experimental_call("frame", { id: "ab-idle-test" });
+    expect((await h.experimental_call("inspect", { id: "ab-idle-test" })).expiresAt).toBe(before.expiresAt);
+    const kept = await h.experimental_call("keepalive", { id: "ab-idle-test" });
+    expect(kept.expiresAt).toBeGreaterThan(before.expiresAt!);
+    await vi.advanceTimersByTimeAsync(1000);
+    await h.experimental_call("input", { id: "ab-idle-test", input: { kind: "text", text: "x" } });
+    expect((await h.experimental_call("inspect", { id: "ab-idle-test" })).expiresAt).toBeGreaterThan(before.expiresAt!);
+    await vi.advanceTimersByTimeAsync(899999);
+    expect((await h.experimental_call("inspect", { id: "ab-idle-test" })).status).toBe("ready");
+    await vi.advanceTimersByTimeAsync(2);
+    expect((await h.experimental_call("inspect", { id: "ab-idle-test" })).status).toBe("released");
+    expect(mock.events).toContain("chrome-close");
+  } finally { vi.useRealTimers(); await h.experimental_dispose(); await rm(root, { recursive: true, force: true }); }
 });

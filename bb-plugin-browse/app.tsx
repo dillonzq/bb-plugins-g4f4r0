@@ -492,6 +492,8 @@ function LiveBrowser({
   }, [rpc, threadId]);
   useEffect(() => {
     void sync();
+    const timer = setInterval(() => void sync(), 30000);
+    return () => clearInterval(timer);
   }, [sync]);
   useRealtime("browser-changed", () => {
     void sync();
@@ -594,7 +596,6 @@ function LiveBrowser({
     );
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      <Button variant="ghost" size="icon" className="absolute right-2 top-2 z-10" aria-label="All sessions" onClick={() => nav.openThreadPanel({ actionId: "live", params: {}, title: "Browser" })}><BrowseIcon name="List" className="size-4" /></Button>
       <div className="absolute bottom-3 right-3 z-10 text-sm">
         {current && ["error", "released"].includes(current.status) && (
           <Button
@@ -621,7 +622,7 @@ function LiveBrowser({
       <iframe
         title="Live browser"
         className="min-h-0 w-full flex-1 border-0 bg-black"
-        src={`/api/v1/plugins/browse/http/viewer?id=${encodeURIComponent(id)}&embedded=1`}
+        src={`/api/v1/plugins/browse/http/viewer?id=${encodeURIComponent(id)}`}
       />
     </div>
   );

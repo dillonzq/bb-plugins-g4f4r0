@@ -13,6 +13,9 @@ const base = {
 };
 async function fixture(
   options: {
+    threadActive?: boolean;
+    panelTabs?: any[];
+    tabReadFails?: boolean;
     held?: boolean;
     personal?: boolean;
     connectFails?: boolean;
@@ -38,7 +41,8 @@ async function fixture(
     pluginId: "browse",
     sdk: {
       threads: {
-        get: async () => ({ environmentId: "env_thread" }) as any,
+        tabs: { get: async () => { if (options.tabReadFails) throw Error("offline"); return { revision: 1, tabs: options.panelTabs ?? [] }; } },
+        get: async () => ({ environmentId: "env_thread", status: options.threadActive ? "active" : "idle" }) as any,
         paneAction,
       },
       environments: {
@@ -122,7 +126,7 @@ async function fixture(
         startedAt:Date.now(),durationMs:1,artifacts:[],
         ...(options.connectJobFails?{error:"Stagehand extension rejected by scoped browser bridge"}:{})
       };
-      if (call.method === "inspect")
+      if (call.method === "inspect" || call.method === "keepalive")
         return {
           ...(options.busyOnce && inspected++ === 0
             ? { busy: "finished-connect" }
@@ -258,7 +262,7 @@ describe("Thread-host routing", () => {
     );
     expect(r.session.mode).toBe("managed");
     expect(r.session.expiresAt).toBeGreaterThan(
-      Date.now() + 7 * 60 * 60 * 1000,
+      Date.now() + 14 * 60 * 1000,
     );
     expect(r.session.viewerUrl).toContain("/http/viewer?id=");
     expect(f.create).not.toHaveBeenCalled();
@@ -636,4 +640,38 @@ it("cleans up an asynchronously failed native connection and blocks repeated uns
   await expect(f.harness.behavior.callRpc("start",{...base})).rejects.toThrow('mode:managed');
   expect(f.create).toHaveBeenCalledOnce();
  } finally {await f.harness.lifecycle.dispose();}
+});
+
+it("keeps browsers alive only while their owning agent thread is active", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  const options = { threadActive: true };
+  const f = await fixture(options);
+  try {
+    await f.harness.behavior.callRpc("start", { threadId: "thread_one", url: "https://example.com" });
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(f.calls.filter(c => c.method === "keepalive")).toHaveLength(1);
+    options.threadActive = false;
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(f.calls.filter(c => c.method === "keepalive")).toHaveLength(1);
+  } finally { await f.harness.lifecycle.dispose(); vi.useRealTimers(); }
+});
+
+it("closes Chrome only after a previously observed session tab is removed", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  const options: { panelTabs: any[]; tabReadFails: boolean } = { panelTabs: [], tabReadFails: false };
+  const f = await fixture(options);
+  try {
+    const result = await f.harness.behavior.callRpc("start", { threadId: "thread_one", url: "https://example.com" }) as any;
+    options.panelTabs = [{ kind: "plugin-panel", pluginId: "browse", actionId: "live", paramsJson: JSON.stringify({ id: result.session.id }) }];
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(f.calls.filter(c => c.method === "release")).toHaveLength(0);
+    options.tabReadFails = true;
+    options.panelTabs = [];
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(f.calls.filter(c => c.method === "release")).toHaveLength(0);
+    options.tabReadFails = false;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(f.calls.filter(c => c.method === "release")).toHaveLength(1);
+  } finally { await f.harness.lifecycle.dispose(); vi.useRealTimers(); }
 });

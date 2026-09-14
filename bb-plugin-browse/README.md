@@ -93,7 +93,7 @@ Element `waitMs` defaults to 3000 (maximum 30000; zero fails immediately when no
 
 ## Lifecycle and limits
 
-- Managed sessions last eight hours and refresh while the live view or inspect is used. Plugin reload or disable still stops Chrome. Expiry, release, or disconnection never silently reacquires control. Reconnect opens a new window at the last URL with cookies and storage, not the previous DOM.
+- Managed sessions last 15 minutes without user or agent actions; frame polling and inspection do not renew the timeout. Plugin reload or disable still stops Chrome. Expiry, release, or disconnection never silently reacquires control. Reconnect opens a new window at the last URL with cookies and storage, not the previous DOM.
 - Managed release/close and plugin reload/disable stop Chromium, keeping profile data and saved artifacts. Reconnect reopens the last known URL with cookies/local storage, not unsaved page state. Native release preserves the BB tab. A thread host change requires a new profile on that host; profiles are not silently copied.
 - One job runs per session. Default deadline is 120 seconds; maximum 600. Ordinary output is bounded to 512 KB; observations inspect at most 12,000 DOM nodes and return at most 150 candidates.
 - Cancelling a continuous gesture releases its held pointer. Cancelling another operation closes the control channel and stops managed Chrome to prevent remaining browser-side work; reconnect before further actions. Already completed page changes are not rolled back.
@@ -190,3 +190,7 @@ on the thread's current machine, discovered with `ss` on Linux or `lsof` on macO
 and a bounded HTTP HEAD check. They refresh every 15 seconds while the launcher
 is open. HTTPS-only apps and servers that reject HEAD may not appear; an address
 can still be entered manually. This list does not include every running process.
+
+Browsers belonging to an actively working agent thread, active jobs, recordings, and pending secure login prompts are protected from idle shutdown. Profiles and artifacts survive expiry; unsaved page state does not.
+
+Closing a persisted Browse session tab stops its managed Chrome within a few seconds. Switching tabs or reloading BB does not remove the persisted tab and does not close the session. The blank launcher is not a session.

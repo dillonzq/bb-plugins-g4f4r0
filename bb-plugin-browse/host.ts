@@ -77,7 +77,13 @@ const sessions = new Map<string, LocalSession>(),
 function scheduleExpiry(s: LocalSession) {
   clearTimeout(s.timer);
   s.timer = setTimeout(
-    () => void release(s),
+    () => {
+      if (s.mode === "managed" && (s.busy || s.credential || s.recorder)) {
+        touchSession(s);
+        return;
+      }
+      void release(s);
+    },
     Math.max(1, s.expiresAt - Date.now()),
   );
   s.timer.unref();
@@ -145,7 +151,7 @@ function startJob(
     durationMs: 0,
     artifacts: [],
   };
-  if (s) s.busy = id;
+  if (s) { s.busy = id; touchSession(s); }
   const timeout = setTimeout(
     () => controller.abort(new Error("Job timed out")),
     timeoutMs,
@@ -190,7 +196,7 @@ function startJob(
       ctx.lifecycle.signal.removeEventListener("abort", abort);
       j.endedAt = Date.now();
       j.durationMs = j.endedAt - j.startedAt;
-      if (s) s.busy = undefined;
+      if (s) { s.busy = undefined; touchSession(s); }
       await retain.dispose();
       if (
         s &&
@@ -731,7 +737,6 @@ export default experimental_defineHostEntry({
       const s = session(id);
       if (s.status !== "ready" || !s.cdp || s.expiresAt <= Date.now())
         throw new Error("Browser is not ready");
-      touchSession(s);
       await s.cdp.startLiveCast();
       const live = await s.cdp.nextLiveFrame(after);
       const url = await s.cdp.evaluate("location.href");
@@ -925,6 +930,11 @@ export default experimental_defineHostEntry({
         300000,
       );
     },
+    keepalive: async ({ id }) => {
+      const s = session(id);
+      if (s.status === "ready") touchSession(s);
+      return publicSession(s);
+    },
     inspect: async ({ id }, ctx) => {
       const s = sessions.get(id);
       if (!s)
@@ -934,7 +944,7 @@ export default experimental_defineHostEntry({
           recording: false,
           artifactRoot: join(ctx.experimental_paths.dataDir, "artifacts", id),
         };
-      if (s.status === "ready") touchSession(s);
+
       return {
         ...publicSession(s),
         url:

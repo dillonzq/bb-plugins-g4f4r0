@@ -2,7 +2,7 @@ import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { credentialRequest, credentialValues } from "./credentials";
 export const VERSION = "4.1.0";
-export const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+export const SESSION_TTL_MS = 15 * 60 * 1000;
 export const NATIVE_LEASE_TTL_MS = 30 * 60 * 1000;
 export const CREDENTIAL_TIMEOUT_MS = 300000;
 export const id = z.string().min(1).max(200);
@@ -216,6 +216,7 @@ export const hostContract = defineRpcContract({
     }),
   },
   input: { input: z.object({ id, input: viewerInput }), output: job },
+  keepalive: { input: z.object({ id }), output: hostSession },
   inspect: { input: z.object({ id }), output: hostSession },
   submit: {
     input: z.object({
