@@ -138,16 +138,29 @@ function StatusPopover({ snapshot }: { snapshot: ServerSnapshot }) {
   );
 }
 
+// Mirrors the loaded sections row for row so the popover does not grow when data arrives.
+function LoadingPopover() {
+  const rows = (count: number) => Array.from({ length: count }, (_, i) => <Skeleton key={i} className="h-4 w-full" />);
+  return (
+    <>
+      <Section label="CPU" value={<Sampling />}><Skeleton className="h-6 w-full rounded-none" /><Skeleton className="h-6 w-full" /></Section>
+      <Section label="Memory" value={<Sampling />}><Skeleton className="h-2 w-full" />{rows(1)}</Section>
+      <Section label="Disk" value={<Sampling />}><Skeleton className="h-2 w-full" />{rows(1)}</Section>
+      <Section label="Network">{rows(2)}</Section>
+      <Section label="Top processes">{rows(3)}</Section>
+      <Section label="Uptime">{rows(2)}</Section>
+    </>
+  );
+}
+
 function StatusDisclosure(_props: ExperimentalSidebarFooterDisclosureProps) {
   const { container, active, snapshot, error } = useServerSnapshot();
   return (
-    <div ref={container} data-beacon-shell className="w-full min-w-64 divide-y divide-sidebar-border">
+    <div ref={container} data-beacon-shell aria-busy={!(active && snapshot)} className="w-full min-w-64 divide-y divide-sidebar-border">
       {error ? <div role="alert" className="px-3 py-2 text-xs text-destructive">Could not refresh: {error}</div> : null}
       {/* The skeleton gives the shell height so the visibility observer can activate polling. */}
       {active && snapshot ? <StatusPopover snapshot={snapshot} /> : (
-        <div className="space-y-3 p-3" aria-busy="true" aria-label="Loading server metrics">
-          {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-4 w-full" />)}
-        </div>
+        <LoadingPopover />
       )}
     </div>
   );
