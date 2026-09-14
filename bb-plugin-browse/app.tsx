@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { browserIcons, type BrowserIconName } from "./src/browser-icons";
+import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import {
   definePluginApp,
   useRpc,
@@ -459,6 +460,10 @@ export default definePluginApp((app) => {
   });
 });
 
+function BrowseIcon({ name, className }: { name: BrowserIconName; className?: string }) {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" data-icon-library="hugeicons" className={className}>{browserIcons[name].map(([tag, props]) => createElement(tag, props))}</svg>;
+}
+
 function LiveBrowser({
   params,
   threadId,
@@ -531,9 +536,9 @@ function LiveBrowser({
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
         <form aria-label="Browser navigation" className="flex shrink-0 items-center gap-1 border-b px-3 py-2" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
-          <Button type="button" variant="ghost" size="icon" aria-label="Back" disabled><Icon name="ArrowLeft" className="size-4" /></Button>
-          <Button type="button" variant="ghost" size="icon" aria-label="Forward" disabled><Icon name="ArrowRight" className="size-4" /></Button>
-          <Button type="button" variant="ghost" size="icon" aria-label="Refresh sessions" onClick={() => void sync()}><Icon name="RefreshCw" className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon" aria-label="Back" disabled><BrowseIcon name="ArrowLeft" className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon" aria-label="Forward" disabled><BrowseIcon name="ArrowRight" className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon" aria-label="Refresh sessions" onClick={() => void sync()}><BrowseIcon name="RefreshCw" className="size-4" /></Button>
           <input
             aria-label="Website address"
             className="min-w-0 flex-1 rounded-md bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -545,7 +550,7 @@ function LiveBrowser({
             spellCheck={false}
             required
           />
-          <Button type="submit" variant="ghost" size="icon" aria-label={opening ? "Opening" : "Go"} disabled={opening || !address.trim()}><Icon name="ArrowRight" className="size-4" /></Button>
+          <Button type="submit" variant="ghost" size="icon" aria-label={opening ? "Opening" : "Go"} disabled={opening || !address.trim()}><BrowseIcon name="ArrowRight" className="size-4" /></Button>
         </form>
         <div className="min-h-0 flex-1 overflow-auto flex flex-col">
           <div className="m-auto w-full max-w-3xl px-6 py-12">
@@ -563,7 +568,7 @@ function LiveBrowser({
                       nav.openThreadPanel({ actionId: "live", params: { id: target.id }, title: browserTitle(target) });
                     } catch (e) { setError(String(e)); }
                   }}>
-                    <Icon name="Globe" className="size-5 shrink-0 text-muted-foreground" />
+                    <BrowseIcon name="Globe" className="size-5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{browserTitle(s)}</span><span className="block truncate text-xs text-muted-foreground">{s.url}</span></span>
                     <span className="shrink-0 text-xs text-muted-foreground">{group.title === "Sessions" ? s.status : ""}</span>
                   </button>
@@ -578,7 +583,7 @@ function LiveBrowser({
               {!local.error && !local.servers.length && <p className="text-sm text-muted-foreground">No web servers detected on this thread’s machine.</p>}
               <ul className="space-y-2">{local.servers.map(server => <li key={server.port}>
                 <button type="button" disabled={opening} className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left hover:bg-accent" onClick={() => void openAddress(server.url)}>
-                  <Icon name="Terminal" className="size-5 text-muted-foreground" />
+                  <BrowseIcon name="Terminal" className="size-5 text-muted-foreground" />
                   <span><span className="block text-sm font-medium">{server.name}</span><span className="block text-xs text-muted-foreground">localhost:{server.port}</span></span>
                 </button>
               </li>)}</ul>
@@ -589,7 +594,7 @@ function LiveBrowser({
     );
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      <Button variant="ghost" size="icon" className="absolute right-2 top-2 z-10" aria-label="All sessions" onClick={() => nav.openThreadPanel({ actionId: "live", params: {}, title: "Browser" })}><Icon name="List" className="size-4" /></Button>
+      <Button variant="ghost" size="icon" className="absolute right-2 top-2 z-10" aria-label="All sessions" onClick={() => nav.openThreadPanel({ actionId: "live", params: {}, title: "Browser" })}><BrowseIcon name="List" className="size-4" /></Button>
       <div className="absolute bottom-3 right-3 z-10 text-sm">
         {current && ["error", "released"].includes(current.status) && (
           <Button
