@@ -878,7 +878,8 @@ export default experimental_defineHostEntry({
             s.cdp.onDisconnect = () => {
               if (s.status !== "released") {
                 s.status = "error";
-                s.error = "Browser disconnected. Reconnect the session.";
+                s.error =
+                  "Browser disconnected or its tab closed. Reconnect the session.";
               }
             };
             if (input.mode === "managed") {

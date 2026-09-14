@@ -139,3 +139,44 @@ it("reconnects managed profiles with restored tabs but keeps native leases stric
     await new Promise<void>((r) => upstream.close(() => r()));
   }
 });
+
+it("reports a detached page even when the browser websocket remains connected", async () => {
+  const { Cdp } = await import("../src/cdp");
+  const upstream = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+  await once(upstream, "listening");
+  let socket: WebSocket | undefined;
+  upstream.on("connection", (ws) => {
+    socket = ws;
+    ws.on("message", (raw) => {
+      const m = JSON.parse(raw.toString());
+      ws.send(
+        JSON.stringify({
+          id: m.id,
+          result:
+            m.method === "Target.getTargets"
+              ? { targetInfos: [{ type: "page", targetId: "page" }] }
+              : { sessionId: "page-session" },
+        }),
+      );
+    });
+  });
+  let c: Awaited<ReturnType<typeof Cdp.connect>> | undefined;
+  try {
+    c = await Cdp.connect(`ws://127.0.0.1:${(upstream.address() as any).port}`);
+    const disconnected = new Promise<void>((resolve) => {
+      c!.onDisconnect = resolve;
+    });
+    socket!.send(
+      JSON.stringify({
+        method: "Target.detachedFromTarget",
+        params: { sessionId: "page-session", targetId: "page" },
+      }),
+    );
+    await disconnected;
+    expect(socket!.readyState).toBe(WebSocket.OPEN);
+  } finally {
+    c?.close();
+    for (const ws of upstream.clients) ws.terminate();
+    await new Promise<void>((r) => upstream.close(() => r()));
+  }
+});

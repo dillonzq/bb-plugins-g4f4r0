@@ -59,6 +59,14 @@ export class Cdp {
       } catch {
         return;
       }
+      if (
+        (m.method === "Target.detachedFromTarget" &&
+          m.params?.sessionId === this.sessionId) ||
+        (m.method === "Target.targetDestroyed" &&
+          m.params?.targetId === this.targetId)
+      ) {
+        this.fail();
+      }
       if (m.method)
         for (const listener of this.listeners) listener(m.method, m.params);
       if (m.method === "Page.screencastFrame") this.onScreencast(m.params);
@@ -67,6 +75,13 @@ export class Cdp {
         clearTimeout(p.timer);
         this.pending.delete(m.id);
         m.error ? p.reject(new Error(m.error.message)) : p.resolve(m.result);
+        if (
+          m.error &&
+          /session with given id not found|no target with given id/i.test(
+            m.error.message,
+          )
+        )
+          this.fail();
       }
     });
     this.ws.on("close", () => this.fail());
@@ -219,7 +234,7 @@ export class Cdp {
         else
           reject(
             new Error(
-              "No live frame yet. Keep the managed browser running and retry.",
+              "No live frame arrived. The browser may not be rendering; check its session and host.",
             ),
           );
       }, timeoutMs);
@@ -277,11 +292,19 @@ export class Cdp {
     this.frameFailure?.();
     this.casting = false;
     for (const w of this.waiters)
-      w.reject(new Error("Browser disconnected; the tab has been preserved."));
+      w.reject(
+        new Error(
+          "Browser control disconnected or its tab closed. Inspect the session before reconnecting.",
+        ),
+      );
     this.waiters.clear();
     for (const p of this.pending.values()) {
       clearTimeout(p.timer);
-      p.reject(new Error("Browser disconnected; the tab has been preserved."));
+      p.reject(
+        new Error(
+          "Browser control disconnected or its tab closed. Inspect the session before reconnecting.",
+        ),
+      );
     }
     this.pending.clear();
   }
