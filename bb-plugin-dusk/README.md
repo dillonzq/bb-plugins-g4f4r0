@@ -26,6 +26,21 @@ Disable Dusk to restore BB's native layout. Switch back to the default palette w
 bb theme set default
 ```
 
+To opt into Dusk's T3-inspired keyboard layout, apply it explicitly:
+
+```sh
+bb dusk shortcuts apply
+bb dusk shortcuts list
+bb dusk shortcuts reset
+```
+
+The preset is app-wide. Dusk snapshots the affected BB overrides before the
+first apply so `reset` can restore them. Reset the preset before uninstalling
+Dusk if you want those previous overrides back.
+
+`Mod+J` opens a terminal through BB's `terminal.open` command. `Mod+Alt+B`
+toggles the right panel.
+
 ## Working on the plugin
 
 Use the development watcher while editing:
