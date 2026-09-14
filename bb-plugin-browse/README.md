@@ -32,7 +32,7 @@ Tools and the bundled skill become available when BB refreshes the agent session
 
 Browse can request username, password, or verification-code fields through BB's private input UI, using the same SDK mechanism as the built-in Secrets plugin. Device password managers such as 1Password can fill this form. No vault connection or service account is required. Environment-variable requests still use Secrets.
 
-Use `browse_credentials`, or `bb browse credentials` with the session ID, purpose, field selectors/labels/kinds, and `submitSelector`. See the bundled skill for an example. The request locks an idle managed browser for up to five minutes, binds to the original document and fields, then fills and clicks once. Values are excluded from its result and job history, and are not written to dotenv files. Existing input nodes are cleared after delivery. Cancellation before filling preserves the page.
+The request starts a credentials job immediately (agents poll it; the CLI waits). It locks automation for up to five minutes, keeps the live view visible, binds to the original document and fields, then fills and clicks once. Values are excluded from its result and job history, and are not written to dotenv files. Existing input nodes are cleared after delivery. Cancellation before filling preserves the page.
 
 The first version supports top-document inputs and a standard button, HTTPS or loopback HTTP fixtures, and same-origin POST forms. Stop recording before requesting. Unsupported forms and page changes fail closed. A delivery result is not proof of successful login; inspect the following page. Browser/host access remains trusted: destination scripts can retain submitted values, and this feature does not isolate secrets from arbitrary browser scripting or shell access.
 
@@ -93,7 +93,7 @@ Element `waitMs` defaults to 3000 (maximum 30000; zero fails immediately when no
 
 ## Lifecycle and limits
 
-- Sessions last 30 minutes. Expiry, release, or disconnection never silently reacquires control.
+- Managed sessions last eight hours and refresh while the live view or inspect is used. Plugin reload or disable still stops Chrome. Expiry, release, or disconnection never silently reacquires control. Reconnect opens a new window at the last URL with cookies and storage, not the previous DOM.
 - Managed release/close and plugin reload/disable stop Chromium, keeping profile data and saved artifacts. Reconnect reopens the last known URL with cookies/local storage, not unsaved page state. Native release preserves the BB tab. A thread host change requires a new profile on that host; profiles are not silently copied.
 - One job runs per session. Default deadline is 120 seconds; maximum 600. Ordinary output is bounded to 512 KB; observations inspect at most 12,000 DOM nodes and return at most 150 candidates.
 - Cancelling a continuous gesture releases its held pointer. Cancelling another operation closes the control channel and stops managed Chrome to prevent remaining daemon-side work; reconnect before further actions. Already completed page changes are not rolled back.

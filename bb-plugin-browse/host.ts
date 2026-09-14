@@ -11,6 +11,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import {
   hostContract,
   VERSION,
+  SESSION_TTL_MS,
+  CREDENTIAL_TIMEOUT_MS,
   type Job,
   type Artifact,
   type Operation,
@@ -73,6 +75,19 @@ type LocalSession = {
 type Task = { view: Job; controller: AbortController; promise: Promise<void> };
 const sessions = new Map<string, LocalSession>(),
   jobs = new Map<string, Task>();
+function scheduleExpiry(s: LocalSession) {
+  clearTimeout(s.timer);
+  s.timer = setTimeout(
+    () => void release(s),
+    Math.max(1, s.expiresAt - Date.now()),
+  );
+  s.timer.unref();
+}
+function touchSession(s: LocalSession) {
+  if (s.status === "released" || s.closing) return;
+  s.expiresAt = Date.now() + SESSION_TTL_MS;
+  scheduleExpiry(s);
+}
 function publicSession(s: LocalSession) {
   return {
     id: s.id,
@@ -238,7 +253,7 @@ async function cli(
   env.AGENT_BROWSER_NAMESPACE = "bb-agent-browser";
   env.AGENT_BROWSER_RESTORE_SAVE = "never";
   env.AGENT_BROWSER_DEFAULT_TIMEOUT = "25000";
-  env.AGENT_BROWSER_IDLE_TIMEOUT_MS = "1800000";
+  env.AGENT_BROWSER_IDLE_TIMEOUT_MS = String(SESSION_TTL_MS);
   const out = await runProcess(
     s.binary ?? runtimePath(s.root),
     [
@@ -614,7 +629,7 @@ export default experimental_defineHostEntry({
         );
       const pending: NonNullable<LocalSession["credential"]> = {
         token: randomUUID(),
-        expiresAt: Date.now() + 300000,
+        expiresAt: Date.now() + CREDENTIAL_TIMEOUT_MS,
       };
       s.credential = pending;
       try {
@@ -625,7 +640,7 @@ export default experimental_defineHostEntry({
           throw new Error("Session closed");
         pending.timer = setTimeout(() => {
           void finishCredential(s, pending);
-        }, 300000);
+        }, CREDENTIAL_TIMEOUT_MS);
         return { token: pending.token, origin: pending.binding.origin };
       } catch {
         await finishCredential(s, pending);
@@ -733,8 +748,7 @@ export default experimental_defineHostEntry({
       const s = session(id);
       if (s.status !== "ready" || !s.managed || !s.cdp)
         throw new Error("Browser is not ready");
-      if (s.credential)
-        throw new Error("Browser is waiting for private credential input.");
+      touchSession(s);
       await s.cdp.startLiveCast();
       const live = await s.cdp.nextLiveFrame(after);
       const url = await s.cdp.evaluate("location.href");
@@ -813,11 +827,7 @@ export default experimental_defineHostEntry({
         retain: ctx.experimental_retainWorker(),
       };
       sessions.set(s.id, s);
-      s.timer = setTimeout(
-        () => void release(s),
-        Math.max(1, s.expiresAt - Date.now()),
-      );
-      s.timer.unref();
+      scheduleExpiry(s);
       return startJob(
         "connect",
         ctx,
@@ -916,6 +926,7 @@ export default experimental_defineHostEntry({
           recording: false,
           artifactRoot: join(ctx.experimental_paths.dataDir, "artifacts", id),
         };
+      if (s.status === "ready") touchSession(s);
       return {
         ...publicSession(s),
         url:

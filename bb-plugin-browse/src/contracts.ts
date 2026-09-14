@@ -2,6 +2,8 @@ import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { credentialRequest, credentialValues } from "./credentials";
 export const VERSION = "0.37.1";
+export const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+export const CREDENTIAL_TIMEOUT_MS = 300000;
 export const id = z.string().min(1).max(200);
 export const point = z.object({
   x: z.number().finite().min(0).max(50000),
@@ -313,4 +315,5 @@ export const rpcContract = defineRpcContract({
   },
   close: { input: z.object({ id }), output: z.object({ ok: z.boolean() }) },
   artifacts: { input: z.object({ id }), output: z.array(artifact) },
+  credentials: { input: credentialRequest, output: job },
 });

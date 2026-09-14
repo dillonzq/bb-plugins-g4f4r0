@@ -234,6 +234,7 @@ describe("Thread-host routing", () => {
       "host_thread",
     );
     expect(r.session.mode).toBe("managed");
+    expect(r.session.expiresAt).toBeGreaterThan(Date.now() + 7 * 60 * 60 * 1000);
     expect(r.session.viewerUrl).toContain("/http/viewer?id=");
     expect(f.create).not.toHaveBeenCalled();
     expect(JSON.stringify(r)).not.toContain("ws://");
@@ -430,6 +431,42 @@ describe("private browser credential requests", () => {
       );
       expect(result.exitCode).toBe(1);
       expect(f.calls.some((c) => c.method === "credentialPrepare")).toBe(false);
+    } finally {
+      await f.harness.lifecycle.dispose();
+    }
+  });
+  it("returns a running credentials job that the agent can poll", async () => {
+    const f = await fixture();
+    try {
+      const started: any = await f.harness.behavior.callRpc("start", {
+        threadId: base.threadId,
+        mode: "managed",
+        url: "https://accounts.shopify.com",
+      });
+      const job: any = await f.harness.behavior.callRpc(
+        "credentials",
+        request(started.session.id),
+      );
+      expect(job.status).toBe("running");
+      expect(job.kind).toBe("credentials");
+      expect(JSON.stringify(job)).not.toContain("dummy-secret");
+      await vi.waitFor(() =>
+        expect(f.harness.inspection.pendingInteractions).toHaveLength(1),
+      );
+      f.harness.behavior.submitInteraction(
+        f.harness.inspection.pendingInteractions[0].id,
+        ["dummy-secret"],
+      );
+      await vi.waitFor(async () => {
+        const polled: any = await f.harness.behavior.callRpc("job", {
+          hostId: started.session.hostId,
+          id: job.id,
+        });
+        expect(polled.status).toBe("succeeded");
+        expect(polled.output).toContain('"filled":true');
+        expect(polled.output).toContain("not a successful login");
+        expect(JSON.stringify(polled)).not.toContain("dummy-secret");
+      });
     } finally {
       await f.harness.lifecycle.dispose();
     }

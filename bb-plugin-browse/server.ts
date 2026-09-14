@@ -15,6 +15,8 @@ import {
   type Session,
   type Job,
   type Artifact,
+  SESSION_TTL_MS,
+  CREDENTIAL_TIMEOUT_MS,
 } from "./src/contracts";
 import { viewerHtml } from "./src/viewer";
 import { credentialRequest, credentialValues } from "./src/credentials";
@@ -170,7 +172,7 @@ export default async function plugin(bb: BbPluginApi) {
       recording: false,
       artifactRoot: "",
       createdAt: Date.now(),
-      expiresAt: Date.now() + 1800000,
+      expiresAt: Date.now() + SESSION_TTL_MS,
       hostLabel: machines.find((h) => h.id === hostId)?.name ?? hostId,
       viewerUrl: viewerUrl(sid),
     };
@@ -201,6 +203,15 @@ export default async function plugin(bb: BbPluginApi) {
   }
   let disposing = false;
   const startLocks = new Map<string, Promise<void>>();
+  type CredentialTask = {
+    job: Job;
+    abort: AbortController;
+    finished: Promise<void>;
+  };
+  const credentialJobs = new Map<string, CredentialTask>();
+  function viewCredentialJob(j: Job): Job {
+    return { ...j, durationMs: (j.endedAt ?? Date.now()) - j.startedAt };
+  }
   async function showLive(threadId: string) {
     try {
       await bb.sdk.threads.paneAction({ threadId, action: "spotlight" });
@@ -287,6 +298,102 @@ export default async function plugin(bb: BbPluginApi) {
         "This thread moved to another host. Start a new browser on its current host; the old profile remains on its original machine.",
       );
     }
+  }
+  async function startCredentialJob(input: z.infer<typeof credentialRequest>) {
+    const s = get(input.id);
+    if (s.mode !== "managed")
+      throw new Error("Credentials are only available on a managed browser.");
+    await ensurePlacement(s);
+    if (s.status !== "ready")
+      throw new Error("Managed browser is not ready. Reconnect the session.");
+    if ([...credentialJobs.values()].some((t) => t.job.sessionId === s.id && t.job.status === "running"))
+      throw new Error("This browser is already waiting for private credential input.");
+    const prepared = await host.call("credentialPrepare", input, {
+      hostId: s.hostId,
+    });
+    const now = Date.now();
+    const j: Job = {
+      id: randomUUID(),
+      sessionId: s.id,
+      kind: "credentials",
+      status: "running",
+      startedAt: now,
+      durationMs: 0,
+      artifacts: [],
+    };
+    const abort = new AbortController();
+    const task: CredentialTask = { job: j, abort, finished: Promise.resolve() };
+    credentialJobs.set(j.id, task);
+    s.busy = j.id;
+    await showLive(s.threadId);
+    changed();
+    task.finished = (async () => {
+      let values: string[] = [];
+      try {
+        const answer = await bb.ui.requestInput(
+          {
+            threadId: s.threadId,
+            rendererId: "browser-credentials",
+            title: "Credentials",
+            payload: {
+              origin: prepared.origin,
+              purpose: input.purpose,
+              fields: input.fields.map(({ label, kind }) => ({ label, kind })),
+            },
+            timeoutMs: CREDENTIAL_TIMEOUT_MS,
+          },
+          { signal: abort.signal },
+        );
+        if (answer.outcome !== "submitted") {
+          j.status = "succeeded";
+          j.output = JSON.stringify({
+            filled: false,
+            cancelled: true,
+            inspect: "Delivery did not run. The page is unchanged.",
+          });
+          return;
+        }
+        const parsed = credentialValues.safeParse(answer.value);
+        if (!parsed.success || parsed.data.length !== input.fields.length)
+          throw new Error("Invalid credential form response. Request again.");
+        values = parsed.data;
+        abort.signal.throwIfAborted();
+        await ensurePlacement(s);
+        const filled = await host.call(
+          "credentialFill",
+          { id: s.id, token: prepared.token, values },
+          { hostId: s.hostId, timeoutMs: 30000 },
+        );
+        j.status = "succeeded";
+        j.output = JSON.stringify({
+          ...filled,
+          cancelled: false,
+          inspect:
+            "filled is delivery and a click, not a successful login. Inspect the following page.",
+        });
+      } catch {
+        j.status = abort.signal.aborted ? "cancelled" : "failed";
+        if (abort.signal.aborted)
+          j.output = JSON.stringify({ filled: false, cancelled: true });
+        else
+          j.error =
+            "Browser credential request did not complete. Inspect the page before requesting again.";
+      } finally {
+        values.fill("");
+        await host
+          .call(
+            "credentialCancel",
+            { id: s.id, token: prepared.token },
+            { hostId: s.hostId },
+          )
+          .catch(() => {});
+        j.endedAt = Date.now();
+        j.durationMs = j.endedAt - j.startedAt;
+        if (s.busy === j.id) delete s.busy;
+        await persist(s);
+      }
+    })();
+    return viewCredentialJob(j);
   }
   const handlers: PluginRpcHandlers<typeof rpcContract> = {
     machines: async () =>
@@ -381,6 +488,7 @@ export default async function plugin(bb: BbPluginApi) {
       await ensurePlacement(s);
       if (s.mode !== "managed" || s.status !== "ready")
         throw new Error("Managed browser is not ready. Reconnect the session.");
+      s.expiresAt = Date.now() + SESSION_TTL_MS;
       return host.call("frame", { id, after }, { hostId: s.hostId, timeoutMs: 20000 });
     },
     input: async (input) => {
@@ -434,7 +542,7 @@ export default async function plugin(bb: BbPluginApi) {
         ...base,
         tabIds: [tabId],
         controllerLabel: "Browse",
-        ttlMs: 1800000,
+        ttlMs: SESSION_TTL_MS,
         allowPersonal: input.allowPersonal,
       });
       const sid = `ab-${randomUUID().slice(0, 12)}`;
@@ -540,6 +648,8 @@ export default async function plugin(bb: BbPluginApi) {
       );
     },
     job: async ({ hostId, id }) => {
+      const local = credentialJobs.get(id);
+      if (local) return viewCredentialJob(local.job);
       const j = await host.call("job", { id }, { hostId });
       if (j.sessionId) {
         const s = sessions.get(j.sessionId);
@@ -561,7 +671,15 @@ export default async function plugin(bb: BbPluginApi) {
       }
       return enrich(hostId, j);
     },
-    cancel: ({ hostId, id }) => host.call("cancel", { id }, { hostId }),
+    cancel: async ({ hostId, id }) => {
+      const local = credentialJobs.get(id);
+      if (local) {
+        local.abort.abort();
+        await local.finished.catch(() => {});
+        return viewCredentialJob(local.job);
+      }
+      return host.call("cancel", { id }, { hostId });
+    },
     release: ({ id }) => release(get(id)),
     reveal: async ({ id }) => {
       const s = get(id);
@@ -589,6 +707,7 @@ export default async function plugin(bb: BbPluginApi) {
         await host.call("artifacts", { id }, { hostId: s.hostId }),
       );
     },
+    credentials: (input) => startCredentialJob(input),
   };
   bb.rpc.register(rpcContract, handlers);
   // BB origin authentication applies to every viewer route; no CDP endpoints reach the client.
@@ -671,62 +790,30 @@ export default async function plugin(bb: BbPluginApi) {
     }
   });
 
-  async function requestCredentials(
+  async function waitCredentials(
     raw: unknown,
     threadId: string | undefined,
-    signal: AbortSignal = new AbortController().signal,
+    signal: AbortSignal,
   ) {
     const input = credentialRequest.parse(raw);
     if (!threadId) throw new Error("Request credentials from a BB thread.");
-    const s = own(input.id, threadId);
-    await ensurePlacement(s);
-    const prepared = await host.call("credentialPrepare", input, {
-      hostId: s.hostId,
-      signal,
-    });
-    let values: string[] = [];
+    own(input.id, threadId);
+    let j = await startCredentialJob(input);
     try {
-      const answer = await bb.ui.requestInput(
-        {
-          threadId,
-          rendererId: "browser-credentials",
-          title: "Credentials",
-          payload: {
-            origin: prepared.origin,
-            purpose: input.purpose,
-            fields: input.fields.map(({ label, kind }) => ({ label, kind })),
-          },
-          timeoutMs: 300000,
-        },
-        { signal },
-      );
-      if (answer.outcome !== "submitted")
-        return { filled: false, cancelled: true };
-      const parsed = credentialValues.safeParse(answer.value);
-      if (!parsed.success || parsed.data.length !== input.fields.length)
-        throw new Error("Invalid credential form response. Request again.");
-      values = parsed.data;
-      signal.throwIfAborted();
-      await ensurePlacement(s);
-      return await host.call(
-        "credentialFill",
-        { id: s.id, token: prepared.token, values },
-        { hostId: s.hostId, signal, timeoutMs: 30000 },
-      );
-    } catch {
-      throw new Error(
-        "Browser credential request did not complete. Inspect the page before requesting again.",
-      );
-    } finally {
-      values.fill("");
-      await host
-        .call(
-          "credentialCancel",
-          { id: s.id, token: prepared.token },
-          { hostId: s.hostId },
-        )
-        .catch(() => {});
+      while (j.status === "running") {
+        await sleep(200, undefined, { signal });
+        j = await handlers.job({ hostId: get(input.id).hostId, id: j.id });
+      }
+    } catch (e) {
+      await handlers.cancel({ hostId: get(input.id).hostId, id: j.id });
+      throw e;
     }
+    if (j.status !== "succeeded")
+      throw new Error(
+        j.error ||
+          "Browser credential request did not complete. Inspect the page before requesting again.",
+      );
+    return JSON.parse(j.output || "{}");
   }
   async function invoke(method: string, input: unknown) {
     if (!(method in rpcContract)) throw new Error(`Unknown command ${method}`);
@@ -739,7 +826,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.cli.register({
     name: "browse",
     summary: "Browse on the thread’s execution host",
-    commands: [...Object.keys(rpcContract), "credentials"].map((name) => ({
+    commands: Object.keys(rpcContract).map((name) => ({
       name,
       summary: `Browser ${name}`,
       usage: `bb browse ${name} [JSON input]`,
@@ -764,7 +851,11 @@ export default async function plugin(bb: BbPluginApi) {
           exitCode: 0,
           stdout: JSON.stringify(
             args[0] === "credentials"
-              ? await requestCredentials(input, ctx.threadId, ctx.signal)
+              ? await waitCredentials(
+                  input,
+                  ctx.threadId,
+                  ctx.signal ?? new AbortController().signal,
+                )
               : await invoke(args[0], input),
             null,
             2,
@@ -818,10 +909,12 @@ export default async function plugin(bb: BbPluginApi) {
   bb.agents.registerTool({
     name: "browse_credentials",
     description:
-      "Ask the user for login fields through a private BB form, then fill and continue in this thread's managed browser. Pass observed CSS selectors, never credential values. Supports username, password, and verification codes. The browser is locked during the request. Returns delivery status only; inspect afterward to verify login.",
+      "Ask the user for login fields through a private BB form, then fill and continue in this thread's managed browser. Pass observed CSS selectors, never credential values. Supports username, password, and verification codes. Returns a running credentials job immediately; poll with browse_job until filled or cancelled. The live viewer stays visible. Automation stays locked until the form finishes. Inspect the page afterward — filled is not a successful login.",
     parameters: credentialRequest,
-    execute: async (input, ctx) =>
-      JSON.stringify(await requestCredentials(input, ctx.threadId, ctx.signal)),
+    execute: async (input, ctx) => {
+      own(input.id, ctx.threadId);
+      return JSON.stringify(await startCredentialJob(input));
+    },
   });
   bb.agents.registerTool({
     name: "browse_discover",
@@ -839,7 +932,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.agents.registerTool({
     name: "browse_session",
     description:
-      "Start Browse on this thread’s execution host (headed Chrome, default managed mode). Needs only a URL. The live page opens in the thread side panel. Reuses a live session at the same current URL in this thread without navigation; newTab:true forces a separate profile. Concurrent starts are serialized. Probe/setup check or install Chrome and recording dependencies on that host. Reveal focuses the live viewer. Release/close stop the managed browser, preserving its profile and artifacts. Reconnect relaunches its last URL with cookies/storage, not in-memory page state. Sessions last 30 minutes. Explicit mode:native attaches BB desktop tabs and requires hostId, instanceId, generation; native release preserves its tab.",
+      "Start Browse on this thread’s execution host (headed Chrome, default managed mode). Needs only a URL. The live page opens in the thread side panel. Reuses a live session at the same current URL in this thread without navigation; newTab:true forces a separate profile. Concurrent starts are serialized. Probe/setup check or install Chrome and recording dependencies on that host. Reveal focuses the live view. Release/close stop the managed browser, preserving its profile and artifacts. Reconnect launches a new Chrome at the last URL with cookies and storage from that profile; unsaved DOM is gone. Managed sessions last eight hours and refresh while the live view or inspect is used. Plugin reload or disable still stops Chrome. Explicit mode:native attaches BB desktop tabs and requires hostId, instanceId, generation; native release preserves its tab.",
     parameters: z.object({
       action: z.enum([
         "start",
@@ -943,6 +1036,10 @@ export default async function plugin(bb: BbPluginApi) {
   }));
   bb.onDispose(async () => {
     disposing = true;
+    for (const t of credentialJobs.values()) t.abort.abort();
+    await Promise.allSettled(
+      [...credentialJobs.values()].map((t) => t.finished),
+    );
     await Promise.allSettled([...startLocks.values()]);
     await Promise.allSettled(
       [...sessions.values()]

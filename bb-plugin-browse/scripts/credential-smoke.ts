@@ -87,11 +87,10 @@ try {
   await assert.rejects(
     h.experimental_call("submit", { id, operation: { kind: "observe" } }),
     /private credential/,
+    "observations stay locked during a credential request",
   );
-  await assert.rejects(
-    h.experimental_call("frame", { id }),
-    /private credential/,
-  );
+  const live = await h.experimental_call("frame", { id });
+  assert.ok(live.data);
   await assert.rejects(
     h.experimental_call("input", {
       id,
@@ -116,7 +115,7 @@ try {
   const signedIn = await run(["get", "text", "h1"]);
   assert.ok(signedIn.output.includes("Demo signed in"));
   console.log(
-    "PASS: dummy credentials filled, one submission, signed-in page verified; observations and viewer blocked during request.",
+    "PASS: dummy credentials filled, one submission, signed-in page verified; live frames continue while observations and viewer input stay locked.",
   );
   await run(["open", `http://127.0.0.1:${port}/changing`]);
   prepared = await h.experimental_call("credentialPrepare", request);
