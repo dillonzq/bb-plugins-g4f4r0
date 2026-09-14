@@ -1,6 +1,6 @@
 # Custom BB plugins
 
-This is the permanent source directory for Browse, Beacon, Sidetree, and Silk on this server. BB loads these directories in place. They must stay outside thread workspaces and disposable worktrees.
+This is the permanent source directory for Browse, Beacon, Sidetree, Silk, and Agent Plugins on this server. BB loads these directories in place. They must stay outside thread workspaces and disposable worktrees.
 
 | Plugin | Stable ID | Source directory |
 | --- | --- | --- |
@@ -8,6 +8,7 @@ This is the permanent source directory for Browse, Beacon, Sidetree, and Silk on
 | Beacon | `beacon` | `bb-plugin-beacon` |
 | Sidetree | `sidetree` | `bb-plugin-sidetree` |
 | Silk | `silk` | `bb-plugin-silk` |
+| Agent Plugins | `agent-plugins` | `bb-plugin-agent-plugins` |
 
 Keep these IDs when repairing plugins so settings and saved data stay associated with them.
 

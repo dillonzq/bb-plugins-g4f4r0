@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 
 const permanentRoot = fs.realpathSync(path.resolve(import.meta.dirname, '..'));
 const { plugins } = JSON.parse(execFileSync('bb', ['plugin', 'list', '--json'], { encoding: 'utf8' }));
-const expected = ['browse', 'beacon', 'sidetree', 'silk'];
+const expected = ['browse', 'beacon', 'sidetree', 'silk', 'agent-plugins'];
 const problems = [];
 for (const id of expected) if (!plugins.some(p => p.id === id)) problems.push(`${id}: registration missing`);
 for (const plugin of plugins.filter(p => p.source?.startsWith('path:'))) {
