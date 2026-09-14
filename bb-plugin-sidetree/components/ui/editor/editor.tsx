@@ -25,7 +25,6 @@ import type {
   ImagePickerHandler,
   ImagePickerResult,
   ImagePickerUrlResult,
-  SlashImageFallback,
 } from "./slash-command/suggestion";
 
 export type EditorFormat = "html" | "markdown";
@@ -50,6 +49,13 @@ export type ImageUploadHandler = (
 ) => ImageUploadResult | null | Promise<ImageUploadResult | null>;
 
 const DEFAULT_MAX_IMAGE_BYTES = 1_000_000;
+const BUBBLE_PLUGIN_KEY = "editor-bubble";
+
+const isInsertableImageSrc = (src: string): boolean => {
+  const trimmed = src.trim();
+  return trimmed.length > 0 && !/^(javascript|vbscript):/i.test(trimmed);
+};
+
 const UPLOADED_IMAGE_PRELOAD_TIMEOUT_MS = 8_000;
 
 const RAW_MARKDOWN_HTML_BLOCK = "rawMarkdownHtmlBlock";
@@ -383,7 +389,6 @@ export type {
   ImagePickerHandler,
   ImagePickerResult,
   ImagePickerUrlResult,
-  SlashImageFallback,
 };
 
 type ToggleAction = {
@@ -491,12 +496,21 @@ export function Editor({
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [showTableActions, setShowTableActions] = useState(false);
   const [showAltInput, setShowAltInput] = useState(false);
+  const [showImageUrlInput, setShowImageUrlInput] = useState(false);
+  const showImageUrlInputRef = useRef(false);
+  const editorRef = useRef<TiptapEditor | null>(null);
   const [isInTable, setIsInTable] = useState(false);
   const [isOnImage, setIsOnImage] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [imageAltText, setImageAltText] = useState("");
   const bubbleMenuRef = useRef<HTMLDivElement>(null);
   const linkInputRef = useRef<HTMLInputElement>(null);
+  const imageUrlInputRef = useRef<HTMLInputElement>(null);
+  const imageUrlWaiterRef = useRef<((result: ImagePickerResult | null) => void) | null>(
+    null,
+  );
+  const pickImageUrlRef = useRef<ImagePickerHandler>(async () => null);
   const lastEmittedValueRef = useRef<string>(value);
   const pendingUploadsRef = useRef(0);
   const objectUrlByUploadIdRef = useRef(new Map<string, string>());
@@ -505,6 +519,44 @@ export function Editor({
     "typeset typeset-editor min-h-full w-full bg-transparent px-4 py-3 outline-none placeholder:text-muted-foreground [&_p.is-empty::before]:text-muted-foreground [&_p.is-empty::before]:content-[attr(data-placeholder)] [&_p.is-empty::before]:pointer-events-none [&_p.is-empty::before]:float-left [&_p.is-empty::before]:h-0 [&_td_p.is-empty::before]:content-none [&_th_p.is-empty::before]:content-none [&_img[data-uploading=true]]:opacity-70 [&_img[data-uploading=true]]:animate-pulse [&_img[data-upload-error]]:ring-2 [&_img[data-upload-error]]:ring-destructive [&_img[data-upload-error]]:ring-offset-2 [&_img[data-upload-error]]:ring-offset-background",
     editorClassName,
   );
+
+  const hideBubbleMenu = () => {
+    const current = editorRef.current;
+    if (!current || current.isDestroyed) return;
+    current.view.dispatch(current.state.tr.setMeta(BUBBLE_PLUGIN_KEY, "hide"));
+  };
+
+  const beginImageUrlInput = () => {
+    imageUrlWaiterRef.current?.(null);
+    imageUrlWaiterRef.current = null;
+    setShowLinkInput(false);
+    setShowTableActions(false);
+    setShowAltInput(false);
+    showImageUrlInputRef.current = true;
+    setShowImageUrlInput(true);
+    setImageUrl("");
+  };
+
+  const settleImageUrl = (result: ImagePickerResult | null) => {
+    const waiter = imageUrlWaiterRef.current;
+    imageUrlWaiterRef.current = null;
+    const wasAsking = showImageUrlInputRef.current;
+    showImageUrlInputRef.current = false;
+    if (wasAsking && result == null) hideBubbleMenu();
+    setShowImageUrlInput(false);
+    setImageUrl("");
+    waiter?.(result);
+  };
+
+  pickImageUrlRef.current = async () => {
+    beginImageUrlInput();
+    return new Promise((resolve) => {
+      imageUrlWaiterRef.current = resolve;
+    });
+  };
+
+  const settleImageUrlRef = useRef(settleImageUrl);
+  settleImageUrlRef.current = settleImageUrl;
 
   const editor = useEditor({
     extensions: [
@@ -545,7 +597,9 @@ export function Editor({
       }),
       Markdown,
       SlashCommands.configure({
-        onRequestImage: enableImages ? (onRequestImage ?? null) : null,
+        onRequestImage: enableImages
+          ? (onRequestImage ?? ((context) => pickImageUrlRef.current(context)))
+          : null,
         onInsertLocalImageFile: ({ file, alt, title }) => {
           void insertLocalImageFile(file, "slash", {
             ...(alt ? { alt } : {}),
@@ -553,7 +607,6 @@ export function Editor({
           });
         },
         enableImages,
-        imageSlashFallback: imageFallback === "prompt-url" ? "prompt-url" : "none",
       }),
     ],
     content: value || (format === "markdown" ? "" : "<p></p>"),
@@ -586,6 +639,10 @@ export function Editor({
         void insertImagesFromFiles(files, "drop");
         return true;
       },
+      handleKeyDown: (_view, event) => {
+        if (event.key === "/" && showImageUrlInputRef.current) settleImageUrlRef.current(null);
+        return false;
+      },
     },
     editable: !disabled,
     immediatelyRender: false,
@@ -602,6 +659,8 @@ export function Editor({
       onChange(nextValue);
     },
   });
+
+  editorRef.current = editor ?? null;
 
   const activeState = (useEditorState({
     editor,
@@ -672,7 +731,7 @@ export function Editor({
   }, [editor, tiptapSurfaceClass]);
 
   useEffect(() => {
-    if ((!showLinkInput && !showTableActions && !showAltInput) || !editor) return;
+    if ((!showLinkInput && !showTableActions && !showAltInput && !showImageUrlInput) || !editor) return;
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
@@ -683,6 +742,7 @@ export function Editor({
         setShowLinkInput(false);
         setShowTableActions(false);
         setShowAltInput(false);
+        settleImageUrl(null);
       }
     };
 
@@ -690,7 +750,7 @@ export function Editor({
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [showLinkInput, showTableActions, showAltInput, editor]);
+  }, [showLinkInput, showTableActions, showAltInput, showImageUrlInput, editor]);
 
   useEffect(() => {
     if (!showLinkInput) return;
@@ -700,6 +760,41 @@ export function Editor({
     });
     return () => cancelAnimationFrame(frameId);
   }, [showLinkInput]);
+
+  useEffect(() => {
+    if (!showImageUrlInput || !editor) return;
+    editor.commands.focus();
+    let innerId = 0;
+    const outerId = requestAnimationFrame(() => {
+      innerId = requestAnimationFrame(() => {
+        imageUrlInputRef.current?.focus();
+        imageUrlInputRef.current?.select();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outerId);
+      cancelAnimationFrame(innerId);
+    };
+  }, [showImageUrlInput, editor]);
+
+  useEffect(() => {
+    if (!showImageUrlInput) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      settleImageUrl(null);
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [showImageUrlInput]);
+
+  useEffect(() => {
+    return () => {
+      imageUrlWaiterRef.current?.(null);
+      imageUrlWaiterRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!editor) return;
@@ -1022,6 +1117,29 @@ export function Editor({
     setShowLinkInput(true);
     setShowTableActions(false);
     setShowAltInput(false);
+    settleImageUrl(null);
+  };
+
+  const openImageUrlInput = () => {
+    if (!enableImages) return;
+    if (showImageUrlInput) {
+      settleImageUrl(null);
+      return;
+    }
+    beginImageUrlInput();
+  };
+
+  const applyImageUrl = () => {
+    const src = imageUrl.trim();
+    if (!isInsertableImageSrc(src)) return;
+    if (imageUrlWaiterRef.current) {
+      settleImageUrl({ kind: "url", src });
+      return;
+    }
+    editor.chain().focus().setImage({ src }).run();
+    showImageUrlInputRef.current = false;
+    setShowImageUrlInput(false);
+    setImageUrl("");
   };
 
   const toggleTableActions = () => {
@@ -1029,6 +1147,7 @@ export function Editor({
     setShowTableActions((current) => !current);
     setShowLinkInput(false);
     setShowAltInput(false);
+    settleImageUrl(null);
   };
 
   const toggleAltInput = () => {
@@ -1043,6 +1162,7 @@ export function Editor({
     setShowAltInput(true);
     setShowLinkInput(false);
     setShowTableActions(false);
+    settleImageUrl(null);
   };
 
   const applyLink = () => {
@@ -1126,9 +1246,10 @@ export function Editor({
   return (
     <div {...props} className={cn("cn-editor", className)}>
       <BubbleMenu
-        pluginKey="editor-bubble"
+        pluginKey={BUBBLE_PLUGIN_KEY}
         ref={bubbleMenuRef}
         editor={editor}
+        updateDelay={0}
         className="z-50 w-fit max-w-[95vw] text-popover-foreground outline-hidden"
         options={{
           placement: "top",
@@ -1139,10 +1260,56 @@ export function Editor({
         shouldShow={({ editor: bubbleEditor, from, to, view, element }) => {
           const hasEditorFocus = view.hasFocus() || element.contains(document.activeElement);
           if (!hasEditorFocus) return false;
-          return showLinkInput || showTableActions || showAltInput || (!bubbleEditor.state.selection.empty && from !== to);
+          if (showImageUrlInputRef.current) return true;
+          return (
+            showLinkInput ||
+            showTableActions ||
+            showAltInput ||
+            (!bubbleEditor.state.selection.empty && from !== to)
+          );
         }}
       >
         <div className="flex flex-col gap-1">
+          {showImageUrlInput ? (
+            <div className="border-border bg-popover flex flex-nowrap items-center gap-0.5 overflow-x-auto overflow-y-hidden rounded-md border p-1 shadow-sm whitespace-nowrap">
+              <input
+                id="image-url"
+                ref={imageUrlInputRef}
+                type="text"
+                placeholder="https://example.com/image.png"
+                value={imageUrl}
+                onChange={(event) => setImageUrl(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    applyImageUrl();
+                  }
+                }}
+                disabled={disabled}
+                className={`${toolbarInputClass} min-w-56 flex-1`}
+              />
+              {renderIconButton({
+                label: "Insert image",
+                icon: "Check",
+                onMouseDown: (event) => event.preventDefault(),
+                onClick: applyImageUrl,
+                disabled: disabled || !isInsertableImageSrc(imageUrl),
+              })}
+              {renderIconButton({
+                label: "Cancel image",
+                icon: "X",
+                onMouseDown: (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                },
+                onClick: () => settleImageUrl(null),
+                disabled,
+              })}
+            </div>
+          ) : null}
+          {!showImageUrlInput ? (
+          <>
           <div className="border-border bg-popover flex flex-nowrap items-center gap-0.5 overflow-x-auto overflow-y-hidden rounded-md border p-1 shadow-sm whitespace-nowrap">
             {!isInTable ? (
               <div className="group/native-select relative w-fit">
@@ -1185,6 +1352,16 @@ export function Editor({
               toggle: true,
               pressed: showLinkInput || activeState.link,
             })}
+            {enableImages
+              ? renderIconButton({
+                  label: "Image",
+                  icon: "Image",
+                  onClick: openImageUrlInput,
+                  disabled,
+                  toggle: true,
+                  pressed: showImageUrlInput || isOnImage,
+                })
+              : null}
             {isOnImage ? (
               <button
                 type="button"
@@ -1332,6 +1509,8 @@ export function Editor({
                 disabled,
               })}
             </div>
+          ) : null}
+          </>
           ) : null}
         </div>
       </BubbleMenu>

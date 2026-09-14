@@ -61,7 +61,6 @@ export const MarkdownEditor = memo(function MarkdownEditor({
         disabled={readOnly}
         enableImages
         enableImagePasteDrop={false}
-        imageFallback="prompt-url"
         className="h-full min-h-0"
         onAddToChat={(markdown) => {
           const text = quoteSelectedText(path, live.current, markdown);

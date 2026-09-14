@@ -29,13 +29,10 @@ export type ImagePickerHandler = (
   context: ImagePickerContext,
 ) => ImagePickerResult | null | Promise<ImagePickerResult | null>;
 
-export type SlashImageFallback = "prompt-url" | "none";
-
 type SuggestionOptions = {
   onRequestImage?: ImagePickerHandler | null;
   onInsertLocalImageFile?: ((context: ImagePickerContext & Omit<ImagePickerFileResult, "kind">) => void | Promise<void>) | null;
   enableImages?: boolean;
-  imageSlashFallback?: SlashImageFallback;
 };
 
 const TABLE_SAFE_COMMANDS = new Set(["Image"]);
@@ -43,7 +40,6 @@ const TABLE_SAFE_COMMANDS = new Set(["Image"]);
 type RequestImageAndInsertArgs = ImagePickerContext & {
   onRequestImage: ImagePickerHandler | null;
   onInsertLocalImageFile: ((context: ImagePickerContext & Omit<ImagePickerFileResult, "kind">) => void | Promise<void>) | null;
-  imageSlashFallback: SlashImageFallback;
 };
 
 const requestImageAndInsert = async ({
@@ -51,17 +47,14 @@ const requestImageAndInsert = async ({
   range,
   onRequestImage,
   onInsertLocalImageFile,
-  imageSlashFallback = "prompt-url",
 }: RequestImageAndInsertArgs): Promise<void> => {
   let result: ImagePickerResult | null = null;
   if (onRequestImage) {
     result = await onRequestImage({ editor, range });
-  } else if (imageSlashFallback === "prompt-url") {
-    const src = window.prompt("Image URL")?.trim();
-    result = src ? { kind: "url", src } : null;
   }
 
-  if (!result) return;
+  if (!result || editor.isDestroyed) return;
+  if (result.kind === "url" && !result.src.trim()) return;
 
   if (result.kind === "file") {
     if (!onInsertLocalImageFile) return;
@@ -83,12 +76,7 @@ const requestImageAndInsert = async ({
     ...(result.title ? { title: result.title } : {}),
   };
 
-  editor
-    .chain()
-    .focus()
-    .deleteRange(range)
-    .setImage(imageAttrs)
-    .run();
+  editor.chain().focus().setImage(imageAttrs).run();
 };
 
 const getAllItems = (options: SuggestionOptions): SlashItem[] => [
@@ -126,12 +114,13 @@ const getAllItems = (options: SuggestionOptions): SlashItem[] => [
     title: "Image",
     icon: "Image",
     command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).run();
+      const from = editor.state.selection.from;
       void requestImageAndInsert({
         editor,
-        range,
+        range: { from, to: from },
         onRequestImage: options.onRequestImage ?? null,
         onInsertLocalImageFile: options.onInsertLocalImageFile ?? null,
-        imageSlashFallback: options.imageSlashFallback ?? "prompt-url",
       });
     },
   },
@@ -153,68 +142,77 @@ const getAllItems = (options: SuggestionOptions): SlashItem[] => [
   },
 ];
 
-type SlashSuggestion = Pick<TiptapSuggestionOptions, "items" | "render">;
+type SlashSuggestion = Pick<TiptapSuggestionOptions, "items" | "render" | "command">;
 type SuggestionRenderLifecycle = NonNullable<ReturnType<NonNullable<SlashSuggestion["render"]>>>;
 type SuggestionKeyDownProps = Parameters<NonNullable<SuggestionRenderLifecycle["onKeyDown"]>>[0];
 
-const createSuggestion = (options: SuggestionOptions = {}): SlashSuggestion => ({
-  items: ({ query, editor }: { query: string; editor: Editor }) => {
-    const isInTableCell = editor.isActive("tableCell") || editor.isActive("tableHeader");
-    return getAllItems(options)
-      .filter((item) => !isInTableCell || TABLE_SAFE_COMMANDS.has(item.title))
-      .filter((item) => options.enableImages !== false || item.title !== "Image")
-      .filter((item) => item.title.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 10);
-  },
+const createSuggestion = (options: SuggestionOptions = {}): SlashSuggestion => {
+  let popup: TippyInstance | null = null;
 
-  render: (): SuggestionRenderLifecycle => {
-    let component: ReactRenderer<CommandsListHandle> | null = null;
-    let popup: TippyInstance | null = null;
+  return {
+    items: ({ query, editor }: { query: string; editor: Editor }) => {
+      const isInTableCell = editor.isActive("tableCell") || editor.isActive("tableHeader");
+      return getAllItems(options)
+        .filter((item) => !isInTableCell || TABLE_SAFE_COMMANDS.has(item.title))
+        .filter((item) => options.enableImages !== false || item.title !== "Image")
+        .filter((item) => item.title.toLowerCase().includes(query.toLowerCase()))
+        .slice(0, 10);
+    },
 
-    return {
-      onStart: (props) => {
-        component = new ReactRenderer(CommandsList, {
-          props,
-          editor: props.editor,
-        });
+    command: ({ editor, range, props }) => {
+      popup?.hide();
+      (props as SlashItem).command({ editor, range });
+    },
 
-        if (!props.clientRect) return;
-        const referenceRect = () => props.clientRect?.() ?? new DOMRect(0, 0, 0, 0);
+    render: (): SuggestionRenderLifecycle => {
+      let component: ReactRenderer<CommandsListHandle> | null = null;
 
-        popup = tippy(document.body, {
-          getReferenceClientRect: referenceRect,
-          appendTo: () => document.body,
-          content: component.element,
-          showOnCreate: true,
-          interactive: true,
-          trigger: "manual",
-          placement: "bottom-start",
-        });
-      },
+      return {
+        onStart: (props) => {
+          component = new ReactRenderer(CommandsList, {
+            props,
+            editor: props.editor,
+          });
 
-      onUpdate: (props) => {
-        if (!component) return;
-        component.updateProps(props);
-        if (!props.clientRect || !popup) return;
-        const referenceRect = () => props.clientRect?.() ?? new DOMRect(0, 0, 0, 0);
-        popup.setProps({ getReferenceClientRect: referenceRect });
-      },
+          if (!props.clientRect) return;
+          const referenceRect = () => props.clientRect?.() ?? new DOMRect(0, 0, 0, 0);
 
-      onKeyDown: ({ event }: SuggestionKeyDownProps): boolean => {
-        if (event.key === "Escape" && popup) {
-          popup.hide();
-          return true;
-        }
+          popup = tippy(document.body, {
+            getReferenceClientRect: referenceRect,
+            appendTo: () => document.body,
+            content: component.element,
+            showOnCreate: true,
+            interactive: true,
+            trigger: "manual",
+            placement: "bottom-start",
+          });
+        },
 
-        return component?.ref?.onKeyDown(event) ?? false;
-      },
+        onUpdate: (props) => {
+          if (!component) return;
+          component.updateProps(props);
+          if (!props.clientRect || !popup) return;
+          const referenceRect = () => props.clientRect?.() ?? new DOMRect(0, 0, 0, 0);
+          popup.setProps({ getReferenceClientRect: referenceRect });
+        },
 
-      onExit: (): void => {
-        if (popup) popup.destroy();
-        component?.destroy();
-      },
-    };
-  },
-});
+        onKeyDown: ({ event }: SuggestionKeyDownProps): boolean => {
+          if (event.key === "Escape" && popup) {
+            popup.hide();
+            return true;
+          }
+
+          return component?.ref?.onKeyDown(event) ?? false;
+        },
+
+        onExit: (): void => {
+          popup?.destroy();
+          popup = null;
+          component?.destroy();
+        },
+      };
+    },
+  };
+};
 
 export default createSuggestion;
