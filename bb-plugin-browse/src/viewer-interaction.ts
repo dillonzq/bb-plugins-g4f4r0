@@ -1,0 +1,37 @@
+// Runs only inside the authenticated viewer; no agent job is created for human input.
+export const viewerInteraction = String.raw`
+let control=null,controlSeq=0,inflight=null,sendScheduled=false,selectedText='',heldPointer=null,clickAt=0,clickPoint=null,clickCount=0;
+const directQueue=[];const keyboard=document.createElement('textarea');keyboard.id='browser-keyboard';keyboard.setAttribute('aria-label','Browser keyboard input');keyboard.autocomplete='off';keyboard.autocapitalize='off';keyboard.spellcheck=false;document.body.append(keyboard);
+const mods=e=>(e.altKey?1:0)|(e.ctrlKey?2:0)|(e.metaKey?4:0)|(e.shiftKey?8:0);
+function controlUrl(){return(location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+location.pathname.replace(/\/viewer$/,'/control')+'?id='+encodeURIComponent(id);}
+function openControl(){if(closed||document.hidden||control)return;const ws=new WebSocket(controlUrl());control=ws;
+ ws.onopen=flushDirect;
+ ws.onmessage=e=>{let result;try{result=JSON.parse(e.data);}catch{return;}if(!inflight||result.seq!==inflight.seq)return;metrics.inputLatencyMs=performance.now()-inflight.at;clearTimeout(inflight.timer);inflight=null;if(result.error){directQueue.length=0;selectedText='';status.textContent=result.error;}else{if(typeof result.selection==='string')selectedText=result.selection;if(typeof result.cursor==='string'&&/^[a-z-]+$/.test(result.cursor))screen.style.cursor=result.cursor;}flushDirect();};
+ ws.onclose=()=>{if(control!==ws)return;control=null;directQueue.length=0;if(inflight)clearTimeout(inflight.timer);inflight=null;heldPointer=null;keysDown.clear();if(!closed&&!document.hidden)setTimeout(openControl,500);};ws.onerror=()=>ws.close();}
+function flushDirect(){sendScheduled=false;if(inflight||!directQueue.length||control?.readyState!==WebSocket.OPEN)return;const seq=++controlSeq;const events=directQueue.splice(0,64);const ws=control;inflight={seq,at:performance.now(),timer:setTimeout(()=>{status.textContent='Browser input connection timed out.';ws.close();},10000)};ws.send(JSON.stringify({seq,events}));}
+function direct(event){if(document.hidden||closed)return;if(control?.readyState!==WebSocket.OPEN){status.textContent='Connecting browser input…';openControl();return;}const last=directQueue.at(-1);
+ if(event.kind==='pointer'&&event.type==='move'&&last?.kind==='pointer'&&last.type==='move')directQueue[directQueue.length-1]=event;
+ else if(event.kind==='wheel'&&last?.kind==='wheel'){last.deltaX=Math.max(-3000,Math.min(3000,last.deltaX+event.deltaX));last.deltaY=Math.max(-3000,Math.min(3000,last.deltaY+event.deltaY));last.x=event.x;last.y=event.y;}
+ else if(directQueue.length<256)directQueue.push(event);else{status.textContent='Browser input queue is full.';control.close();return;}
+ metrics.maxInputQueue=Math.max(metrics.maxInputQueue,directQueue.length);if(!sendScheduled){sendScheduled=true;requestAnimationFrame(flushDirect);}}
+function releaseInput(){if(control?.readyState===WebSocket.OPEN){directQueue.length=0;directQueue.push({kind:'reset'});flushDirect();}heldPointer=null;keysDown.clear();}
+const buttonName=e=>e.button===2?'right':e.button===1?'middle':e.button===0?'left':'none';
+screen.addEventListener('pointerdown',e=>{e.preventDefault();keyboard.focus({preventScroll:true});screen.setPointerCapture(e.pointerId);const p=point(e);const now=performance.now();clickCount=clickPoint&&Math.hypot(p.x-clickPoint.x,p.y-clickPoint.y)<5&&now-clickAt<400?Math.min(3,clickCount+1):1;clickAt=now;clickPoint=p;heldPointer={id:e.pointerId,button:buttonName(e),...p,buttons:e.buttons,modifiers:mods(e)};selectedText='';direct({kind:'pointer',type:'down',...p,button:buttonName(e),buttons:e.buttons,clickCount,modifiers:mods(e)});});
+screen.addEventListener('pointermove',e=>{const p=point(e);if(heldPointer)Object.assign(heldPointer,p,{buttons:e.buttons,modifiers:mods(e)});direct({kind:'pointer',type:'move',...p,button:heldPointer?.button||'none',buttons:e.buttons,clickCount:0,modifiers:mods(e)});});
+screen.addEventListener('pointerup',e=>{e.preventDefault();direct({kind:'pointer',type:'up',...point(e),button:buttonName(e),buttons:e.buttons,clickCount,modifiers:mods(e)});heldPointer=null;if(screen.hasPointerCapture(e.pointerId))screen.releasePointerCapture(e.pointerId);});
+screen.addEventListener('pointercancel',releaseInput);screen.addEventListener('lostpointercapture',()=>{if(heldPointer)releaseInput();});
+screen.addEventListener('contextmenu',e=>e.preventDefault());screen.addEventListener('dragstart',e=>e.preventDefault());
+screen.addEventListener('wheel',e=>{e.preventDefault();const unit=e.deltaMode===1?16:e.deltaMode===2?vh:1;direct({kind:'wheel',...point(e),deltaX:Math.max(-3000,Math.min(3000,e.deltaX*unit)),deltaY:Math.max(-3000,Math.min(3000,e.deltaY*unit)),modifiers:mods(e)});},{passive:false});
+const keysDown=new Set();let composing=false;
+keyboard.addEventListener('keydown',e=>{if(e.isComposing||composing)return;const shortcut=e.ctrlKey||e.metaKey;if(shortcut&&['c','x','v'].includes(e.key.toLowerCase()))return;if(!shortcut&&!e.altKey&&e.key.length===1)return;e.preventDefault();keysDown.add(e.code);direct({kind:'keyboard',type:'down',key:e.key,code:e.code,modifiers:mods(e),repeat:e.repeat});});
+keyboard.addEventListener('keyup',e=>{if(!keysDown.delete(e.code))return;e.preventDefault();direct({kind:'keyboard',type:'up',key:e.key,code:e.code,modifiers:mods(e),repeat:false});});
+keyboard.addEventListener('compositionstart',()=>{composing=true;});keyboard.addEventListener('compositionend',e=>{composing=false;if(e.data)direct({kind:'text',text:e.data.slice(0,10000)});keyboard.value='';});
+keyboard.addEventListener('beforeinput',e=>{if(composing||e.isComposing)return;if(e.inputType==='insertText'&&e.data){e.preventDefault();direct({kind:'text',text:e.data.slice(0,10000)});}});
+keyboard.addEventListener('input',()=>{if(!composing)keyboard.value='';});
+keyboard.addEventListener('paste',e=>{e.preventDefault();const text=e.clipboardData.getData('text/plain');if(text)direct({kind:'text',text:text.slice(0,10000)});});
+for(const event of ['copy','cut'])keyboard.addEventListener(event,e=>{e.preventDefault();if(!selectedText)return;e.clipboardData.setData('text/plain',selectedText);if(event==='cut'){direct({kind:'keyboard',type:'down',key:'Backspace',code:'Backspace',modifiers:0,repeat:false});direct({kind:'keyboard',type:'up',key:'Backspace',code:'Backspace',modifiers:0,repeat:false});selectedText='';}});
+screen.addEventListener('focus',()=>keyboard.focus({preventScroll:true}));keyboard.addEventListener('blur',releaseInput);window.addEventListener('blur',releaseInput);
+const heldHeartbeat=setInterval(()=>{if(heldPointer)direct({kind:'pointer',type:'move',x:heldPointer.x,y:heldPointer.y,button:heldPointer.button,buttons:heldPointer.buttons,clickCount:0,modifiers:heldPointer.modifiers});},2000);
+document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseInput();control?.close();cast?.close();}else{openControl();openCast();}});
+addEventListener('pagehide',()=>{clearInterval(heldHeartbeat);control?.close();directQueue.length=0;},{once:true});openControl();
+`;

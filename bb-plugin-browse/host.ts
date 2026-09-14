@@ -1,3 +1,4 @@
+import { DirectInput } from "./src/direct-input";
 import { localServers } from "./src/local-servers";
 import {
   experimental_defineHostEntry,
@@ -52,6 +53,9 @@ type LocalSession = {
   managed?: ManagedBrowser;
   mode?: "managed" | "native";
   framing?: boolean;
+  direct?: DirectInput;
+  frameInfo?: {url:string;loading:boolean;at:number};
+  castTimer?: ReturnType<typeof setTimeout>;
   status: "connecting" | "ready" | "error" | "released";
   error?: string;
   recording: boolean;
@@ -134,6 +138,7 @@ function startJob(
 ): Job {
   if (s?.credential)
     throw new Error("Browser is waiting for private credential input.");
+  if (s?.direct?.busy || s?.direct?.held) throw new Error("Browser is being controlled by a viewer.");
   if (s?.busy)
     throw new Error(
       `Session is busy with job ${s.busy}. Poll it or cancel it first.`,
@@ -570,6 +575,8 @@ function release(s: LocalSession): Promise<void> {
 }
 async function closeSession(s: LocalSession) {
   clearTimeout(s.timer);
+  clearTimeout(s.castTimer);
+  await s.direct?.reset();
   if (s.credential) await finishCredential(s, s.credential);
   if (s.busy) {
     const t = task(s.busy);
@@ -609,6 +616,7 @@ export default experimental_defineHostEntry({
           s.expiresAt < Date.now() + CREDENTIAL_TIMEOUT_MS + 30000) ||
         s.busy ||
         s.framing ||
+        s.direct?.busy || s.direct?.held ||
         s.recording ||
         s.credential
       )
@@ -733,14 +741,29 @@ export default experimental_defineHostEntry({
         undefined,
         600000,
       ),
+    direct: async ({id,clientId,events}) => {
+      const s=session(id);
+      if(s.status!=='ready'||!s.cdp)throw Error('Browser is not ready.');
+      if(s.credential)throw Error('Browser is waiting for private credential input.');
+      if(s.busy)throw Error('Browser is busy with an agent action.');
+      s.direct??=new DirectInput(s.cdp);
+      const result=await s.direct.run(clientId,events);
+      if(events.some(e=>e.kind!=='reset'&&(e.kind!=='pointer'||e.type!=='move'||e.buttons)))touchSession(s);
+      return result;
+    },
     frame: async ({ id, after = 0 }) => {
       const s = session(id);
       if (s.status !== "ready" || !s.cdp || s.expiresAt <= Date.now())
         throw new Error("Browser is not ready");
       await s.cdp.startLiveCast();
       const live = await s.cdp.nextLiveFrame(after);
-      const [url, loading] = await Promise.all([s.cdp.evaluate("location.href"), s.cdp.evaluate('document.readyState !== "complete"')]);
-      return { ...live, url, loading: loading === true };
+      clearTimeout(s.castTimer);
+      s.castTimer=setTimeout(()=>{void s.cdp?.stopLiveCast();},12000);s.castTimer.unref();
+      if(!s.frameInfo||Date.now()-s.frameInfo.at>100){
+        const [url,loading]=await Promise.all([s.cdp.evaluate('location.href'),s.cdp.evaluate('document.readyState !== "complete"')]);
+        s.frameInfo={url,loading:loading===true,at:Date.now()};
+      }
+      return { ...live, url:s.frameInfo.url, loading:s.frameInfo.loading };
     },
     input: async ({ id, input }, ctx) => {
       const s = session(id);

@@ -1,3 +1,4 @@
+import { directBatch } from "./src/direct-input";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import type {
@@ -552,7 +553,6 @@ export default async function plugin(bb: BbPluginApi) {
       await ensurePlacement(s);
       if (s.status !== "ready")
         throw new Error("Browser is not ready. Reconnect the session.");
-      if (s.mode === "managed") s.expiresAt = Date.now() + SESSION_TTL_MS;
       try {
         const frame = await host.call(
           "frame",
@@ -923,35 +923,48 @@ export default async function plugin(bb: BbPluginApi) {
       return c.json({ error: redact(String(e)) }, 409);
     }
   });
-  bb.http.experimental_websocket("/cast", (ctx) => {
-    const sid = ctx.url.searchParams.get("id");
-    let closed = false;
+  bb.http.experimental_websocket("/control", ctx => {
+    const sid=id.parse(ctx.url.searchParams.get('id')),clientId=randomUUID();
+    const s=get(sid);let closed=false,pending=0,chain=Promise.resolve();
     return {
-      onOpen: (socket) => {
-        void (async () => {
-          let after = 0;
-          while (!closed) {
-            try {
-              const frame = await handlers.frame({
-                id: id.parse(sid),
-                after,
-              });
-              if (closed) return;
-              if (frame.seq > after) {
-                socket.send(JSON.stringify(frame));
-                after = frame.seq;
-              } else await sleep(80);
-            } catch (e) {
-              if (!closed)
-                socket.send(JSON.stringify({ error: redact(String(e)) }));
-              return;
+      onMessage(socket,raw){
+        if(closed)return;
+        if(typeof raw!=='string'||raw.length>65536||pending>=4){socket.close(1008,'Input queue exceeded');return;}
+        let message:{seq:number;events:unknown};
+        try{message=JSON.parse(raw);if(!Number.isSafeInteger(message.seq))throw Error('Invalid sequence');directBatch.parse({id:sid,clientId,events:message.events});}catch{socket.close(1008,'Invalid input');return;}
+        pending++;
+        chain=chain.then(async()=>{if(closed)return;try{
+          const result=await host.call('direct',directBatch.parse({id:sid,clientId,events:message.events}),{hostId:s.hostId,timeoutMs:10000});
+          if(!closed)socket.send(JSON.stringify({seq:message.seq,...result}));
+        }catch(e){if(!closed)socket.send(JSON.stringify({seq:message.seq,error:redact(String(e))}));}finally{pending--;}});
+      },
+      onClose(){closed=true;void chain.finally(()=>host.call('direct',{id:sid,clientId,events:[{kind:'reset'}]},{hostId:s.hostId,timeoutMs:5000}).catch(()=>{}));},
+    };
+  });
+  bb.http.experimental_websocket("/cast", ctx => {
+    const sid=id.parse(ctx.url.searchParams.get('id'));get(sid);
+    const binary=ctx.url.searchParams.get('binary')==='1';
+    let closed=false;const outstanding=new Map<number,number>();let wake:(()=>void)|undefined;
+    return {
+      onMessage(_socket,raw){if(!binary||typeof raw!=='string'||raw.length>100)return;try{const message=JSON.parse(raw);if(Number.isSafeInteger(message.ack)&&outstanding.delete(message.ack)){wake?.();wake=undefined;}}catch{}},
+      onOpen: socket => {void(async()=>{
+        let after=0;
+        while(!closed){
+          try{
+            // At most three frames / 4 MiB await display; never queue an unbounded video backlog.
+            if(binary&&(outstanding.size>=3||[...outstanding.values()].reduce((a,b)=>a+b,0)>4*1024*1024)){
+              await new Promise<void>(resolve=>{const timer=setTimeout(resolve,1000);wake=()=>{clearTimeout(timer);resolve();};});continue;
             }
-          }
-        })();
-      },
-      onClose: () => {
-        closed = true;
-      },
+            const frame=await handlers.frame({id:sid,after});if(closed)return;
+            if(frame.seq>after){
+              if(binary){const bytes=Buffer.from(frame.data,'base64');outstanding.set(frame.seq,bytes.length);const {data,...meta}=frame;socket.send(JSON.stringify({kind:'frame',...meta}));socket.send(bytes);}
+              else socket.send(JSON.stringify(frame));
+              after=frame.seq;
+            }else await sleep(16);
+          }catch(e){if(!closed)socket.send(JSON.stringify({error:redact(String(e))}));return;}
+        }
+      })();},
+      onClose(){closed=true;wake?.();outstanding.clear();},
     };
   });
   bb.http.route("GET", "/viewer-job", async (c) => {

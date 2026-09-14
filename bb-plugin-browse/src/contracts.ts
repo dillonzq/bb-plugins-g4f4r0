@@ -1,3 +1,4 @@
+import { directBatch } from "./direct-input";
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { credentialRequest, credentialValues } from "./credentials";
@@ -173,6 +174,7 @@ export const viewerInput = z.discriminatedUnion("kind", [
 ]);
 const localServerList = z.object({ servers: z.array(z.object({ port: z.number(), name: z.string(), url: z.string() })), error: z.string().nullable() });
 export const hostContract = defineRpcContract({
+  direct: { input: directBatch, output: z.object({selection:z.string().optional(),cursor:z.string().optional()}) },
   "local-servers": { input: z.null(), output: localServerList },
   credentialPrepare: {
     input: credentialRequest,

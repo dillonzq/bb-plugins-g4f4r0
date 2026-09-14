@@ -208,9 +208,9 @@ export class Cdp {
     try {
       await this.send("Page.startScreencast", {
         format: "jpeg",
-        quality: 55,
-        maxWidth: 1280,
-        maxHeight: 800,
+        quality: 80,
+        maxWidth: 1920,
+        maxHeight: 1080,
         everyNthFrame: 1,
       });
     } catch (e) {

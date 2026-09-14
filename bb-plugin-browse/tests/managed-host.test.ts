@@ -244,6 +244,7 @@ it("uses a resized viewport for live frames and scroll coordinates", async () =>
     expect(
       await h.experimental_call("frame", { id: "ab-viewport" }),
     ).toMatchObject({ data: "jpeg", width: 390, height: 600, seq: 1, loading: true });
+    await new Promise(r=>setTimeout(r,110));
     mock.evaluate.mockResolvedValueOnce("https://example.com").mockResolvedValueOnce(false as any);
     expect(await h.experimental_call("frame", { id: "ab-viewport" })).toMatchObject({ loading: false });
     expect(mock.startLiveCast).toHaveBeenCalled();
