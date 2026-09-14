@@ -1,46 +1,64 @@
 # Custom BB plugins
 
-Permanent source for Browse, Beacon, Sidetree, and Dusk. BB loads these directories in place from this checkout. Remote: https://github.com/g4f4r0/bb-plugins
+Live source for Browse, Beacon, Sidetree, and Dusk. BB loads these folders in place from this checkout. The GitHub remote is https://github.com/g4f4r0/bb-plugins
 
-Do not install these plugins from a thread workspace, temporary directory, or disposable worktree.
+Do not install these from a thread workspace, `/tmp`, or a throwaway worktree. If the thread is archived, BB deletes the directory. The plugin entry survives, pointing at a hole.
 
-| Plugin | Stable ID | Source directory |
+| Plugin | ID | Directory |
 | --- | --- | --- |
 | Browse | `browse` | `bb-plugin-browse` |
 | Beacon | `beacon` | `bb-plugin-beacon` |
 | Sidetree | `sidetree` | `bb-plugin-sidetree` |
 | Dusk | `dusk` | `bb-plugin-dusk` |
 
-Keep these IDs when repairing plugins so settings and saved data stay associated with them. Agent Plugins is a separate local package and is not part of this repository.
+Keep these IDs. Change the id and BB treats it as a new plugin and drops its settings. Agent Plugins is a separate local package at `/home/g4f4r0/.bb/local-plugins/bb-plugin-agent-plugins`.
 
-## Change and deploy
+## Deploy
 
-1. Check the installed source with `bb plugin source <id> --json` and inspect `git status` here.
-2. Edit the permanent package. Preserve unrelated changes. Do not work from an old archived thread copy.
-3. Use `npm ci --include=dev` when restoring dependencies from the committed lockfile. Run the package's checks, inspect the diff, and commit the relevant files. Browse and Beacon have substantial test suites; Dusk also has an optional browser-based homepage test.
-4. From this directory, run `node maintenance/install.mjs <id>`.
-5. Verify the actual feature in BB. A successful build does not establish that its UI or host runtime works.
-
-The installer requires a committed lockfile and clean package source, refuses paths outside this directory, checks for active Browse sessions before reload, runs available type checks and unit tests, and builds the plugin. It saves a Git bundle under `/home/g4f4r0/.bb/plugin-backups` before deployment, then verifies installation paths and statuses. It does not run live browser tests automatically.
-
-Run the read-only audit at any time:
+1. Check the live path with `bb plugin source <id> --json`. Edit that package, not an old workspace copy. Leave unrelated dirty files alone.
+2. Restore deps with `npm ci --include=dev` if `node_modules` is missing. Run the package typecheck and tests. Browse and Beacon have real suites. Dusk's homepage test needs a browser.
+3. Commit the reviewed files. A committed `package-lock.json` is required.
+4. For Browse, finish or release every active session first.
+5. Build, then reload or point the install at this folder:
 
 ```sh
-node /home/g4f4r0/projects/bb-plugins/maintenance/check-installations.mjs
+bb plugin build bb-plugin-<id>
+bb plugin reload <id>
 ```
 
-For a new custom plugin, scaffold `bb-plugin-<id>` here, implement and test it, and commit its source and lockfile before using the installer. BB's built-in and managed Git/npm plugins keep their existing managed locations.
+If this checkout is not the live source yet:
 
-## Storage and recovery
+```sh
+bb plugin install path:/home/g4f4r0/projects/bb-plugins/bb-plugin-<id> --yes
+```
 
-Source and dependency lockfiles belong in this Git repository. Generated bundles and dependencies are ignored. BB owns settings, databases, browser profiles, and secrets elsewhere under its data directory; never copy those into this repository or remove a plugin to change its source path.
+Path-to-path install keeps settings. `bb plugin remove` deletes them. Do not remove a plugin just to move its source.
 
-`bb plugin install path:/absolute/permanent/package --yes` can change an existing local installation's source without deleting its settings. The helper uses this during migration and `bb plugin reload <id>` for an unchanged source path.
+6. Use the feature in BB. A passing typecheck does not mean the UI works.
 
-GitHub is the off-server copy of this source. Local bundles under `/home/g4f4r0/.bb/plugin-backups` protect against accidental source edits.
+Optional snapshot before a risky reload:
 
-To inspect a saved bundle, clone it into a separate directory and compare the required revision. Restore reviewed files to the permanent package, commit, and deploy with the helper. Do not reset a dirty live source tree or point BB at a temporary recovery checkout.
+```sh
+mkdir -p ~/.bb/plugin-backups
+git bundle create ~/.bb/plugin-backups/<id>-$(date -u +%Y-%m-%dT%H-%M-%SZ).bundle --all
+```
 
-Server-wide agent guidance is in `/home/g4f4r0/.bb/AGENTS.md`. It directs future plugin work here. This is a workflow safeguard; BB core itself has not been changed to block unsafe raw path installations.
+Those bundles live on this machine. GitHub is the copy that survives if the disk does not.
 
-See [RECOVERY.md](RECOVERY.md) for the September 13 recovery and its verification limits.
+After install, `bb plugin list` should show each repo plugin as `running` from `path:/home/g4f4r0/projects/bb-plugins/bb-plugin-<id>`. If one custom plugin looks wrong, check all of them. Shared install mistakes tend to hit more than one.
+
+For a new plugin, run `bb plugin new <id>` here, commit source and lockfile, then the path install above.
+
+Dusk palette:
+
+```sh
+bb theme set plugin:dusk:default
+```
+
+## What belongs where
+
+Git holds source and lockfiles. `dist/` and `node_modules/` are ignored.
+
+BB keeps settings, KV, browser profiles, and secrets under its own data directory. Do not copy those into this repo.
+
+Server-wide agent notes are in `/home/g4f4r0/.bb/AGENTS.md`. They point here. BB core still lets you install from anywhere.

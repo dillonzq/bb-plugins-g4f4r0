@@ -10,5 +10,3 @@
 **/__pycache__/
 **/validation/artifacts/
 **/validation/recovery-*.json
-maintenance/recovery/
-maintenance/reports/
