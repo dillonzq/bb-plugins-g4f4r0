@@ -1,5 +1,5 @@
-import { Copy01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowReloadHorizontalIcon, MoreHorizontalIcon, Menu01Icon, Globe02Icon, ComputerTerminal01Icon } from '@hugeicons/core-free-icons';
-export const browserIcons = { Copy: Copy01Icon, ArrowLeft: ArrowLeft01Icon, ArrowRight: ArrowRight01Icon, RefreshCw: ArrowReloadHorizontalIcon, More: MoreHorizontalIcon, List: Menu01Icon, Globe: Globe02Icon, Terminal: ComputerTerminal01Icon };
+import { LaptopIcon, Copy01Icon, ArrowLeft01Icon, ArrowRight01Icon, ArrowReloadHorizontalIcon, MoreHorizontalIcon, Menu01Icon, Globe02Icon, ComputerTerminal01Icon } from '@hugeicons/core-free-icons';
+export const browserIcons = { Machine: LaptopIcon, Copy: Copy01Icon, ArrowLeft: ArrowLeft01Icon, ArrowRight: ArrowRight01Icon, RefreshCw: ArrowReloadHorizontalIcon, More: MoreHorizontalIcon, List: Menu01Icon, Globe: Globe02Icon, Terminal: ComputerTerminal01Icon };
 export type BrowserIconName = keyof typeof browserIcons;
 // Only trusted icon-package data is serialized; no page or session strings.
 export function browserIconSvg(name: BrowserIconName) {
