@@ -22,7 +22,7 @@ it("opens a same-origin screencast websocket from the viewer", () => {
 it('backs off capture without demand and permits a short active pipeline',async()=>{
   const {Cdp}=await import('../src/cdp');
   const c:any=Object.create(Cdp.prototype);
-  c.casting=true;c.liveAcks=new Set();c.waiters=new Set();c.seq=0;c.send=async(...args:any[])=>{calls.push(args);return{};};
+  c.casting=true;c.liveAcks=[];c.waiters=new Set();c.seq=0;c.send=async(...args:any[])=>{calls.push(args);return{};};
   const calls:any[]=[];
   c.onScreencast({sessionId:1,data:'frame',metadata:{deviceWidth:1280,deviceHeight:800}});
   expect(calls).toHaveLength(0);
@@ -35,4 +35,11 @@ it('backs off capture without demand and permits a short active pipeline',async(
   c.lastFrameDemand=Date.now()-100;
   c.onScreencast({sessionId:3,data:'waiting',metadata:{}});await c.stopLiveCast();
   expect(calls.slice(-2)).toEqual([['Page.screencastFrameAck',{sessionId:3}],['Page.stopScreencast']]);
+});
+
+it('acknowledges each captured frame even when Chrome repeats its session id',async()=>{
+ const {Cdp}=await import('../src/cdp');const c:any=Object.create(Cdp.prototype);const calls:any[]=[];
+ c.casting=true;c.liveAcks=[];c.waiters=new Set();c.seq=0;c.send=async(...args:any[])=>{calls.push(args);return{};};
+ c.onScreencast({sessionId:7,data:'one',metadata:{}});c.onScreencast({sessionId:7,data:'two',metadata:{}});
+ await c.nextLiveFrame();expect(calls).toEqual([['Page.screencastFrameAck',{sessionId:7}],['Page.screencastFrameAck',{sessionId:7}]]);
 });

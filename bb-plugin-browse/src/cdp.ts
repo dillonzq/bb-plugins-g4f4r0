@@ -43,11 +43,11 @@ export class Cdp {
   private casting = false;
   private seq = 0;
   private latest?: LiveFrame;
-  private liveAcks = new Set<number>();
+  private liveAcks: number[] = [];
   private lastFrameDemand = 0;
   private acknowledgeLiveFrames() {
-    const ids = [...this.liveAcks];
-    this.liveAcks.clear();
+    const ids = this.liveAcks;
+    this.liveAcks = [];
     for (const sessionId of ids) void this.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
   }
   private waiters = new Set<{
@@ -197,9 +197,9 @@ export class Cdp {
   private onScreencast(params: any) {
     if (this.casting) {
       // Preserve a short capture pipeline for active viewers, then withhold
-      // credit when consumers stop reading. Strict per-frame credit serializes
-      // capture and delivery and materially reduces the display rate.
-      this.liveAcks.add(params.sessionId);
+      // credit when consumers stop reading. IDs repeat across frames, so each
+      // event must retain its own acknowledgement; never deduplicate them.
+      this.liveAcks.push(params.sessionId);
       this.latest = liveFrameFromEvent(params, ++this.seq);
       if (Date.now() - this.lastFrameDemand < 50) this.acknowledgeLiveFrames();
       for (const w of [...this.waiters])
@@ -303,7 +303,7 @@ export class Cdp {
     this.onDisconnect?.();
     this.onDisconnect = undefined;
     this.frameFailure?.();
-    this.liveAcks.clear();
+    this.liveAcks = [];
     this.casting = false;
     for (const w of this.waiters)
       w.reject(
