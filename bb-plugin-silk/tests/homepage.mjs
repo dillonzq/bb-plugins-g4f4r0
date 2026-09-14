@@ -86,21 +86,6 @@ try {
   await page.getByRole("button", { name: "Customize Silk homepage" }).click();
   await page.getByRole("menuitem", { name: "Choose image", exact: true }).waitFor();
   assert.equal(await page.getByRole("dialog").count(), 0);
-  const iconLayoutDifferences = await page.evaluate(() => {
-    const freeze = document.createElement("style"); freeze.textContent = "* { animation: none !important; transition: none !important; }"; document.head.append(freeze);
-    const differences = [];
-    for (const el of document.querySelectorAll('span[data-icon]:has(>svg[data-silk-remix])')) {
-      const before = el.getBoundingClientRect();
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("width", "24"); svg.setAttribute("height", "24");
-      svg.setAttribute("class", el.className.replace(/^inline-flex size-6 shrink-0\s*/, ""));
-      if (el.hasAttribute("style")) svg.setAttribute("style", el.getAttribute("style"));
-      el.replaceWith(svg); const after = svg.getBoundingClientRect(); svg.replaceWith(el);
-      if (["x", "y", "width", "height"].some(key => Math.abs(before[key] - after[key]) > .5)) differences.push(el.dataset.icon);
-    }
-    freeze.remove(); return differences;
-  });
-  assert.deepEqual(iconLayoutDifferences, [], "Remix wrappers must match native SVG bounds in the sidebar, composer and menu");
   assert.equal(await page.getByRole("slider").count(), 0);
   assert.equal(await page.getByRole("checkbox").count(), 0);
   await page.waitForTimeout(400);

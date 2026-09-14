@@ -95,7 +95,7 @@ button[aria-label="New thread in this environment"] {
 }
 
 /* Compact provider artwork in the model selector; preserve the native hit area. */
-button[aria-label^="Provider, model and reasoning"] > .contents > span:has(> :is([data-provider-logo], [data-silk-provider])) {
+button[aria-label^="Provider, model and reasoning"] > .contents > span:has(> [data-provider-logo]) {
   width: 14px;
   height: 14px;
   min-width: 14px;
@@ -242,17 +242,6 @@ button[aria-label^="Context window "][data-state="open"] {
 button:is([aria-label="Cancel recording"], [aria-label="Cancel transcription"], [aria-label="Stop and transcribe recording"], [aria-label="Transcribing voice input"]) {
   border-radius: var(--radius-md, 6px);
 }
-/* Provider artwork fills its existing host-sized slot, including 14px triggers. */
-svg[data-silk-provider] {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-/* Shared menu glyphs retain BB's 16px artwork box with custom icon wrappers. */
-[role="menuitem"] > span[data-icon]:has(> svg[data-silk-icon]) {
-  width: 16px; height: 16px; flex-shrink: 0;
-}
 /* Thread search uses the same quiet surfaces and two-line rhythm as the sidebar. */
 [data-testid="command-palette"] {
   background-color: var(--sidebar);
@@ -348,7 +337,9 @@ div[class~="@container/page"]:has(#root-compose-prompt) > div:has(> [data-prompt
 .silk-background-header-action { z-index: 20; pointer-events: auto; }
 .silk-background-edit { width: 28px; height: 28px; app-region: no-drag; -webkit-app-region: no-drag; }
 @media (max-width: 767px) {
-  /* Keep the mobile sidebar clear while its shelf is open. */
+  /* BB keeps data-sidebar-shelf="closed" until the 220ms shelf settle.
+     Hide as soon as the inset animation starts, then keep it hidden. */
+  [data-sidebar="inset"][data-vaul-animate] :is(.silk-background-header-action, .silk-background-header-cutout),
   [data-sidebar-shelf="open"] :is(.silk-background-header-action, .silk-background-header-cutout) {
     visibility: hidden;
   }

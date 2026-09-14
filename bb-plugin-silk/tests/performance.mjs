@@ -21,22 +21,18 @@ await assert.rejects(retry.get('a'));assert.equal(await retry.get('a'),9);
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try {
  const p=await browser.newPage();
- await p.setContent('<head><title>Initial</title><style id="host">button > svg {width:16px;height:16px}</style></head><body><main><aside id="sidebar"></aside><article id="chat"></article></main><button><span data-icon="Test"><svg data-silk-icon></svg></span></button></body>');
+ await p.setContent('<head><title>Initial</title></head><body><main><aside id="sidebar"></aside><article id="chat"></article></main></body>');
  await p.addScriptTag({content:(await compile('observe-roots')).replace('export function','function')+'\\nwindow.changes=0;window.stopRoots=observeRoots("#sidebar",()=>window.changes++);'});
- await p.addScriptTag({content:(await compile('icon-layout')).replace('export function','function')+'\\nwindow.abort=new AbortController();mountIconLayout(window.abort.signal);window.writes=0;new MutationObserver(()=>window.writes++).observe(document.querySelector("[data-silk-icon-layout]"),{childList:true});'});
  await p.evaluate(()=>{for(let i=0;i<1000;i++)document.querySelector('#chat').append(document.createElement('div'));document.title='Streaming';});
  await p.waitForTimeout(80);
  assert.equal(await p.evaluate(()=>window.changes),0);
- assert.equal(await p.evaluate(()=>window.writes),0);
- await p.evaluate(()=>{document.querySelector('#sidebar').append(document.createElement('a'));document.querySelector('#host').textContent='button > svg {width:18px;height:18px}';});
+ await p.evaluate(()=>{document.querySelector('#sidebar').append(document.createElement('a'));});
  await p.waitForTimeout(80);
  assert.equal(await p.evaluate(()=>window.changes),1);
- assert.equal(await p.locator('[data-icon]').evaluate(n=>getComputedStyle(n).width),'18px');
  await p.evaluate(()=>document.querySelector('#sidebar').outerHTML='<aside id="sidebar"></aside>');await p.waitForTimeout(80);
  await p.evaluate(()=>document.querySelector('#sidebar').append(document.createElement('a')));await p.waitForTimeout(80);
  assert.equal(await p.evaluate(()=>window.changes),3);
- await p.evaluate(()=>{window.stopRoots();window.abort.abort();document.querySelector('#sidebar').append(document.createElement('a'));});await p.waitForTimeout(80);
+ await p.evaluate(()=>{window.stopRoots();document.querySelector('#sidebar').append(document.createElement('a'));});await p.waitForTimeout(80);
  assert.equal(await p.evaluate(()=>window.changes),3);
- assert.equal(await p.locator('[data-silk-icon-layout]').count(),0);
- console.log('PASS: cache reuse/invalidation/races/retry; 1,000 chat mutations ignored; title updates cause zero CSS writes; stylesheet refresh, sidebar replacement and cleanup.');
+ console.log('PASS: cache reuse/invalidation/races/retry; 1,000 chat mutations ignored; sidebar replacement and cleanup.');
 } finally {await browser.close();}

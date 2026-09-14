@@ -8,11 +8,7 @@ import { Button } from "@/components/ui/button";
 import { mountHomepage, getSlots, subscribeSlots, getConfig, subscribeConfig, setConfig } from "./lib/homepage";
 import { prepareImage } from "./lib/wallpaper";
 import { SidebarDetails } from "./lib/sidebar";
-import { remixIcons } from "./lib/remix-icons";
-import { mountIconLayout } from "./lib/icon-layout";
-import { RiOpenaiFill, RiClaudeLine, RiCursorAiLine } from "@remixicon/react";
 import "./app.css";
-import "./lib/settings-icons.css";
 
 function useBackground() {
   const rpc = useRpc<typeof rpcContract>();
@@ -80,13 +76,6 @@ function HomepageController() {
 }
 
 export default definePluginApp((app) => {
-  for (const [providerId, Artwork] of Object.entries({ codex: RiOpenaiFill, "claude-code": RiClaudeLine, "acp-cursor": RiCursorAiLine })) {
-    app.slots.experimental_providerIcon({ providerKind: "agent", providerId, icon: ({ className }) => <Artwork className={className} data-silk-provider={providerId} aria-hidden /> });
-  }
-  for (const [name, Artwork] of Object.entries(remixIcons)) {
-    app.experimental_icons.register({ name, component: ({ className }) => <Artwork className={className} data-silk-icon="" aria-hidden /> });
-  }
-  app.contentScripts.register({ id: "icon-layout", mount: ({ signal }) => mountIconLayout(signal) });
   app.contentScripts.register({ id: "homepage", mount: ({ signal }) => mountHomepage(signal) });
   app.slots.experimental_appOverlay({ id: "background-controller", component: HomepageController });
   app.slots.experimental_appOverlay({ id: "sidebar-details", component: SidebarDetails });
