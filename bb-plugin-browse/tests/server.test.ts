@@ -13,6 +13,7 @@ const base = {
 };
 async function fixture(
   options: {
+    progressiveFrames?: boolean;
     threadActive?: boolean;
     panelTabs?: any[];
     tabReadFails?: boolean;
@@ -36,7 +37,7 @@ async function fixture(
     }),
     create = vi.fn(async () => ({ tab: { tabId: "tab_new" } }));
   const calls: any[] = [];
-  let inspected = 0;
+  let inspected = 0, frameSequence=0;
   const { bb, harness } = createFakePluginHost({
     pluginId: "browse",
     sdk: {
@@ -142,7 +143,7 @@ async function fixture(
           url: "https://example.com/",
           width: 1280,
           height: 800,
-          seq: input.after ? input.after : 1,
+          seq: options.progressiveFrames ? ++frameSequence : input.after ? input.after : 1,
         };
       if (call.method === "submit")
         return {
@@ -154,6 +155,7 @@ async function fixture(
           durationMs: 1,
           artifacts: [],
         };
+      if (call.method === "direct") return {selection:"selected"};
       if (call.method === "release") return { released: true };
       if (call.method === "credentialPrepare")
         return {
@@ -674,4 +676,39 @@ it("closes Chrome only after a previously observed session tab is removed", asyn
     await vi.advanceTimersByTimeAsync(2000);
     expect(f.calls.filter(c => c.method === "release")).toHaveLength(1);
   } finally { await f.harness.lifecycle.dispose(); vi.useRealTimers(); }
+});
+
+it('sends binary frames with bounded credit and rejects arbitrary direct protocol messages', async()=>{
+  const f=await fixture({progressiveFrames:true});
+  const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+  const stream=await f.harness.behavior.experimental_openWebSocket(`/cast?id=${r.session.id}&binary=1`);
+  await vi.waitFor(()=>expect(stream.sent.length).toBeGreaterThanOrEqual(2));
+  expect(JSON.parse(String(stream.sent[0]))).toMatchObject({kind:'frame',seq:1});
+  expect(stream.sent[1]).toBeInstanceOf(Uint8Array);
+  await vi.waitFor(()=>expect(stream.sent).toHaveLength(6));
+  await new Promise(resolve=>setTimeout(resolve,40));expect(stream.sent).toHaveLength(6);
+  await stream.receive(JSON.stringify({ack:1}));
+  await vi.waitFor(()=>expect(stream.sent).toHaveLength(8));await stream.close();
+  const control=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}`);
+  await control.receive(JSON.stringify({seq:1,events:[{kind:'cdp',method:'Browser.close'}]}));
+  expect(control.closeCalls[0]).toMatchObject({code:1008});
+  expect(f.calls.filter(c=>c.method==='direct'&&c.input.events.some((e:any)=>e.kind==='cdp'))).toHaveLength(0);
+  await control.close();await f.harness.lifecycle.dispose();
+});
+
+it('orders direct input and releases controller state when its socket disconnects',async()=>{
+ const f=await fixture();
+ try{
+  const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+  const control=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}`);
+  await control.receive(JSON.stringify({seq:1,events:[{kind:'text',text:'one'}]}));
+  await control.receive(JSON.stringify({seq:2,events:[{kind:'text',text:'two'}]}));
+  await vi.waitFor(()=>expect(control.sent).toHaveLength(2));
+  expect(control.sent.map(v=>JSON.parse(String(v)).seq)).toEqual([1,2]);
+  await control.close();
+  await vi.waitFor(()=>expect(f.calls.filter(c=>c.method==='direct')).toHaveLength(3));
+  const calls=f.calls.filter(c=>c.method==='direct');
+  expect(calls.map(c=>c.input.events)).toEqual([[{kind:'text',text:'one'}],[{kind:'text',text:'two'}],[{kind:'reset'}]]);
+  expect(new Set(calls.map(c=>c.input.clientId)).size).toBe(1);
+ }finally{await f.harness.lifecycle.dispose();}
 });

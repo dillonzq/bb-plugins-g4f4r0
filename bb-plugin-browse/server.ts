@@ -128,6 +128,7 @@ export default async function plugin(bb: BbPluginApi) {
         leases.delete(s.id);
       }
       s.status = "released";
+      presence.delete(s.id);viewerTelemetry.delete(s.id);
       delete s.busy;
       s.recording = false;
       await persist(s);
@@ -217,6 +218,8 @@ export default async function plugin(bb: BbPluginApi) {
   }
   const viewerErrors = new Map<string, string>();
   const presence = new Map<string, Map<string, number>>();
+  const viewerTelemetry = new Map<string, Map<string, {at:number;host:string;fps:number;mbps:number;inputLatencyMs:number;displayed:number;dropped:number}>>();
+  function pruneViewerTelemetry(){for(const [sid,clients] of viewerTelemetry){for(const [cid,value] of clients)if(Date.now()-value.at>15000)clients.delete(cid);if(!clients.size)viewerTelemetry.delete(sid);}}
   function visibleClients(id: string) {
     const clients = presence.get(id);
     if (!clients) return 0;
@@ -894,7 +897,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.http.route("POST", "/presence", async (c) => {
     try {
       const report = z
-        .object({ id, clientId: id, visible: z.boolean() })
+        .object({ id, clientId: id, visible: z.boolean(), metrics:z.object({host:z.string().max(200),fps:z.number().min(0).max(1000),mbps:z.number().min(0).max(10000),inputLatencyMs:z.number().min(0).max(60000),displayed:z.number().min(0),dropped:z.number().min(0)}).optional() })
         .parse(await c.req.json());
       get(report.id);
       const clients = presence.get(report.id) ?? new Map<string, number>();
@@ -904,11 +907,17 @@ export default async function plugin(bb: BbPluginApi) {
         clients.set(report.clientId, Date.now());
         presence.set(report.id, clients);
       } else clients.delete(report.clientId);
+      pruneViewerTelemetry();
+      const telemetry=viewerTelemetry.get(report.id)??new Map();
+      for(const [key,value] of telemetry)if(Date.now()-value.at>15000)telemetry.delete(key);
+      if(report.visible&&report.metrics){if(telemetry.size>=32&&!telemetry.has(report.clientId))telemetry.delete(telemetry.keys().next().value!);telemetry.set(report.clientId,{at:Date.now(),...report.metrics});viewerTelemetry.set(report.id,telemetry);}else telemetry.delete(report.clientId);
+      if(!telemetry.size)viewerTelemetry.delete(report.id);
       return c.json({ ok: true });
     } catch {
       return c.json({ error: "Invalid viewer presence" }, 400);
     }
   });
+  bb.http.route('GET','/viewer-metrics',c=>{pruneViewerTelemetry();const sid=id.parse(c.req.query('id'));get(sid);return c.json({clients:[...(viewerTelemetry.get(sid)?.values()??[])].filter(v=>Date.now()-v.at<15000)});});
   bb.http.route("GET", "/frame", async (c) => {
     c.header("Cache-Control", "no-store");
     try {
@@ -961,7 +970,7 @@ export default async function plugin(bb: BbPluginApi) {
               else socket.send(JSON.stringify(frame));
               after=frame.seq;
             }else await sleep(16);
-          }catch(e){if(!closed)socket.send(JSON.stringify({error:redact(String(e))}));return;}
+          }catch(e){if(!closed){socket.send(JSON.stringify({error:redact(String(e))}));socket.close(1011,'Stream unavailable');}return;}
         }
       })();},
       onClose(){closed=true;wake?.();outstanding.clear();},

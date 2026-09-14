@@ -26,3 +26,22 @@ it('bounds messages and rejects arbitrary protocol commands',()=>{
  expect(()=>directBatch.parse({id:'session',clientId:'client',events:Array(65).fill(pointer('move'))})).toThrow();
  expect(()=>directBatch.parse({id:'session',clientId:'client',events:[{kind:'cdp',method:'Browser.close'}]})).toThrow();
 });
+it('sends Enter as a text-producing key and keeps ordinary DOM key events',async()=>{
+ const cdp={send:vi.fn().mockResolvedValue({}),evaluate:vi.fn().mockResolvedValue('')};const input=new DirectInput(cdp);
+ for(const [key,code,text] of [['Enter','Enter','\r'],['a','KeyA','a']]){
+  await input.run('a',[{kind:'keyboard',type:'down',key,code,modifiers:0,repeat:false},{kind:'keyboard',type:'up',key,code,modifiers:0,repeat:false}]);
+  expect(cdp.send).toHaveBeenCalledWith('Input.dispatchKeyEvent',expect.objectContaining({type:'keyDown',key,text}));
+ }
+ expect(input.held).toBe(false);
+});
+it('maintains held input with heartbeats, then releases it after a lost client',async()=>{
+ vi.useFakeTimers();
+ try{
+  const cdp={send:vi.fn().mockResolvedValue({}),evaluate:vi.fn().mockResolvedValue('')};const input=new DirectInput(cdp);
+  await input.run('a',[pointer('down',1)]);
+  await vi.advanceTimersByTimeAsync(4000);await input.run('a',[{kind:'heartbeat'}]);
+  await vi.advanceTimersByTimeAsync(4000);expect(input.held).toBe(true);
+  await vi.advanceTimersByTimeAsync(1001);expect(input.held).toBe(false);
+  expect(cdp.send).toHaveBeenLastCalledWith('Input.dispatchMouseEvent',expect.objectContaining({type:'mouseReleased'}));
+ }finally{vi.useRealTimers();}
+});
