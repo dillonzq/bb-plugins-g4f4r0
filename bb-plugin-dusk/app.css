@@ -19,20 +19,20 @@ button[aria-label="New thread in this environment"] {
   display: none;
 }
 
-/* Sidebar command shortcuts share the Search threads right-edge alignment. */
+/* Sidebar command shortcuts share Search threads' inset and trailing slot. */
 [data-sidebar="sidebar"] :is(a, button):has(kbd) {
-  padding-inline-end: 0;
+  padding-inline-end: 4px;
 }
 [data-sidebar="sidebar"] :is(a, button):has(kbd) kbd {
   flex-shrink: 0;
   margin-inline-start: auto;
   margin-inline-end: 0;
-  min-height: 18px;
-  height: 18px;
-  padding-inline: 4px;
-  border-radius: 4px;
+  min-height: 16px;
+  height: 16px;
+  padding-inline: 3px;
+  border-radius: 3px;
   font-size: 10px;
-  line-height: 14px;
+  line-height: 12px;
 }
 
 /* Sidebar state artwork. BB retains its labels, state priority and hover controls.
