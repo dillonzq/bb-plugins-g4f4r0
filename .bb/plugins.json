@@ -1,0 +1,11 @@
+{
+  "$schema": "https://getbb.app/schemas/plugins.schema.json",
+  "schemaVersion": 1,
+  "name": "g4f4r0-plugins",
+  "plugins": [
+    { "name": "browse", "source": "./bb-plugin-browse" },
+    { "name": "beacon", "source": "./bb-plugin-beacon" },
+    { "name": "sidetree", "source": "./bb-plugin-sidetree" },
+    { "name": "dusk", "source": "./bb-plugin-dusk" }
+  ]
+}

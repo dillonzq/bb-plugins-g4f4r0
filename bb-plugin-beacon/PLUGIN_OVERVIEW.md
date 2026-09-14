@@ -1,23 +1,19 @@
-See what the machine behind BB is doing without leaving your workspace.
+## What you get
 
-## Live server dashboard
+Status lives in the sidebar footer. Open it for CPU, per-core load, memory, swap, root disk use, network rates, top processes, and uptime on the machine that runs BB. The popover samples only while it is on screen.
 
-Beacon tracks aggregate and per-core CPU, load windows, detailed memory composition, swap, disk capacity, network throughput, top processes, host uptime, and the BB server process itself. A dense mix of area charts, pressure bars, composition blocks, and process rows makes spikes and sustained pressure easy to distinguish.
+`bb beacon snapshot` prints the same numbers in a terminal. Add `--json` for the full structured reading. `bb beacon health` reports pressure and exits 2 when a reading is critical.
 
-The dashboard refreshes automatically, follows your BB theme, and lives under **Status** in the sidebar. Usage colors convey pressure without health badges or status banners.
+Turn on background monitoring to watch CPU and memory every 30 seconds while Status is closed. Sustained overload can send an in-app toast. BB has to be open and visible to show it. There is no OS push and no third-party monitor.
 
-Detailed sampling runs only on demand. Hidden dashboards stop polling and release their charts; chart history expires after a short idle grace. Optional lightweight background monitoring checks CPU and memory every 30 seconds, sends native in-app overload/recovery alerts, and retains bounded diagnostic logs without process scans or chart history.
+## How it works
 
-## Built-in health checks
+Dashboard colors turn amber at 75% and red at 95%. CLI health warns at 85% and goes critical at 95%, and it also compares five-minute load with core count. Background alerts wait a full minute of samples at higher thresholds. Those scales are independent on purpose.
 
-CPU, memory, and disk usage raise a warning at 85% and become critical at 95%. Five-minute system load is evaluated relative to the host's CPU core count. Any active signal is explained in plain language instead of hidden behind a score.
+Metrics stay on the BB server. Chart history is memory-only and expires when nobody is looking. Beacon never calls an external API. It does not change server settings, enable swap, or kill processes.
 
-## Terminal and agent friendly
+## Requirements
 
-Use `bb beacon snapshot` for a concise readout or add `--json` for the full structured snapshot and recent history. `bb beacon health` returns only the health assessment.
+Needs BB 0.43 or newer. It inspects only the BB server host, not other enrolled machines or containers. Detailed network rates need Linux. A process can show more than 100% CPU because that figure is a lifetime average relative to one core.
 
-## Private and read-only
-
-All sampling happens on the BB server host. Metrics stay inside BB, history is memory-only, and the plugin makes no external requests. It needs no account, API key, privileged access, or third-party monitoring service.
-
-Beacon monitors the BB server host itself. It does not inspect separate enrolled machines, containers, or application-specific services.
+No account, API key, or extra install.

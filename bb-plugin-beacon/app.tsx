@@ -3,6 +3,8 @@ import { definePluginApp, type ExperimentalSidebarFooterDisclosureProps } from "
 import type { ServerSnapshot } from "./server";
 import { useServerSnapshot } from "./hooks/use-server-snapshot";
 import { PressureNotifications, bindStatusOpener } from "./components/pressure-notifications";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ServerIcon } from "@hugeicons/core-free-icons";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -147,6 +149,10 @@ function LoadingPopover() {
   ));
 }
 
+function ServerMark({ className }: { className?: string }) {
+  return <HugeiconsIcon icon={ServerIcon} className={className} aria-hidden="true" />;
+}
+
 function StatusDisclosure(_props: ExperimentalSidebarFooterDisclosureProps) {
   const { container, active, snapshot, error } = useServerSnapshot();
   return (
@@ -161,12 +167,13 @@ function StatusDisclosure(_props: ExperimentalSidebarFooterDisclosureProps) {
 }
 
 export default definePluginApp((app) => {
+  app.experimental_icons.register({ name: "Server", component: ServerMark });
   app.slots.experimental_appOverlay({ id: "pressure-notifications", component: PressureNotifications });
   bindStatusOpener(app.experimental_sidebarFooter.register({
     kind: "disclosure",
     id: "status",
-    label: "Status",
-    icon: "Limitation",
+    label: "Server status",
+    icon: "Server",
     component: StatusDisclosure,
   }).open);
 });

@@ -2,6 +2,12 @@
   "name": "bb-plugin-beacon",
   "version": "0.1.0",
   "type": "module",
+  "description": "See CPU, memory, disk, and process pressure on the BB server from the sidebar, without leaving the workspace.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/g4f4r0/bb-plugins.git",
+    "directory": "bb-plugin-beacon"
+  },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit"
@@ -12,12 +18,13 @@
   },
   "bb": {
     "name": "Beacon",
-    "description": "Live CPU, memory, disk, uptime, and health signals from the machine running your BB server.",
+    "description": "See CPU, memory, disk, and process pressure on the BB server from the sidebar, without leaving the workspace.",
     "branding": {
-      "icon": "Limitation"
+      "icon": "./assets/icon.svg"
     },
     "server": "./server.ts",
-    "app": "./app.tsx"
+    "app": "./app.tsx",
+    "skills": ["skills"]
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.1.3",

@@ -13,6 +13,8 @@ Do not install these from a thread workspace, `/tmp`, or a throwaway worktree. I
 
 Keep these IDs. Change the id and BB treats it as a new plugin and drops its settings. Agent Plugins is a separate local package at `/home/g4f4r0/.bb/local-plugins/bb-plugin-agent-plugins`.
 
+`.bb/plugins.json` lists the four packages so a git install can pass `--plugin <id>`. Example: `bb plugin install git:https://github.com/g4f4r0/bb-plugins.git --plugin beacon`.
+
 ## Deploy
 
 1. Check the live path with `bb plugin source <id> --json`. Edit that package, not an old workspace copy. Leave unrelated dirty files alone.
