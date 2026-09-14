@@ -85,13 +85,6 @@ export function CredentialForm({
       <p className="text-xs text-muted-foreground">
         Your details stay out of chat.
       </p>
-      <details className="text-xs text-muted-foreground">
-        <summary className="cursor-pointer">Using a password manager?</summary>
-        <p className="pt-2">
-          Tap a field, then AutoFill → Passwords. Choose your login in 1Password
-          or your password manager. If prompted, choose Allow Once.
-        </p>
-      </details>
       {error && <p role="alert">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" disabled={busy}>
