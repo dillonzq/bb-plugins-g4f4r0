@@ -73,6 +73,20 @@
   --surface-raised-solid: #202021;
 }
 
+/* Match Sidetree's editor selection across the whole Dusk surface. */
+::selection,
+*::selection {
+  background: color-mix(in srgb, var(--primary) 40%, transparent) !important;
+  color: var(--primary) !important;
+  -webkit-text-fill-color: var(--primary) !important;
+}
+
+::-moz-selection,
+*::-moz-selection {
+  background: color-mix(in srgb, var(--primary) 40%, transparent) !important;
+  color: var(--primary) !important;
+}
+
 /* Quotes are structural emphasis, not an interactive primary accent. */
 blockquote {
   border-color: var(--quote-border) !important;
