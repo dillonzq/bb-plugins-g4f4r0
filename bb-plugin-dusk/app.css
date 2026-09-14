@@ -19,20 +19,29 @@ button[aria-label="New thread in this environment"] {
   display: none;
 }
 
-/* Sidebar command shortcuts share Search threads' inset and trailing slot. */
-[data-sidebar="sidebar"] :is(a, button):has(kbd) {
-  padding-inline-end: 4px;
-}
-[data-sidebar="sidebar"] :is(a, button):has(kbd) kbd {
-  flex-shrink: 0;
-  margin-inline-start: auto;
-  margin-inline-end: 0;
+/* BB shortcut keycaps use one compact treatment across native surfaces. */
+kbd {
   min-height: 16px;
   height: 16px;
   padding-inline: 3px;
   border-radius: 3px;
   font-size: 10px;
   line-height: 12px;
+}
+
+/* Sidebar command shortcuts share Search threads' inset and trailing slot. */
+[data-sidebar="sidebar"] :is(a, button):has(kbd) {
+  padding-inline-end: 4px;
+}
+[data-sidebar="sidebar"] kbd {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+}
+/* Thread jump hints live beside the row's hover-action slot, not inside its
+   link, so give them the same inset explicitly. */
+[data-sidebar="sidebar"] [data-dusk-thread-row] kbd {
+  margin-inline-end: 4px;
 }
 
 /* Sidebar state artwork. BB retains its labels, state priority and hover controls.
