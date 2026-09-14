@@ -420,6 +420,21 @@ function BrowseSettings() {
   );
 }
 export default definePluginApp((app) => {
+  app.contentScripts.register({
+    id: "hide-native-browser-launcher",
+    mount() {
+      // BB's launcher slots are additive. Scope this presentation override to
+      // the core action's stable id, including its sortable row/drag handle.
+      const style = document.createElement("style");
+      style.dataset.browseNativeLauncher = "hidden";
+      style.textContent = `
+        #file-search-result-open-browser,
+        div:has(> button#file-search-result-open-browser) { display: none !important; }
+      `;
+      document.head.append(style);
+      return () => style.remove();
+    },
+  });
   app.slots.pendingInteraction({
     id: "browser-credentials",
     component: CredentialForm,

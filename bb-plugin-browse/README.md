@@ -146,3 +146,7 @@ Native leases use BB’s 30-minute maximum. Fresh discovery replaces stale gener
 Linux hosts need no desktop shell: managed Chrome uses a virtual display. Browse panels are streamed pages inside BB, not Electron-native tabs. Browse does not attach arbitrary existing Chrome windows or automatically expose website-created popup windows. Different managed sessions have isolated login cookies. Native capture can require the desktop tab to remain visible. CAPTCHA, passkeys and device-specific login may require manual interaction; website anti-bot restrictions are not removed by remote viewing.
 
 See [multi-host validation](MULTI-HOST-VALIDATION.md) for the September 2026 browser handoff, login and recovery checks. macOS and Windows use their own desktop display; Xvfb is required only on Linux without a display. A native session’s panel offers a separate managed browser on the same host when native rendering is unavailable; that browser has a separate login profile.
+
+### Native launcher visibility
+
+While Browse is enabled, its client content script hides BB’s built-in “Open browser” action and its reorder handle. The Browse “Browser” action remains available. Disabling Browse restores the native launcher. This is a scoped UI override using the core action’s DOM ID; it does not disable the native browser engine, existing tabs, external-link preferences or core shortcuts. A BB update that changes that ID will need a selector update.
