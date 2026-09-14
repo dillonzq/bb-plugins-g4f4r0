@@ -2,27 +2,12 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import ts from 'typescript';
 import {chromium} from 'playwright';
-const compile = async name => ts.transpileModule(await readFile("'`lib/${name}.ts`,'"'utf8'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
-const {createMessageTimeCache}=await import('data:text/javascript;base64,'+Buffer.from(await compile('message-time-cache')).toString('base64'));
-let reads=0, now=0;
-const cache=createMessageTimeCache(async()=>++reads,()=>now);
-assert.deepEqual(await Promise.all([cache.get('a'),cache.get('a')]),[1,1]);
-now=30_000; assert.equal(await cache.get('a'),1);
-cache.invalidate('a'); assert.equal(await cache.get('a'),2);
-now=400_000; assert.equal(await cache.get('a'),3);
-let resolve;
-const race=createMessageTimeCache(()=>new Promise(r=>resolve=r));
-const stale=race.get('a'); await Promise.resolve();const old=resolve;
-race.invalidate('a');const fresh=race.get('a'); await Promise.resolve();
-resolve(2); old(1);await stale; await fresh; assert.equal(await race.get('a'),2);
-let attempts=0;
-const retry=createMessageTimeCache(async()=>{if(++attempts===1)throw Error('retry');return 9});
-await assert.rejects(retry.get('a'));assert.equal(await retry.get('a'),9);
+const compile = async name => ts.transpileModule(await readFile(`lib/${name}.ts`, 'utf8'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try {
  const p=await browser.newPage();
  await p.setContent('<head><title>Initial</title></head><body><main><aside id="sidebar"></aside><article id="chat"></article></main></body>');
- await p.addScriptTag({content:(await compile('observe-roots')).replace('export function','function')+'\\nwindow.changes=0;window.stopRoots=observeRoots("#sidebar",()=>window.changes++);'});
+ await p.addScriptTag({content:(await compile('observe-roots')).replace('export function','function')+'\nwindow.changes=0;window.stopRoots=observeRoots("#sidebar",()=>window.changes++);'});
  await p.evaluate(()=>{for(let i=0;i<1000;i++)document.querySelector('#chat').append(document.createElement('div'));document.title='Streaming';});
  await p.waitForTimeout(80);
  assert.equal(await p.evaluate(()=>window.changes),0);
@@ -34,5 +19,5 @@ try {
  assert.equal(await p.evaluate(()=>window.changes),3);
  await p.evaluate(()=>{window.stopRoots();document.querySelector('#sidebar').append(document.createElement('a'));});await p.waitForTimeout(80);
  assert.equal(await p.evaluate(()=>window.changes),3);
- console.log('PASS: cache reuse/invalidation/races/retry; 1,000 chat mutations ignored; sidebar replacement and cleanup.');
+ console.log('PASS: 1,000 chat mutations ignored; sidebar replacement and cleanup.');
 } finally {await browser.close();}

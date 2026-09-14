@@ -4,6 +4,8 @@
 :root {
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --dusk-stop: #dc454b;
+  --dusk-draft: #c46e2c;
+  --dusk-draft-fill: color-mix(in srgb, var(--dusk-draft) 10%, transparent);
   --canvas: #ffffff;
   --ink: #37352f;
   --background: var(--canvas);
@@ -35,6 +37,8 @@
 }
 .dark {
   --dusk-stop: var(--destructive);
+  --dusk-draft: #e08a3a;
+  --dusk-draft-fill: color-mix(in srgb, var(--dusk-draft) 18%, transparent);
   --canvas: #131314;
   --ink: #dededc;
   --background: var(--canvas);
