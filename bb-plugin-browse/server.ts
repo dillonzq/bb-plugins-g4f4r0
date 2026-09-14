@@ -653,7 +653,7 @@ export default async function plugin(bb: BbPluginApi) {
         {
           threadId,
           rendererId: "browser-credentials",
-          title: "Browser sign-in",
+          title: "Credentials",
           payload: {
             origin: prepared.origin,
             purpose: input.purpose,
