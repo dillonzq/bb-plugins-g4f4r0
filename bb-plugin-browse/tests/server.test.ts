@@ -14,6 +14,7 @@ const base = {
 async function fixture(
   options: {
     progressiveFrames?: boolean;
+    frameData?: string;
     threadActive?: boolean;
     panelTabs?: any[];
     tabReadFails?: boolean;
@@ -139,7 +140,7 @@ async function fixture(
         };
       if (call.method === "frame")
         return {
-          data: "qq",
+          data: options.frameData ?? "qq",
           url: "https://example.com/",
           width: 1280,
           height: 800,
@@ -710,5 +711,18 @@ it('orders direct input and releases controller state when its socket disconnect
   const calls=f.calls.filter(c=>c.method==='direct');
   expect(calls.map(c=>c.input.events)).toEqual([[{kind:'text',text:'one'}],[{kind:'text',text:'two'}],[{kind:'reset'}]]);
   expect(new Set(calls.map(c=>c.input.clientId)).size).toBe(1);
+ }finally{await f.harness.lifecycle.dispose();}
+});
+
+it('bounds unacknowledged bytes as well as the number of frames',async()=>{
+ const f=await fixture({progressiveFrames:true,frameData:Buffer.alloc(3*1024*1024).toString('base64')});
+ try{
+  const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+  const stream=await f.harness.behavior.experimental_openWebSocket(`/cast?id=${r.session.id}&binary=1`);
+  await vi.waitFor(()=>expect(stream.sent).toHaveLength(2));
+  await new Promise(r=>setTimeout(r,40));expect(stream.sent).toHaveLength(2);
+  await stream.receive(JSON.stringify({ack:1}));
+  await vi.waitFor(()=>expect(stream.sent).toHaveLength(4));
+  await stream.close();
  }finally{await f.harness.lifecycle.dispose();}
 });

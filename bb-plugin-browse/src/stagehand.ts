@@ -6,6 +6,7 @@ import type { Cdp } from "./cdp";
 import { safeUrl } from "./policy";
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
+import { boundedDiagnostic, diagnosticUrl } from "./diagnostic-history";
 
 /** One persistent SDK connection, always bound to the session's exact page. */
 export class StagehandDriver {
@@ -47,7 +48,7 @@ export class StagehandDriver {
         if (method === "Network.requestWillBeSent") {
           driver.requests.push({
             id: params.requestId,
-            url: params.request.url,
+            url: diagnosticUrl(params.request.url),
             method: params.request.method,
           });
           driver.requests = driver.requests.slice(-200);
@@ -94,7 +95,7 @@ export class StagehandDriver {
           method === "Runtime.consoleAPICalled" ||
           method === "Runtime.exceptionThrown"
         ) {
-          driver.logs.push({ method, params });
+          driver.logs.push({ method, params: boundedDiagnostic(params) });
           driver.logs = driver.logs.slice(-100);
         }
       });

@@ -954,6 +954,8 @@ export default async function plugin(bb: BbPluginApi) {
     const sid=id.parse(ctx.url.searchParams.get('id'));get(sid);
     const binary=ctx.url.searchParams.get('binary')==='1';
     let closed=false;const outstanding=new Map<number,number>();let wake:(()=>void)|undefined;
+    const bytesOutstanding=()=>[...outstanding.values()].reduce((a,b)=>a+b,0);
+    const waitCredit=()=>new Promise<void>(resolve=>{const timer=setTimeout(resolve,1000);wake=()=>{clearTimeout(timer);resolve();};});
     return {
       onMessage(_socket,raw){if(!binary||typeof raw!=='string'||raw.length>100)return;try{const message=JSON.parse(raw);if(Number.isSafeInteger(message.ack)&&outstanding.delete(message.ack)){wake?.();wake=undefined;}}catch{}},
       onOpen: socket => {void(async()=>{
@@ -961,12 +963,12 @@ export default async function plugin(bb: BbPluginApi) {
         while(!closed){
           try{
             // At most three frames / 4 MiB await display; never queue an unbounded video backlog.
-            if(binary&&(outstanding.size>=3||[...outstanding.values()].reduce((a,b)=>a+b,0)>4*1024*1024)){
-              await new Promise<void>(resolve=>{const timer=setTimeout(resolve,1000);wake=()=>{clearTimeout(timer);resolve();};});continue;
+            if(binary&&(outstanding.size>=3||bytesOutstanding()>=4*1024*1024)){
+              await waitCredit();continue;
             }
             const frame=await handlers.frame({id:sid,after});if(closed)return;
             if(frame.seq>after){
-              if(binary){const bytes=Buffer.from(frame.data,'base64');outstanding.set(frame.seq,bytes.length);const {data,...meta}=frame;socket.send(JSON.stringify({kind:'frame',...meta}));socket.send(bytes);}
+              if(binary){const bytes=Buffer.from(frame.data,'base64');if(bytes.length>4*1024*1024)throw Error('Browser frame exceeds the streaming budget. Reduce the viewport size.');while(!closed&&bytesOutstanding()+bytes.length>4*1024*1024)await waitCredit();if(closed)return;outstanding.set(frame.seq,bytes.length);const {data,...meta}=frame;socket.send(JSON.stringify({kind:'frame',...meta}));socket.send(bytes);}
               else socket.send(JSON.stringify(frame));
               after=frame.seq;
             }else await sleep(16);

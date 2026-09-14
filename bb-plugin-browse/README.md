@@ -12,7 +12,7 @@ Browse runs through agent tools and the `bb browse` CLI. It adds a dependency pa
 
 Start with `bb browse start '{"url":"https://example.com"}'` from a BB thread. Browse resolves that thread’s environment host and opens headed Chrome. The live page appears in the thread panel. Run `probe` to check readiness and `setup` to install dependencies, including Xvfb, xkbcomp, and XKB keymap data on Linux hosts without a display. Settings lists all enrolled machines with independent checks and installation actions; offline machines are shown separately.
 
-The viewer is a custom authenticated web view. It streams JPEG screencast frames from headed Chrome over a plugin WebSocket, with clicking, typing/pasting, navigation keys and scrolling. Each session opens as its own BB side-panel tab, with its host in the title. Native sessions can use the same viewer when their desktop supports streaming. The Browser launcher lists this thread’s sessions across hosts. Routine refreshes preserve your selected tab. It is not BB’s native Electron browser surface. Relative viewer URLs resolve against the current BB web origin.
+The viewer is a custom authenticated web view. It streams binary JPEG frames into a canvas, with direct pointer movement, dragging, text selection, keyboard events, Unicode paste and scrolling. Each session opens as its own BB side-panel tab; the machine appears in the lower-right corner. The Open browser launcher lists this thread’s sessions across hosts. Routine refreshes preserve the selected tab. Relative viewer URLs resolve against the current BB web origin.
 
 `mode:"native"` retains the existing desktop backend and requires fresh hostId, instanceId and generation. The legacy preferredHost applies only to native discovery; it never changes managed placement.
 
@@ -168,7 +168,7 @@ Snapshot IDs are Stagehand IDs such as `[0-19]`; pass `@0-19` to actions. `snaps
 
 Supported command families: open/back/forward/reload, snapshot, click/dblclick/hover/fill/type/press/keyboard, select/check/uncheck/upload, scroll/scrollintoview/drag, wait/frame, get/is/focus/eval, storage/cookies/dialog/console/errors, set viewport/headers, network requests/route/unroute, and a11y. `get attr` and `focus` currently require a top-page DOM selector; use native locator operations for nested elements. Network route supports pass-through, `--abort`, or a fixed `--body` response.
 
-Streaming, secure credentials, exact gestures, canvas/link export and printing remain Browse-owned CDP features. Recording uses the shared screencast plus FFmpeg; requested FPS samples frames and does not guarantee that every frame is new. This migration does not establish a 60 FPS viewer or measured speed superiority.
+Streaming, secure credentials, exact gestures, canvas/link export and printing remain Browse-owned CDP features. Recording uses the shared screencast plus FFmpeg; requested FPS samples frames and does not guarantee that every frame is new. The interactive viewer targets the display refresh rate, but CDP capture, server load and network conditions determine the actual rate. See [interaction validation](INTERACTION-VALIDATION.md) for measurements; this is not a guarantee of 60 FPS.
 
 ### Replacing the original browser entry points
 
@@ -194,3 +194,16 @@ can still be entered manually. This list does not include every running process.
 Browsers belonging to an actively working agent thread, active jobs, recordings, and pending secure login prompts are protected from idle shutdown. Profiles and artifacts survive expiry; unsaved page state does not.
 
 Closing a persisted Browse session tab stops its managed Chrome within a few seconds. Switching tabs or reloading BB does not remove the persisted tab and does not close the session. The blank launcher is not a session.
+
+
+## Interactive viewer performance
+
+Human input uses an authenticated, session-bound WebSocket and direct CDP input on the host. It bypasses agent job creation and polling. Agent automation continues to use Stagehand. Each input batch is bounded and ordered; pointer moves and compatible wheel events coalesce. Disconnect discards unsent input and releases held keys/buttons. A heartbeat supports long holds; its loss releases input after five seconds. Agent actions and credential entry exclude competing viewer input.
+
+The binary frame stream allows at most three unacknowledged frames and 4 MiB of unacknowledged JPEG payload. A single frame above 4 MiB is rejected. The server can temporarily retain one additional bounded frame while waiting for byte credit. The client decodes one frame at a time and retains only the newest pending frame. It draws on animation frames and closes decoded image bitmaps. The canvas allocation follows the encoded image size (capture capped at 1920 × 1080), while input coordinates use the actual browser viewport.
+
+Hidden documents and panels close their input/stream connections. Capture stops on the host after 12 seconds without frame requests. This preserves the page for later automation; the normal idle/session lifetime still applies. Viewing alone does not renew that lifetime. Console history retains at most 100 bounded entries; request history retains 200 URLs capped at 8192 characters. These limits are not a total Chromium memory limit.
+
+The authenticated `/viewer-metrics?id=<session-id>` endpoint reports recent viewer samples: displayed FPS, JPEG throughput, input acknowledgement time and dropped frames. Samples expire after 15 seconds, are capped at 32 clients per session, and are removed on release. The host field identifies the BB origin used by that viewer, so localhost measurements can be distinguished from public-client observations. No page text or credentials are included.
+
+Run `node tests/live-viewer.mjs <fixture-profile-id> <viewer-profile-id-or-CDP-port> [soak-seconds]` only with disposable test sessions. It requires the fixture at `http://127.0.0.1:39114/` and the matching local authenticated viewer. It changes the test page and sends synthetic viewer input. Real pointer capture, operating-system clipboard permissions and WAN performance require separate interactive checks.
