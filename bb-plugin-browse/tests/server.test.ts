@@ -16,6 +16,7 @@ async function fixture(
     held?: boolean;
     personal?: boolean;
     connectFails?: boolean;
+    connectJobFails?: boolean;
     executionHost?: string;
     busyOnce?: boolean;
     credentialFailure?: boolean;
@@ -116,6 +117,11 @@ async function fixture(
           artifacts: [],
         };
       }
+      if (call.method === "job") return {
+        id: input.id, kind:"connect", status:options.connectJobFails?"failed":"succeeded",
+        startedAt:Date.now(),durationMs:1,artifacts:[],
+        ...(options.connectJobFails?{error:"Stagehand extension rejected by scoped browser bridge"}:{})
+      };
       if (call.method === "inspect")
         return {
           ...(options.busyOnce && inspected++ === 0
@@ -619,4 +625,15 @@ it("provides native viewer frames and identity through the selected host", async
   } finally {
     await f.harness.lifecycle.dispose();
   }
+});
+
+
+it("cleans up an asynchronously failed native connection and blocks repeated unsupported acquisition", async () => {
+ const f=await fixture({connectJobFails:true});
+ try {
+  await expect(f.harness.behavior.callRpc("start",{...base})).rejects.toThrow('"cleanup":"closed"');
+  expect(f.close).toHaveBeenCalledOnce();expect(f.release).toHaveBeenCalledOnce();
+  await expect(f.harness.behavior.callRpc("start",{...base})).rejects.toThrow('mode:managed');
+  expect(f.create).toHaveBeenCalledOnce();
+ } finally {await f.harness.lifecycle.dispose();}
 });

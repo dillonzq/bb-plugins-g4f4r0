@@ -29,6 +29,7 @@ export default async function plugin(bb: BbPluginApi) {
   // Legacy desktop preference is used only for explicit native mode.
   const preferredHost = async () =>
     (await bb.storage.kv.get<string>("preference:preferredHost")) ?? "pro";
+  const unsupportedNativeHosts = new Set<string>();
   const sessions = new Map<string, Session>(),
     leases = new Map<string, string>();
   for (const key of await bb.storage.kv.list("session:")) {
@@ -587,6 +588,8 @@ export default async function plugin(bb: BbPluginApi) {
           input.hostId,
         );
       }
+      if (unsupportedNativeHosts.has(input.hostId ?? ""))
+        throw new Error("This host's native BB browser bridge does not support Stagehand's extension. Use mode:managed with the same hostId; it has a separate login profile.");
       const base = await freshNativeScope(scope.parse(input)),
         url = safeUrl(input.url);
       const browser = bb.sdk.experimental_desktopBrowsers;
@@ -646,7 +649,7 @@ export default async function plugin(bb: BbPluginApi) {
         };
         sessions.set(sid, s);
         leases.set(sid, lease.leaseId);
-        const j = await host.call(
+        let j = await host.call(
           "connect",
           {
             id: sid,
@@ -657,6 +660,17 @@ export default async function plugin(bb: BbPluginApi) {
           },
           { hostId: s.hostId },
         );
+        // Complete acquisition before exposing the native tab. A background
+        // connection failure must take the same cleanup path as a lease failure.
+        const deadline = Date.now() + 15000;
+        while (j.status === "running" && Date.now() < deadline) {
+          await sleep(100);
+          j = await host.call("job", {id:j.id}, {hostId:s.hostId});
+        }
+        if (j.status !== "succeeded") {
+          if (/extension|scoped browser bridge/i.test(j.error ?? "")) unsupportedNativeHosts.add(s.hostId);
+          throw new Error(j.error ?? "Native connection did not finish within 15 seconds.");
+        }
         s.connectJobId = j.id;
         Object.assign(
           s,
@@ -1108,6 +1122,7 @@ export default async function plugin(bb: BbPluginApi) {
           },
           native: {
             requires: "connected BB Desktop instance with Stagehand extension installation and extension debugging support; otherwise use managed Chrome on that host",
+            knownUnsupportedHosts: [...unsupportedNativeHosts],
             remoteViewer:
               "requires desktop screencast support; visible desktop tab may be necessary",
             secureCredentials: true,

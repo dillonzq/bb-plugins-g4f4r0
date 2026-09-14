@@ -24,3 +24,11 @@ BROWSE_TEST_ROOT=/absolute/browse/host-data npx tsx tests/stagehand-live.ts
 - Raw DOM eval/export retains its existing page-origin restrictions. The private credential helper still uses CDP and does not gain closed-shadow-root support merely because the automation driver changed.
 - Recording samples the shared JPEG cast at the requested rate; repeated frames are possible. Node >=22.18, npm, Chrome and FFmpeg are host requirements.
 - Old runtime downloads remain on disk; profiles and saved artifacts are preserved.
+
+## Installed-plugin checks
+
+- Public `browse_session` and `browse_action` calls started and inspected managed Stagehand sessions on Linux server and macOS pro. Pro installed its own lockfile-pinned runtime and Chrome successfully.
+- The actual BB web client rendered the managed viewer with decoded 1280 × 800 frames. This verifies the test client's handoff; it does not identify the user's current client.
+- The native pro bridge rejected `Extensions.loadUnpacked`. The test tab was explicitly closed. Native startup now waits for the connect result, closes newly created tabs on background connection failure, and remembers unsupported hosts for the current plugin lifetime to reject repeated acquisition before creating another tab.
+- Pro later reported a disconnected tab; its cause was not established. Explicit reconnect restored the same profile and URL, and subsequent commands succeeded. This is recovery evidence, not a claim of long-duration stability.
+- The final automated suite has 115 passing tests, including asynchronous native-failure cleanup and prevention of repeated unsupported acquisition.
