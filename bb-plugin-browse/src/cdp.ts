@@ -44,6 +44,7 @@ export class Cdp {
   private seq = 0;
   private latest?: LiveFrame;
   private liveAcks = new Set<number>();
+  private lastFrameDemand = 0;
   private acknowledgeLiveFrames() {
     const ids = [...this.liveAcks];
     this.liveAcks.clear();
@@ -195,10 +196,12 @@ export class Cdp {
   }
   private onScreencast(params: any) {
     if (this.casting) {
-      // Grant capture credit only when a consumer asks for a frame. Slow or
-      // hidden viewers must not keep the encoder running at the display rate.
+      // Preserve a short capture pipeline for active viewers, then withhold
+      // credit when consumers stop reading. Strict per-frame credit serializes
+      // capture and delivery and materially reduces the display rate.
       this.liveAcks.add(params.sessionId);
       this.latest = liveFrameFromEvent(params, ++this.seq);
+      if (Date.now() - this.lastFrameDemand < 50) this.acknowledgeLiveFrames();
       for (const w of [...this.waiters])
         if (this.latest.seq > w.after) {
           this.waiters.delete(w);
@@ -232,6 +235,7 @@ export class Cdp {
     await this.send("Page.stopScreencast").catch(() => {});
   }
   async nextLiveFrame(after = 0, timeoutMs = 8000): Promise<LiveFrame> {
+    this.lastFrameDemand = Date.now();
     if (!this.casting) await this.startLiveCast();
     this.acknowledgeLiveFrames();
     if (this.latest && this.latest.seq > after) return this.latest;

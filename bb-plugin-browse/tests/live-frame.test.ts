@@ -19,7 +19,7 @@ it("opens a same-origin screencast websocket from the viewer", () => {
   expect(viewerHtml).not.toContain("setTimeout(refresh,800)");
 });
 
-it('withholds capture credit until a consumer requests a frame',async()=>{
+it('backs off capture without demand and permits a short active pipeline',async()=>{
   const {Cdp}=await import('../src/cdp');
   const c:any=Object.create(Cdp.prototype);
   c.casting=true;c.liveAcks=new Set();c.waiters=new Set();c.seq=0;c.send=async(...args:any[])=>{calls.push(args);return{};};
@@ -32,6 +32,7 @@ it('withholds capture credit until a consumer requests a frame',async()=>{
   c.onScreencast({sessionId:2,data:'new',metadata:{deviceWidth:1280,deviceHeight:800}});
   expect((await next).seq).toBe(2);
   expect(calls.at(-1)).toEqual(['Page.screencastFrameAck',{sessionId:2}]);
+  c.lastFrameDemand=Date.now()-100;
   c.onScreencast({sessionId:3,data:'waiting',metadata:{}});await c.stopLiveCast();
   expect(calls.slice(-2)).toEqual([['Page.screencastFrameAck',{sessionId:3}],['Page.stopScreencast']]);
 });
