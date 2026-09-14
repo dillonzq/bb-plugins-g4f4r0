@@ -7,8 +7,8 @@ npm install
 bb plugin install .
 ```
 
-In a thread, + then Files. Click a folder to expand it. Click a file to open
-it. That tab is titled Editor. The ⋮ menu saves, copies, downloads, and
+In a thread, + then Open files. Click a folder to expand it. Click a file to
+open it. That tab is titled Editor. The ⋮ menu saves, copies, downloads, and
 deletes.
 
 Most text files open in CodeMirror. `.md` and `.markdown` open as a page you

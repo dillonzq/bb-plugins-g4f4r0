@@ -537,10 +537,13 @@ export default definePluginApp((app) => {
   });
   app.slots.threadPanelAction({
     id: "files",
-    title: "Files",
+    title: "Open files",
     icon: "FolderOpen",
     layout: "flush",
     component: FilesPanel,
+    run: ({ openPanel }) => {
+      openPanel({ title: "Files" });
+    },
   });
   app.slots.fileOpener({
     id: "file",
