@@ -543,10 +543,13 @@ function LiveBrowser({
   if (!id)
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <form aria-label="Browser navigation" className="flex shrink-0 items-center gap-1 border-b px-2 py-1" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
+        <form aria-label="Browser navigation" className="flex shrink-0 items-center gap-2 border-b px-4 py-2" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
+          <div role="group" aria-label="Navigation" className="flex shrink-0 items-center gap-1">
           <BrowserActionTooltip label="Back"><Button type="button" variant="ghost" size="icon-sm" aria-label="Back" disabled><BrowseIcon name="ArrowLeft" className="size-4" /></Button></BrowserActionTooltip>
           <BrowserActionTooltip label="Forward"><Button type="button" variant="ghost" size="icon-sm" aria-label="Forward" disabled><BrowseIcon name="ArrowRight" className="size-4" /></Button></BrowserActionTooltip>
           <BrowserActionTooltip label="Refresh sessions"><Button type="button" variant="ghost" size="icon-sm" aria-label="Refresh sessions" onClick={() => void sync()}><BrowseIcon name="RefreshCw" className="size-4" /></Button></BrowserActionTooltip>
+          </div>
+          <div role="group" aria-label="Address" className="flex min-w-0 flex-1 items-center gap-1">
           <Input
             aria-label="Website address"
             className="min-w-0 flex-1"
@@ -559,6 +562,7 @@ function LiveBrowser({
             spellCheck={false}
             required
           />
+          </div>
         </form>
         <div className="min-h-0 flex-1 overflow-auto flex flex-col">
           <div className="m-auto w-full max-w-3xl px-6 py-12">
