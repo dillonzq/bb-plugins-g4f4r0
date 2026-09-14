@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
@@ -33,7 +34,7 @@ run('bb', ['plugin', 'build', dir]);
 if (tree() !== reviewedTree || execFileSync('git', ['status', '--porcelain', '--', path.basename(dir)], { cwd: root, encoding: 'utf8' }).trim()) {
   throw Error('Source changed during verification; review and commit it before deploying.');
 }
-const backup = path.resolve(root, '..', 'plugin-backups');
+const backup = path.join(os.homedir(), '.bb', 'plugin-backups');
 fs.mkdirSync(backup, { recursive: true, mode: 0o700 });
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 run('git', ['bundle', 'create', path.join(backup, `${id}-${stamp}.bundle`), '--all'], root);

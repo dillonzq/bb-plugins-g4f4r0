@@ -1,8 +1,8 @@
 # Custom BB plugins
 
-Off-server Git copy of Browse, Beacon, Sidetree, Silk, Agent Plugins, and the Studio/Composio agent-plugin packages. Remote: https://github.com/hellogafaro/bb-plugins
+Permanent source for Browse, Beacon, Sidetree, and Silk. BB loads these directories in place from this checkout. Remote: https://github.com/g4f4r0/bb-plugins
 
-Live BB installations on this server still load from `/home/g4f4r0/.bb/local-plugins`. Edit and deploy there unless the install paths are migrated with a path-to-path install. The live packages must stay outside thread workspaces and disposable worktrees.
+Do not install these plugins from a thread workspace, temporary directory, or disposable worktree.
 
 | Plugin | Stable ID | Source directory |
 | --- | --- | --- |
@@ -10,9 +10,8 @@ Live BB installations on this server still load from `/home/g4f4r0/.bb/local-plu
 | Beacon | `beacon` | `bb-plugin-beacon` |
 | Sidetree | `sidetree` | `bb-plugin-sidetree` |
 | Silk | `silk` | `bb-plugin-silk` |
-| Agent Plugins | `agent-plugins` | `bb-plugin-agent-plugins` |
 
-Keep these IDs when repairing plugins so settings and saved data stay associated with them.
+Keep these IDs when repairing plugins so settings and saved data stay associated with them. Agent Plugins is a separate local package and is not part of this repository.
 
 ## Change and deploy
 
@@ -22,12 +21,12 @@ Keep these IDs when repairing plugins so settings and saved data stay associated
 4. From this directory, run `node maintenance/install.mjs <id>`.
 5. Verify the actual feature in BB. A successful build does not establish that its UI or host runtime works.
 
-The installer requires a committed lockfile and clean package source, refuses paths outside this directory, checks for active Browse sessions before reload, runs available type checks and unit tests, and builds the plugin. It saves a Git bundle under `/home/g4f4r0/.bb/plugin-backups` before deployment, then verifies all local installation paths and statuses. It does not run live browser tests automatically.
+The installer requires a committed lockfile and clean package source, refuses paths outside this directory, checks for active Browse sessions before reload, runs available type checks and unit tests, and builds the plugin. It saves a Git bundle under `/home/g4f4r0/.bb/plugin-backups` before deployment, then verifies installation paths and statuses. It does not run live browser tests automatically.
 
 Run the read-only audit at any time:
 
 ```sh
-node /home/g4f4r0/.bb/local-plugins/maintenance/check-installations.mjs
+node /home/g4f4r0/projects/bb-plugins/maintenance/check-installations.mjs
 ```
 
 For a new custom plugin, scaffold `bb-plugin-<id>` here, implement and test it, and commit its source and lockfile before using the installer. BB's built-in and managed Git/npm plugins keep their existing managed locations.
@@ -38,9 +37,9 @@ Source and dependency lockfiles belong in this Git repository. Generated bundles
 
 `bb plugin install path:/absolute/permanent/package --yes` can change an existing local installation's source without deleting its settings. The helper uses this during migration and `bb plugin reload <id>` for an unchanged source path.
 
-Local Git history and bundles protect against thread-workspace cleanup and accidental source edits. The GitHub repository is the off-server backup.
+GitHub is the off-server copy of this source. Local bundles under `/home/g4f4r0/.bb/plugin-backups` protect against accidental source edits.
 
-To inspect a saved bundle, clone it into a separate directory under this permanent root's parent and compare the required revision. Restore reviewed files to the permanent package, commit, and deploy with the helper. Do not reset a dirty live source tree or point BB at a temporary recovery checkout.
+To inspect a saved bundle, clone it into a separate directory and compare the required revision. Restore reviewed files to the permanent package, commit, and deploy with the helper. Do not reset a dirty live source tree or point BB at a temporary recovery checkout.
 
 Server-wide agent guidance is in `/home/g4f4r0/.bb/AGENTS.md`. It directs future plugin work here. This is a workflow safeguard; BB core itself has not been changed to block unsafe raw path installations.
 
