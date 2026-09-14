@@ -622,12 +622,12 @@ function LiveBrowser({
   );
 }
 
-function browserTitle(s: Pick<Session, "url" | "hostLabel">) {
+function browserTitle(s: Pick<Session, "url">) {
   let title = "Browser";
   try {
     title = new URL(s.url).hostname || title;
   } catch {}
-  return s.hostLabel ? `${title} · ${s.hostLabel}` : title;
+  return title;
 }
 function AutoShowBrowsers({ threadId }: { threadId: string }) {
   const { threadId: selectedThreadId } = useBbContext();

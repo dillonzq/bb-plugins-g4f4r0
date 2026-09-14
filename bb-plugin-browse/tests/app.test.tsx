@@ -293,12 +293,12 @@ it("opens separate tabs for sessions on different hosts and keeps the newest sel
       {
         actionId: "live",
         params: { id: "ab-old" },
-        title: "example.com · server",
+        title: "example.com",
       },
       {
         actionId: "live",
         params: { id: "ab-new" },
-        title: "example.com · pro",
+        title: "example.com",
       },
     ]);
   } finally {
