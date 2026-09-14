@@ -1,3 +1,4 @@
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { browserIcons, type BrowserIconName } from "./src/browser-icons";
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -18,6 +19,10 @@ import {
   SettingsRowList,
   SettingsRow,
 } from "./components/ui/settings-section";
+
+function BrowserActionTooltip({ label, children }: { label: string; children: React.ReactNode }) {
+  return <TooltipPrimitive.Provider delayDuration={400}><TooltipPrimitive.Root><TooltipPrimitive.Trigger asChild><span className="inline-flex">{children}</span></TooltipPrimitive.Trigger><TooltipPrimitive.Portal><TooltipPrimitive.Content side="bottom" sideOffset={4} collisionPadding={8} className="z-50 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground">{label}</TooltipPrimitive.Content></TooltipPrimitive.Portal></TooltipPrimitive.Root></TooltipPrimitive.Provider>;
+}
 
 type Health = z.infer<typeof health>;
 type Machine = { hostId: string; label: string; connected: boolean };
@@ -538,9 +543,9 @@ function LiveBrowser({
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
         <form aria-label="Browser navigation" className="flex shrink-0 items-center gap-1 border-b px-2 py-1" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Back" disabled><BrowseIcon name="ArrowLeft" className="size-4" /></Button>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Forward" disabled><BrowseIcon name="ArrowRight" className="size-4" /></Button>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Refresh sessions" onClick={() => void sync()}><BrowseIcon name="RefreshCw" className="size-4" /></Button>
+          <BrowserActionTooltip label="Back"><Button type="button" variant="ghost" size="icon-sm" aria-label="Back" disabled><BrowseIcon name="ArrowLeft" className="size-4" /></Button></BrowserActionTooltip>
+          <BrowserActionTooltip label="Forward"><Button type="button" variant="ghost" size="icon-sm" aria-label="Forward" disabled><BrowseIcon name="ArrowRight" className="size-4" /></Button></BrowserActionTooltip>
+          <BrowserActionTooltip label="Refresh sessions"><Button type="button" variant="ghost" size="icon-sm" aria-label="Refresh sessions" onClick={() => void sync()}><BrowseIcon name="RefreshCw" className="size-4" /></Button></BrowserActionTooltip>
           <input
             aria-label="Website address"
             className="h-8 min-w-0 flex-1 rounded-md bg-transparent px-2 py-0 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -552,7 +557,7 @@ function LiveBrowser({
             spellCheck={false}
             required
           />
-          <Button type="submit" variant="ghost" size="icon-sm" aria-label={opening ? "Opening" : "Go"} disabled={opening || !address.trim()}><BrowseIcon name="ArrowRight" className="size-4" /></Button>
+          <BrowserActionTooltip label={opening ? "Opening" : "Go"}><Button type="submit" variant="ghost" size="icon-sm" aria-label={opening ? "Opening" : "Go"} disabled={opening || !address.trim()}><BrowseIcon name="ArrowRight" className="size-4" /></Button></BrowserActionTooltip>
         </form>
         <div className="min-h-0 flex-1 overflow-auto flex flex-col">
           <div className="m-auto w-full max-w-3xl px-6 py-12">
