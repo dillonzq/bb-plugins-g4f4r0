@@ -122,7 +122,8 @@ function StatusDisclosure(_props: ExperimentalSidebarFooterDisclosureProps) {
   return (
     <div ref={container} data-beacon-shell className="w-72 max-w-[calc(100vw-2rem)] divide-y divide-border">
       {error ? <div role="alert" className="px-4 py-2 text-xs text-destructive">Could not refresh: {error}</div> : null}
-      {!active ? null : snapshot ? <StatusPopover snapshot={snapshot} /> : (
+      {/* The skeleton gives the shell height so the visibility observer can activate polling. */}
+      {active && snapshot ? <StatusPopover snapshot={snapshot} /> : (
         <div className="space-y-4 p-4" aria-busy="true" aria-label="Loading server metrics">
           {Array.from({ length: 4 }, (_, i) => <div key={i} className="space-y-2"><Skeleton className="h-3 w-full" /><Skeleton className={cn("w-full rounded-none", i === 0 ? "h-6" : "h-2")} /></div>)}
         </div>
