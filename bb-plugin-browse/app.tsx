@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   definePluginApp,
   useRpc,
+  useBbContext,
+  useBbNavigate,
+  useRealtime,
   experimental_Icon as Icon,
 } from "@get-bb/plugin-sdk/app";
 import type { rpcContract, health, Job } from "./src/contracts";
@@ -376,4 +379,80 @@ export default definePluginApp((app) => {
     id: "browse-settings",
     component: BrowseSettings,
   });
+  app.slots.threadPanelAction({
+    id: "live",
+    title: "Browser",
+    icon: "Globe",
+    layout: "flush",
+    component: LiveBrowser,
+  });
+  app.slots.experimental_appOverlay({
+    id: "auto-show",
+    component: AutoShowBrowsers,
+  });
 });
+
+function LiveBrowser({
+  params,
+}: {
+  threadId: string;
+  params: unknown;
+}) {
+  const id =
+    params &&
+    typeof params === "object" &&
+    !Array.isArray(params) &&
+    "id" in params
+      ? String((params as { id: unknown }).id)
+      : "";
+  if (!id)
+    return (
+      <p className="p-4 text-sm text-subtle-foreground">
+        No live browser session.
+      </p>
+    );
+  return (
+    <iframe
+      title="Live browser"
+      className="h-full w-full border-0 bg-black"
+      src={`/api/v1/plugins/browse/http/viewer?id=${encodeURIComponent(id)}`}
+    />
+  );
+}
+
+function AutoShowBrowsers() {
+  const { threadId } = useBbContext();
+  const nav = useBbNavigate();
+  const rpc = useRpc<typeof rpcContract>();
+  const shown = useRef(new Set<string>());
+  const sync = useCallback(async () => {
+    if (!threadId) return;
+    try {
+      const sessions = await rpc.call("list", { threadId });
+      for (const s of sessions) {
+        if (!["ready", "connecting"].includes(s.status)) continue;
+        if (shown.current.has(s.id)) continue;
+        let title = "Browser";
+        try {
+          title = new URL(s.url).hostname || title;
+        } catch {}
+        if (
+          nav.openThreadPanel({
+            actionId: "live",
+            params: { id: s.id },
+            title,
+          })
+        )
+          shown.current.add(s.id);
+      }
+    } catch {}
+  }, [nav, rpc, threadId]);
+  useRealtime("browser-changed", () => {
+    void sync();
+  });
+  useEffect(() => {
+    shown.current.clear();
+    void sync();
+  }, [sync]);
+  return null;
+}

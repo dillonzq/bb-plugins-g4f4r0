@@ -8,11 +8,11 @@ No Browserbase, Browser Use Cloud, AI Gateway, Stagehand API, or second model is
 
 ## Use it
 
-Browse runs through agent tools and the `bb browse` CLI. It adds a dependency page in Settings and no global navigation entry or item in the thread panel’s new-tab menu. The plugin remains visible in BB’s Installed plugins management list.
+Browse runs through agent tools and the `bb browse` CLI. It adds a dependency page in Settings and a Browser tab in the thread side panel. The plugin remains visible in BB’s Installed plugins management list.
 
-Start with `bb browse start '{"url":"https://example.com"}'` from a BB thread. Browse resolves that thread’s environment host. Run `probe` to check readiness, `setup` to install dependencies, and `reveal '{"id":"SESSION"}'` for a live viewer link. Settings lists all enrolled machines with independent checks and installation actions; offline machines are shown separately.
+Start with `bb browse start '{"url":"https://example.com"}'` from a BB thread. Browse resolves that thread’s environment host and opens headed Chrome. The live page appears in the thread panel. Run `probe` to check readiness and `setup` to install dependencies, including Xvfb on Linux hosts without a display. Settings lists all enrolled machines with independent checks and installation actions; offline machines are shown separately.
 
-The viewer is a custom authenticated web view with periodic frames, clicking, typing/pasting, navigation keys and scrolling. It is available on demand and does not add a launcher. It is not BB’s native Electron browser surface. Closing the viewer leaves automation running. Relative viewer URLs resolve against the current BB web origin.
+The viewer is a custom authenticated web view with periodic frames, clicking, typing/pasting, navigation keys and scrolling. It opens automatically when a managed session starts. It is not BB’s native Electron browser surface. Relative viewer URLs resolve against the current BB web origin.
 
 `mode:"native"` retains the existing desktop backend and requires fresh hostId, instanceId and generation. The legacy preferredHost applies only to native discovery; it never changes managed placement.
 

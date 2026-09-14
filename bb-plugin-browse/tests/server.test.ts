@@ -29,7 +29,10 @@ async function fixture(
   const { bb, harness } = createFakePluginHost({
     pluginId: "browse",
     sdk: {
-      threads: { get: async () => ({ environmentId: "env_thread" }) as any },
+      threads: {
+        get: async () => ({ environmentId: "env_thread" }) as any,
+        paneAction: async () => ({ delivered: 1 }),
+      },
       environments: {
         get: async () =>
           ({ hostId: options.executionHost ?? "host_thread" }) as any,

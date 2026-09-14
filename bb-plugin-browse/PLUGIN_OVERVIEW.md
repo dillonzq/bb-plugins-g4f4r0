@@ -2,9 +2,9 @@
 
 Runs managed Chromium on each thread’s execution host using Vercel Agent Browser; explicit native mode also controls BB desktop tabs. No cloud browser subscription or additional model is required.
 
-- `app.tsx`: dependency Settings and private credential form; no navigation or new-tab launcher.
+- `app.tsx`: dependency Settings, live thread-panel viewer, and private credential form.
 - `src/managed.ts`: browser installation, private Linux dependencies, launch and shutdown.
-- `src/viewer.ts`: on-demand authenticated viewer.
+- `src/viewer.ts`: authenticated live viewer, opened automatically in the thread panel.
 - `src/native-download.ts`: event-driven button downloads.
 - `server.ts`: public BB SDK integration, leases, host routing, RPC, CLI and five agent tools.
 - `host.ts`: cancellable jobs, native runtime, tab binding, gestures, captures and artifacts.

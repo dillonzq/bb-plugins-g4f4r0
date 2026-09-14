@@ -26,6 +26,8 @@ it("shows every machine, probes connected hosts independently, and keeps offline
   const app = await loadPluginApp(() => import("../app"));
   expect(app.navPanels).toHaveLength(0);
   expect(app.settingsSections).toHaveLength(1);
+  expect(app.threadPanelActions).toHaveLength(1);
+  expect(app.appOverlays).toHaveLength(1);
   const slot = renderSlot(
     app.settingsSections[0]!,
     {},
@@ -147,6 +149,56 @@ it("installation targets its own machine and leaves other machine controls avail
         (c: any) => c.method === "probe" && c.input.hostId === "host_client",
       ),
     ).toHaveLength(2);
+  } finally {
+    slot.lifecycle.unmount();
+  }
+});
+it("opens a live thread panel when a managed session starts", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  const slot = renderSlot(
+    app.appOverlays[0]!,
+    {},
+    {
+      context: { threadId: "thread_one" },
+      rpc: {
+        list: () => [
+          {
+            id: "ab-live-1",
+            status: "ready",
+            url: "https://example.com/path",
+          },
+        ],
+      },
+    },
+  );
+  try {
+    await waitFor(() =>
+      expect(slot.inspection.navigateCalls).toEqual([
+        expect.objectContaining({
+          method: "openThreadPanel",
+          options: expect.objectContaining({
+            actionId: "live",
+            params: { id: "ab-live-1" },
+            title: "example.com",
+          }),
+        }),
+      ]),
+    );
+  } finally {
+    slot.lifecycle.unmount();
+  }
+});
+it("renders the live iframe for a session id", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  const slot = renderSlot(app.threadPanelActions[0]!, {
+    threadId: "thread_one",
+    params: { id: "ab-live-1" },
+  });
+  try {
+    const frame = slot.getByTitle("Live browser") as HTMLIFrameElement;
+    expect(frame.getAttribute("src")).toContain(
+      "/api/v1/plugins/browse/http/viewer?id=ab-live-1",
+    );
   } finally {
     slot.lifecycle.unmount();
   }

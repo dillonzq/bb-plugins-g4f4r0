@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import { join, delimiter } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -122,6 +122,7 @@ export async function installManaged(
           "libxkbcommon0",
           "fonts-liberation",
           "ffmpeg",
+          "xvfb",
         ],
         { signal, limit: 1000000 },
       );
@@ -137,6 +138,92 @@ export async function installManaged(
   } finally {
     install = undefined;
   }
+}
+export function chromeArgs(profile: string) {
+  return [
+    "--remote-debugging-address=127.0.0.1",
+    "--remote-debugging-port=0",
+    `--user-data-dir=${profile}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-dev-shm-usage",
+    "--window-size=1280,800",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    "about:blank",
+  ];
+}
+function findOnPath(env: NodeJS.ProcessEnv, name: string) {
+  for (const dir of (env.PATH ?? "").split(delimiter)) {
+    const p = join(dir, name);
+    if (existsSync(p)) return p;
+  }
+}
+let xvfb: { n: number; child: ChildProcess; users: number } | undefined;
+async function acquireDisplay(
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal,
+): Promise<{ env: NodeJS.ProcessEnv; release: () => Promise<void> }> {
+  if (process.env.DISPLAY)
+    return {
+      env: { ...env, DISPLAY: process.env.DISPLAY },
+      release: async () => {},
+    };
+  if (xvfb) {
+    xvfb.users++;
+    return {
+      env: { ...env, DISPLAY: `:${xvfb.n}` },
+      release: releaseDisplay,
+    };
+  }
+  const binary = findOnPath(env, "Xvfb");
+  if (!binary)
+    throw new Error(
+      "Headed Chrome needs a display. On this Linux host install Xvfb via Browse Settings, then retry.",
+    );
+  let n = 90;
+  while (n < 120 && (existsSync(`/tmp/.X${n}-lock`) || existsSync(`/tmp/.X11-unix/X${n}`)))
+    n++;
+  const child = spawn(
+    binary,
+    [`:${n}`, "-screen", "0", "1280x800x24", "-nolisten", "tcp", "-ac"],
+    { env, stdio: ["ignore", "ignore", "pipe"] },
+  );
+  let stderr = "";
+  child.stderr?.on("data", (b) => (stderr = (stderr + b.toString()).slice(-4000)));
+  const deadline = Date.now() + 8000;
+  while (!existsSync(`/tmp/.X11-unix/X${n}`)) {
+    signal.throwIfAborted();
+    if (child.exitCode !== null)
+      throw new Error("Xvfb exited: " + stderr);
+    if (Date.now() > deadline) {
+      child.kill("SIGKILL");
+      throw new Error("Xvfb startup timed out: " + stderr);
+    }
+    await sleep(50, undefined, { signal });
+  }
+  xvfb = { n, child, users: 1 };
+  child.once("exit", () => {
+    if (xvfb?.child === child) xvfb = undefined;
+  });
+  return {
+    env: { ...env, DISPLAY: `:${n}` },
+    release: releaseDisplay,
+  };
+}
+async function releaseDisplay() {
+  if (!xvfb) return;
+  xvfb.users--;
+  if (xvfb.users > 0) return;
+  const child = xvfb.child;
+  xvfb = undefined;
+  if (child.exitCode !== null || child.signalCode) return;
+  child.kill("SIGTERM");
+  await Promise.race([
+    new Promise<void>((r) => child.once("exit", () => r())),
+    sleep(1500),
+  ]);
+  if (child.exitCode === null && !child.signalCode) child.kill("SIGKILL");
 }
 export type ManagedBrowser = {
   process: ChildProcess;
@@ -194,25 +281,12 @@ async function launchBrowser(
   const profile = join(root, "profiles", profileId);
   await fs.mkdir(profile, { recursive: true, mode: 0o700 });
   await fs.rm(join(profile, "DevToolsActivePort"), { force: true });
-  const child = spawn(
-    info.chromePath,
-    [
-      "--headless=new",
-      "--remote-debugging-address=127.0.0.1",
-      "--remote-debugging-port=0",
-      `--user-data-dir=${profile}`,
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--disable-dev-shm-usage",
-      "--window-size=1280,800",
-      "about:blank",
-    ],
-    {
-      env: managedEnv(root),
-      stdio: ["ignore", "ignore", "pipe"],
-      windowsHide: true,
-    },
-  );
+  const display = await acquireDisplay(managedEnv(root), signal);
+  const child = spawn(info.chromePath, chromeArgs(profile), {
+    env: display.env,
+    stdio: ["ignore", "ignore", "pipe"],
+    windowsHide: true,
+  });
   let stderr = "";
   child.stderr?.on(
     "data",
@@ -220,19 +294,28 @@ async function launchBrowser(
   );
   let spawnError: Error | undefined;
   child.on("error", (e) => (spawnError = e));
+  let released = false;
   const close = async () => {
-    if (child.exitCode !== null || child.signalCode) return;
-    child.kill("SIGTERM");
-    await Promise.race([
-      new Promise<void>((r) => child.once("exit", () => r())),
-      sleep(2000),
-    ]);
-    if (child.exitCode === null && !child.signalCode) {
-      child.kill("SIGKILL");
-      await Promise.race([
-        new Promise<void>((r) => child.once("exit", () => r())),
-        sleep(2000),
-      ]);
+    try {
+      if (child.exitCode === null && !child.signalCode) {
+        child.kill("SIGTERM");
+        await Promise.race([
+          new Promise<void>((r) => child.once("exit", () => r())),
+          sleep(2000),
+        ]);
+        if (child.exitCode === null && !child.signalCode) {
+          child.kill("SIGKILL");
+          await Promise.race([
+            new Promise<void>((r) => child.once("exit", () => r())),
+            sleep(2000),
+          ]);
+        }
+      }
+    } finally {
+      if (!released) {
+        released = true;
+        await display.release();
+      }
     }
   };
   try {
@@ -247,13 +330,17 @@ async function launchBrowser(
         )
           .trim()
           .split("\n");
-        if (/^\d+$/.test(port) && path.startsWith("/devtools/browser/"))
+        if (/^\d+$/.test(port) && path.startsWith("/devtools/browser/")) {
+          child.once("exit", () => {
+            void close();
+          });
           return {
             process: child,
             endpoint: `ws://127.0.0.1:${port}${path}`,
             profile,
             close,
           };
+        }
       } catch {}
       if (Date.now() > deadline)
         throw new Error("Chrome startup timed out: " + stderr);
