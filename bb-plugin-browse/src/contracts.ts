@@ -210,6 +210,7 @@ export const hostContract = defineRpcContract({
     output: z.object({
       data: z.string(),
       url: z.string(),
+      loading: z.boolean().optional(),
       width: z.number(),
       height: z.number(),
       seq: z.number(),

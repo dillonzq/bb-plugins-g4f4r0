@@ -240,9 +240,12 @@ it("uses a resized viewport for live frames and scroll coordinates", async () =>
       j = await h.experimental_call("job", { id: j.id });
     }
     expect(j.status).toBe("succeeded");
+    mock.evaluate.mockResolvedValueOnce("https://example.com").mockResolvedValueOnce(true as any);
     expect(
       await h.experimental_call("frame", { id: "ab-viewport" }),
-    ).toMatchObject({ data: "jpeg", width: 390, height: 600, seq: 1 });
+    ).toMatchObject({ data: "jpeg", width: 390, height: 600, seq: 1, loading: true });
+    mock.evaluate.mockResolvedValueOnce("https://example.com").mockResolvedValueOnce(false as any);
+    expect(await h.experimental_call("frame", { id: "ab-viewport" })).toMatchObject({ loading: false });
     expect(mock.startLiveCast).toHaveBeenCalled();
     expect(mock.nextLiveFrame).toHaveBeenCalled();
     await h.experimental_call("input", {

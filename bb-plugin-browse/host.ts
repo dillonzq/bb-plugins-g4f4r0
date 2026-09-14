@@ -739,8 +739,8 @@ export default experimental_defineHostEntry({
         throw new Error("Browser is not ready");
       await s.cdp.startLiveCast();
       const live = await s.cdp.nextLiveFrame(after);
-      const url = await s.cdp.evaluate("location.href");
-      return { ...live, url };
+      const [url, loading] = await Promise.all([s.cdp.evaluate("location.href"), s.cdp.evaluate('document.readyState !== "complete"')]);
+      return { ...live, url, loading: loading === true };
     },
     input: async ({ id, input }, ctx) => {
       const s = session(id);
