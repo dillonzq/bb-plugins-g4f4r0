@@ -6,14 +6,14 @@ try {
  await context.addInitScript(()=>{
   window.qaFrames=[];
   const observe=()=>{
-   const s=document.querySelector('[data-promptbox-shell]:has(#root-compose-prompt)'),h=s?.closest('[class~="@container/page"]')?.parentElement,c=document.querySelector('.silk-wallpaper');
+   const s=document.querySelector('[data-promptbox-shell]:has(#root-compose-prompt)'),h=s?.closest('[class~="@container/page"]')?.parentElement,c=document.querySelector('.dusk-wallpaper');
    if(s&&h){const a=s.getBoundingClientRect(),b=h.getBoundingClientRect();window.qaFrames.push({dy:Math.abs((a.top+a.bottom-b.top-b.bottom)/2),ready:c?.hasAttribute('data-ready'),alpha:c?.hasAttribute('data-ready')?c.getContext('2d').getImageData(0,0,1,1).data[3]:null});}
    requestAnimationFrame(observe);
   };requestAnimationFrame(observe);
  });
  const page=await context.newPage();
- await context.route('**/api/v1/plugins/silk/rpc/get',async route=>{const response=await route.fetch();await new Promise(r=>setTimeout(r,1800));await route.fulfill({response});});
- await page.goto('http://127.0.0.1:38886');await page.locator('.silk-wallpaper[data-ready]').waitFor();
+ await context.route('**/api/v1/plugins/dusk/rpc/get',async route=>{const response=await route.fetch();await new Promise(r=>setTimeout(r,1800));await route.fulfill({response});});
+ await page.goto('http://127.0.0.1:38886');await page.locator('.dusk-wallpaper[data-ready]').waitFor();
  await page.waitForTimeout(200);
  const load=await page.evaluate(()=>({frames:qaFrames.length,maxCenterError:Math.max(...qaFrames.map(f=>f.dy)),blankReadyFrames:qaFrames.filter(f=>f.ready&&f.alpha"'!==255).length}));
  console.log('"'loading',load);assert(load.maxCenterError<12);assert.equal(load.blankReadyFrames,0);

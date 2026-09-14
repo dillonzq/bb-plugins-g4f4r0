@@ -4,7 +4,7 @@ const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try {
  const page=await browser.newPage({viewport:{width:1200,height:900}});
  await page.goto('http://127.0.0.1:38886');
- await page.locator('.silk-customize').waitFor();
+ await page.locator('.dusk-customize').waitFor();
  const labels=['Thread working','Thread needs user input','Unread thread failed','Unread thread succeeded','Thread has a message waiting to send','Thread has unsubmitted draft','Thread working with unsubmitted draft','Plan mode active','Goal active','Workflow running','Background agent running','Background command running','Queued message failed to send'];
  await page.evaluate(labels=>{
   const f=document.createElement('section');f.id='qa-states';f.dataset.sidebar='sidebar';f.style.cssText='position:fixed;inset:30px;z-index:99999;background:var(--sidebar);padding:24px;color:var(--foreground)';
@@ -26,9 +26,9 @@ try {
    if(s.label.includes('draft'))assert(s.tint.includes('linear-gradient'));
   });
  }
- await page.screenshot({path:'/tmp/silk-sidebar-states-light.png'});
+ await page.screenshot({path:'/tmp/dusk-sidebar-states-light.png'});
  await page.emulateMedia({colorScheme:'dark'});await page.waitForTimeout(150);
- await page.screenshot({path:'/tmp/silk-sidebar-states-dark.png'});
+ await page.screenshot({path:'/tmp/dusk-sidebar-states-dark.png'});
  await page.locator('#qa-states').evaluate(n=>n.remove());
  console.log('PASS sidebar states: all native labels preserved, static artwork, ring/solid sizing, draft tint, light/dark');
 }finally{await browser.close();}

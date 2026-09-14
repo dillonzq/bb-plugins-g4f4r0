@@ -1,6 +1,6 @@
 const leftSelector = '[data-testid="app-desktop-sidebar-trigger"] [data-sidebar="trigger"], [data-testid="app-sidebar-trigger-overlay"] [data-sidebar="trigger"]';
-const showSelector = 'button[aria-label^="Show right panel"]:not([data-silk-panel-toggle])';
-const hideSelector = 'button[aria-label^="Hide right panel"]:not([data-silk-panel-toggle])';
+const showSelector = 'button[aria-label^="Show right panel"]:not([data-dusk-panel-toggle])';
+const hideSelector = 'button[aria-label^="Hide right panel"]:not([data-dusk-panel-toggle])';
 
 /** Keep homepage controls stable while BB swaps and slides its native headers. */
 export function mountHomepageHeader(host: HTMLElement, control: HTMLElement, cutout: HTMLElement) {
@@ -8,8 +8,8 @@ export function mountHomepageHeader(host: HTMLElement, control: HTMLElement, cut
   // of state and behavior, with one persistent, viewport-pinned presentation.
   const panel = document.createElement("button");
   panel.type = "button";
-  panel.dataset.silkPanelToggle = "";
-  panel.className = "silk-panel-toggle";
+  panel.dataset.duskPanelToggle = "";
+  panel.className = "dusk-panel-toggle";
   panel.hidden = true;
   document.body.append(panel);
   let disposed = false, scheduled = 0, motionFrame = 0;
@@ -32,12 +32,12 @@ export function mountHomepageHeader(host: HTMLElement, control: HTMLElement, cut
     // Desktop follows the left toggle through sidebar width. Mobile hides the
     // pencil instead, so keep the resting x rather than sliding it with the shelf.
     const x = mobileShelfActive()
-      ? Number.parseFloat(control.style.getPropertyValue("--silk-header-x")) || 12
+      ? Number.parseFloat(control.style.getPropertyValue("--dusk-header-x")) || 12
       : (rect ? Math.max(12, rect.right + 4 - bounds.left) : 12);
     const y = rect ? Math.max(0, rect.top - bounds.top) : 10;
     for (const element of [control, cutout]) {
       element.style.top = `${y}px`;
-      element.style.setProperty("--silk-header-x", `${x}px`);
+      element.style.setProperty("--dusk-header-x", `${x}px`);
     }
     const strip = host.querySelector('[data-testid="root-compose-main-window-drag-strip"]');
     if (strip && cutout.parentElement !== strip) strip.append(cutout);
@@ -58,7 +58,7 @@ export function mountHomepageHeader(host: HTMLElement, control: HTMLElement, cut
     panel.hidden = !native;
     if (native) {
       // Use the left trigger's complete responsive sizing and hover treatment.
-      panel.className = `${left?.className ?? native.className} silk-panel-toggle`;
+      panel.className = `${left?.className ?? native.className} dusk-panel-toggle`;
       const icon = native.querySelector('[data-icon="PanelRight"]');
       if (icon && icon !== artwork) { panel.replaceChildren(icon.cloneNode(true)); artwork = icon; }
       setAttribute("aria-label", native.getAttribute("aria-label") ?? "Toggle right panel");

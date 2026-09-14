@@ -1,9 +1,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap");
 
-/* Silk: neutral surfaces with a Notion-inspired blue accent. */
+/* Dusk: neutral surfaces with a Notion-inspired blue accent. */
 :root {
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --silk-stop: #dc454b;
+  --dusk-stop: #dc454b;
   --canvas: #ffffff;
   --ink: #37352f;
   --background: var(--canvas);
@@ -34,7 +34,7 @@
   --sidebar-ring: var(--primary);
 }
 .dark {
-  --silk-stop: var(--destructive);
+  --dusk-stop: var(--destructive);
   --canvas: #131314;
   --ink: #dededc;
   --background: var(--canvas);
@@ -120,11 +120,11 @@ button[aria-label="Stop and transcribe recording"]:hover {
 }
 
 [data-promptbox-submit-action][aria-label="Stop run"] {
-  background-color: var(--silk-stop);
+  background-color: var(--dusk-stop);
   color: #ffffff;
 }
 [data-promptbox-submit-action][aria-label="Stop run"]:hover {
-  background-color: color-mix(in srgb, var(--silk-stop) 90%, var(--foreground));
+  background-color: color-mix(in srgb, var(--dusk-stop) 90%, var(--foreground));
 }
 
 /* BB's shared Skeleton uses the primary-tinted selection surface. */

@@ -1,6 +1,6 @@
 # Photo dithering attribution
 
-Silk's photo effect is adapted from Aura by Mateo Cerquetella (MIT):
+Dusk's photo effect is adapted from Aura by Mateo Cerquetella (MIT):
 https://github.com/MateoCerquetella/bb-plugins/tree/4c5f90a58ea50e45431b94739ab4ffe41079b93e/plugins/aura
 
 See `licenses/AURA-MIT.txt`.
@@ -15,7 +15,7 @@ Aura extracted those shaders from Capy's public bundles on 2026-09-08:
 https://capy.ai/assets/bounded-dithering-CsxWlFZG.js
 https://capy.ai/assets/new-D4WvqOy9.js
 
-Silk adapts Aura's photo renderer in `lib/photo.ts` to its existing canvas,
+Dusk adapts Aura's photo renderer in `lib/photo.ts` to its existing canvas,
 image-change fades, lifecycle, and synchronous panel-resize rendering. It uses
 Aura's 8×8 pattern, four brightness steps, original colors, two-CSS-pixel cells,
 half-resolution framebuffer, 30 fps limit, and gentle threshold-wave animation.

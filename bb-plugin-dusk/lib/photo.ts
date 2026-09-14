@@ -2,7 +2,7 @@
 import { VERTEX_SHADER, ANIMATED_PHOTO_SHADER } from "./photo-shaders";
 import { drawFade } from "./fade";
 
-/** Aura's photo texture, presented through Silk's existing 2D wallpaper canvas. */
+/** Aura's photo texture, presented through Dusk's existing 2D wallpaper canvas. */
 export function animatePhoto(canvas: HTMLCanvasElement, image: HTMLImageElement, from: HTMLCanvasElement | null): () => void {
   const surface = document.createElement("canvas");
   const gl = surface.getContext("webgl2", { alpha: true, antialias: false, depth: false, stencil: false, premultipliedAlpha: true, preserveDrawingBuffer: false });

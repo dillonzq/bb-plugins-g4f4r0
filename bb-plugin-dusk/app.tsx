@@ -57,7 +57,7 @@ function BackgroundMenu() {
       if (file) void apply(file);
     }} />
     <DropdownMenu>
-      <DropdownMenuTrigger asChild><Button className="silk-background-edit" type="button" variant="ghost" size="icon" aria-label="Edit background" disabled={!config || busy}>
+      <DropdownMenuTrigger asChild><Button className="dusk-background-edit" type="button" variant="ghost" size="icon" aria-label="Edit background" disabled={!config || busy}>
         <Icon name={busy ? "Loading" : "Edit"} className={busy ? "size-4 animate-spin" : "size-4"} aria-hidden />
       </Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="bottom" sideOffset={6}>

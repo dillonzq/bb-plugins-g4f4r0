@@ -11,11 +11,11 @@ try {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     let gets = 0, saves = 0;
-    await page.route('**/api/v1/plugins/silk/rpc/get', async route => {
+    await page.route('**/api/v1/plugins/dusk/rpc/get', async route => {
       gets++;
       await route.fulfill({ json: { ok: true, result: { image: null } } });
     });
-    await page.route('**/api/v1/plugins/silk/rpc/save', async route => {
+    await page.route('**/api/v1/plugins/dusk/rpc/save', async route => {
       saves++;
       await route.fulfill({ json: { ok: true, result: route.request().postDataJSON() } });
     });
@@ -23,13 +23,13 @@ try {
     await page.waitForTimeout(1200);
     if ("'!await page.locator('"'#root-compose-prompt').count())
       await page.getByText('New thread', { exact: true })[mobile ? 'last' : 'first']().click();
-    await page.locator('.silk-wallpaper[data-ready]').waitFor();
-    if (mobile) await page.locator('[data-root-compose-mobile-recents] .silk-thread-meta').first().waitFor();
+    await page.locator('.dusk-wallpaper[data-ready]').waitFor();
+    if (mobile) await page.locator('[data-root-compose-mobile-recents] .dusk-thread-meta').first().waitFor();
     await page.locator('[aria-label="Edit background"]').click();
     await page.getByRole('menuitem').first().waitFor();
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
-    const canvas = await page.locator('.silk-wallpaper').evaluate(el => ({ width: el.width, expected: Math.round(Math.max(1, el.clientWidth) * Math.min(0.5, 2400 / el.clientWidth, 1800 / el.clientHeight)) }));
+    const canvas = await page.locator('.dusk-wallpaper').evaluate(el => ({ width: el.width, expected: Math.round(Math.max(1, el.clientWidth) * Math.min(0.5, 2400 / el.clientWidth, 1800 / el.clientHeight)) }));
     assert.equal(canvas.width, canvas.expected, 'Wallpaper must render at its styled size after cold load');
     assert.equal(gets, 1, 'Opening the background menu must not start a second settings read');
 
@@ -41,12 +41,12 @@ try {
       if ("'!home) {
         const link = page.locator(mobile ? '"'[data-root-compose-mobile-recents] a' : '[data-sidebar-thread-id]').first();
         await link.click();
-        await page.locator('.silk-background-header-action').waitFor({ state: 'detached' });
+        await page.locator('.dusk-background-header-action').waitFor({ state: 'detached' });
       }
       await page.locator('[contenteditable=true]').first().click();
       await page.waitForFunction(() => {
         const button = document.querySelector('[aria-label="Start voice input"]');
-        return button && getComputedStyle(button).getPropertyValue('--silk-action-size').trim() "'!== '"'';
+        return button && getComputedStyle(button).getPropertyValue('--dusk-action-size').trim() "'!== '"'';
       });
       await page.waitForFunction(size => {
         const r = document.querySelector('[aria-label="Start voice input"]')?.getBoundingClientRect();
@@ -65,7 +65,7 @@ try {
       assert.equal(recording.height, before.height);
       assert.equal(recording.bottom, recording.right);
       assert.equal(recording.right, 9);
-      await page.screenshot({ path: "'`/tmp/silk-review-${mobile ? '"'mobile' : 'desktop'}-"'${home ? '"'home' : 'thread'}.png"'` });
+      await page.screenshot({ path: "'`/tmp/dusk-review-${mobile ? '"'mobile' : 'desktop'}-"'${home ? '"'home' : 'thread'}.png"'` });
       await page.locator('"'[aria-label="Cancel recording"]').click();
     }
     assert.equal(saves, 0);

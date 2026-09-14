@@ -41,7 +41,7 @@ function findHomepageShells() {
   return found;
 }
 
-// BB owns the welcome actions and composer DOM. Silk only adds removable page
+// BB owns the welcome actions and composer DOM. Dusk only adds removable page
 // artwork and its control around either native surface.
 export function mountHomepage(signal: AbortSignal) {
   const attached = new Map<HTMLElement, { page: HTMLElement; dispose(): void; update(config: Config): void }>();
@@ -56,20 +56,20 @@ export function mountHomepage(signal: AbortSignal) {
       if (previous?.page === page) return;
       previous?.dispose();
 
-      const canvas = document.createElement("canvas"); canvas.className = "silk-wallpaper"; canvas.setAttribute("aria-hidden", "true");
-      const shield = document.createElement("div"); shield.className = "silk-shield"; shield.setAttribute("aria-hidden", "true");
+      const canvas = document.createElement("canvas"); canvas.className = "dusk-wallpaper"; canvas.setAttribute("aria-hidden", "true");
+      const shield = document.createElement("div"); shield.className = "dusk-shield"; shield.setAttribute("aria-hidden", "true");
       for (const element of [canvas, shield]) element.style.position = "absolute";
       for (const element of [canvas, shield]) { element.style.opacity = "0"; element.style.pointerEvents = "none"; }
-      const classes: [HTMLElement, string][] = [[host, "silk-home"], [page, "silk-page"]];
+      const classes: [HTMLElement, string][] = [[host, "dusk-home"], [page, "dusk-page"]];
       classes.forEach(([element, name]) => element.classList.add(name));
       host.prepend(canvas, shield);
 
-      const control = document.createElement("div"); control.className = "silk-background-header-action";
-      const cutout = document.createElement("div"); cutout.className = "silk-background-header-cutout"; cutout.setAttribute("aria-hidden", "true");
+      const control = document.createElement("div"); control.className = "dusk-background-header-action";
+      const cutout = document.createElement("div"); cutout.className = "dusk-background-header-cutout"; cutout.setAttribute("aria-hidden", "true");
       host.append(control);
       const disposeHeader = mountHomepageHeader(host, control, cutout);
       updateSlots([...slots, control]);
-      window.dispatchEvent(new Event("silk:homepage-ready"));
+      window.dispatchEvent(new Event("dusk:homepage-ready"));
 
       let styleFrame = 0;
       const adoptStyles = () => {

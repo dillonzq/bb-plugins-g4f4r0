@@ -1,5 +1,5 @@
 {
-  "name": "bb-plugin-silk",
+  "name": "bb-plugin-dusk",
   "version": "0.1.0",
   "type": "module",
   "engines": {
@@ -7,7 +7,7 @@
     "bbPluginSdk": ">=0.4.87"
   },
   "bb": {
-    "name": "Silk",
+    "name": "Dusk",
     "description": "A refined BB interface with a custom palette, sidebar details, and personal backgrounds.",
     "branding": {
       "icon": "Sparkles"
@@ -16,10 +16,10 @@
     "app": "./app.tsx",
     "themes": [
       {
-        "id": "silk",
-        "name": "Silk",
+        "id": "dusk",
+        "name": "Dusk",
         "description": "Soft charcoal surfaces with a Notion-inspired blue accent.",
-        "css": "./themes/silk.css"
+        "css": "./themes/dusk.css"
       }
     ]
   },

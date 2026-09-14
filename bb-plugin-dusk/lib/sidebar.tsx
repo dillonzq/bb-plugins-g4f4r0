@@ -39,7 +39,7 @@ export function SidebarDetails() {
   useLayoutEffect(() => {
     const entries = new Map<HTMLElement, Mount>(); let frame = 0;
     const knownIds = new Set(threads.map(t => t.id));
-    const dispose = (m: Mount) => { m.meta.remove(); m.pin?.remove(); m.row.removeAttribute('data-silk-thread-row'); m.nativeMeta?.removeAttribute('data-silk-native-meta'); };
+    const dispose = (m: Mount) => { m.meta.remove(); m.pin?.remove(); m.row.removeAttribute('data-dusk-thread-row'); m.nativeMeta?.removeAttribute('data-dusk-native-meta'); };
     const sync = () => {
       frame = 0; let changed = false; const found = new Set<HTMLElement>();
       document.querySelectorAll<HTMLElement>('[data-sidebar="sidebar"] a[data-sidebar-thread-id]').forEach(link => {
@@ -50,25 +50,25 @@ export function SidebarDetails() {
         const old = entries.get(link);
         if (old && old.id === id && old.meta.parentElement === row && (old.pin?.parentElement ?? null) === controls) return;
         if (old) dispose(old);
-        const meta = document.createElement('span'); meta.className = 'silk-thread-meta';
-        row.setAttribute('data-silk-thread-row', ''); row.append(meta);
+        const meta = document.createElement('span'); meta.className = 'dusk-thread-meta';
+        row.setAttribute('data-dusk-thread-row', ''); row.append(meta);
         let pin: HTMLElement | null = null;
         const pinClass = controls?.querySelector('button')?.className || 'size-7 p-0';
-        if (controls) { pin = document.createElement('span'); pin.className = 'silk-pin-slot'; controls.prepend(pin); }
+        if (controls) { pin = document.createElement('span'); pin.className = 'dusk-pin-slot'; controls.prepend(pin); }
         entries.set(link, { id, link, row, meta, pin, pinClass }); changed = true;
       });
       document.querySelectorAll<HTMLElement>('[data-root-compose-mobile-recents] a[href]').forEach(link => {
         const id = link.getAttribute('href')?.match(/\/threads\/(thr_[^/?#]+)/)?.[1];
         const row = link.parentElement;
         const text = link.querySelector<HTMLElement>(':scope > span.min-w-0');
-        const nativeMeta = text?.querySelector<HTMLElement>(':scope > span:nth-child(2):not(.silk-thread-meta)');
+        const nativeMeta = text?.querySelector<HTMLElement>(':scope > span:nth-child(2):not(.dusk-thread-meta)');
         if (!id || !row || !text || !nativeMeta || !knownIds.has(id)) return;
         found.add(link);
         const old = entries.get(link);
         if (old && old.meta.parentElement === text && old.nativeMeta === nativeMeta) return;
         if (old) dispose(old);
-        const meta = document.createElement('span'); meta.className = 'silk-thread-meta';
-        nativeMeta.setAttribute('data-silk-native-meta', ''); text.append(meta);
+        const meta = document.createElement('span'); meta.className = 'dusk-thread-meta';
+        nativeMeta.setAttribute('data-dusk-native-meta', ''); text.append(meta);
         entries.set(link, { id, link, row, meta, nativeMeta, pin: null, pinClass: '' }); changed = true;
       });
       for (const [link, entry] of entries) if (!found.has(link)) { dispose(entry); entries.delete(link); changed = true; }
@@ -78,9 +78,9 @@ export function SidebarDetails() {
     const roots = '[data-sidebar="sidebar"], [data-root-compose-mobile-recents], #root-compose-prompt';
     let stopObserving = observeRoots(roots, schedule);
     const homepageReady = () => { stopObserving(); stopObserving = observeRoots(roots, schedule); schedule(); };
-    window.addEventListener('silk:homepage-ready', homepageReady);
+    window.addEventListener('dusk:homepage-ready', homepageReady);
     sync();
-    return () => { window.removeEventListener('silk:homepage-ready', homepageReady); stopObserving(); cancelAnimationFrame(frame); entries.forEach(dispose); };
+    return () => { window.removeEventListener('dusk:homepage-ready', homepageReady); stopObserving(); cancelAnimationFrame(frame); entries.forEach(dispose); };
   }, [threads.map(t => t.id).sort().join(',')]);
   const ids = [...new Set(mounts.map(m => m.id))].sort().join(',');
   useEffect(() => {
@@ -107,7 +107,7 @@ export function SidebarDetails() {
     const location = branch || thread.environment?.name || thread.host?.name;
     const at = times[m.id];
     return <span key={m.id + '-' + mounts.indexOf(m)} style={{ display: 'contents' }}>
-      {createPortal(<>{location && <><Icon name={branch ? 'GitBranch' : thread.environment?.name ? 'Folder' : 'Laptop'} aria-hidden /><span className="silk-thread-location">{location}</span></>}
+      {createPortal(<>{location && <><Icon name={branch ? 'GitBranch' : thread.environment?.name ? 'Folder' : 'Laptop'} aria-hidden /><span className="dusk-thread-location">{location}</span></>}
         {location && at != null && <span aria-hidden>·</span>}
         {at != null && <time dateTime={new Date(at).toISOString()} title={`Last message: ${new Date(at).toLocaleString()}`}>{relativeMessageTime(at, now)}</time>}
       </>, m.meta)}

@@ -1,6 +1,6 @@
 # Custom BB plugins
 
-Permanent source for Browse, Beacon, Sidetree, and Silk. BB loads these directories in place from this checkout. Remote: https://github.com/g4f4r0/bb-plugins
+Permanent source for Browse, Beacon, Sidetree, and Dusk. BB loads these directories in place from this checkout. Remote: https://github.com/g4f4r0/bb-plugins
 
 Do not install these plugins from a thread workspace, temporary directory, or disposable worktree.
 
@@ -9,7 +9,7 @@ Do not install these plugins from a thread workspace, temporary directory, or di
 | Browse | `browse` | `bb-plugin-browse` |
 | Beacon | `beacon` | `bb-plugin-beacon` |
 | Sidetree | `sidetree` | `bb-plugin-sidetree` |
-| Silk | `silk` | `bb-plugin-silk` |
+| Dusk | `dusk` | `bb-plugin-dusk` |
 
 Keep these IDs when repairing plugins so settings and saved data stay associated with them. Agent Plugins is a separate local package and is not part of this repository.
 
@@ -17,7 +17,7 @@ Keep these IDs when repairing plugins so settings and saved data stay associated
 
 1. Check the installed source with `bb plugin source <id> --json` and inspect `git status` here.
 2. Edit the permanent package. Preserve unrelated changes. Do not work from an old archived thread copy.
-3. Use `npm ci --include=dev` when restoring dependencies from the committed lockfile. Run the package's checks, inspect the diff, and commit the relevant files. Browse and Beacon have substantial test suites; Silk also has an optional browser-based homepage test.
+3. Use `npm ci --include=dev` when restoring dependencies from the committed lockfile. Run the package's checks, inspect the diff, and commit the relevant files. Browse and Beacon have substantial test suites; Dusk also has an optional browser-based homepage test.
 4. From this directory, run `node maintenance/install.mjs <id>`.
 5. Verify the actual feature in BB. A successful build does not establish that its UI or host runtime works.
 

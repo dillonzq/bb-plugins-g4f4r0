@@ -39,17 +39,17 @@ export function HistoryPreview() {
           const question = normalize(hit.pairs[i].question);
           return !label || !question || label.slice(0, 64) !== question.slice(0, 64);
         })) {
-          panel.removeAttribute('data-silk-history');
-          panel.querySelectorAll('.silk-history-answer').forEach(n => n.remove());
+          panel.removeAttribute('data-dusk-history');
+          panel.querySelectorAll('.dusk-history-answer').forEach(n => n.remove());
           return;
         }
-        const firstPairing = !panel.hasAttribute('data-silk-history');
-        panel.setAttribute('data-silk-history', '');
+        const firstPairing = !panel.hasAttribute('data-dusk-history');
+        panel.setAttribute('data-dusk-history', '');
         buttons.forEach((button, i) => {
-          let answer = button.querySelector<HTMLElement>('.silk-history-answer');
+          let answer = button.querySelector<HTMLElement>('.dusk-history-answer');
           const text = hit.pairs[i].answer;
           if (!text) { answer?.remove(); return; }
-          if (!answer) { answer = document.createElement('span'); answer.className = 'silk-history-answer'; button.append(answer); }
+          if (!answer) { answer = document.createElement('span'); answer.className = 'dusk-history-answer'; button.append(answer); }
           if (answer.textContent !== text) answer.textContent = text;
         });
         if (firstPairing) {
@@ -64,15 +64,15 @@ export function HistoryPreview() {
       for (const panel of panels.keys()) if (!panel.isConnected) panels.delete(panel);
     };
     const observer = new MutationObserver(records => {
-      if (records.some(r => !(r.target instanceof Element && r.target.closest('.silk-history-answer')))) schedule();
+      if (records.some(r => !(r.target instanceof Element && r.target.closest('.dusk-history-answer')))) schedule();
     });
     observer.observe(document.body, { childList: true, subtree: true });
     sync();
     return () => {
       disposed = true; observer.disconnect(); cancelAnimationFrame(frame);
       for (const [panel, previous] of panels) {
-        panel.removeAttribute('data-silk-history');
-        panel.querySelectorAll('.silk-history-answer').forEach(n => n.remove());
+        panel.removeAttribute('data-dusk-history');
+        panel.querySelectorAll('.dusk-history-answer').forEach(n => n.remove());
         if (previous?.isConnected) previous.click();
       }
     };

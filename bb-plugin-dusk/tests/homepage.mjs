@@ -5,14 +5,14 @@ import { chromium } from "playwright";
 // Run against a local path installation. Browser RPC is intercepted so image
 // tests do not replace the user's saved background or publish realtime changes.
 const base = process.env.BB_TEST_URL || "http://127.0.0.1:38886";
-const artifacts = process.env.SILK_ARTIFACTS || "/tmp/silk-checks";
+const artifacts = process.env.DUSK_ARTIFACTS || "/tmp/dusk-checks";
 await mkdir(artifacts, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
 const errors = [];
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, colorScheme: "dark" });
   let config = { image: null };
-  await context.route("**/api/v1/plugins/silk/rpc/*", async (route) => {
+  await context.route("**/api/v1/plugins/dusk/rpc/*", async (route) => {
     if (route.request().url().endsWith("/save")) config = route.request().postDataJSON();
     await route.fulfill({ json: { ok: true, result: config } });
   });
@@ -21,8 +21,8 @@ try {
   page.setDefaultNavigationTimeout(20000);
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(base);
-  await page.locator(".silk-customize").waitFor();
-  const measure = () => page.locator(".silk-home").evaluate((host) => {
+  await page.locator(".dusk-customize").waitFor();
+  const measure = () => page.locator(".dusk-home").evaluate((host) => {
     const form = host.querySelector("form").getBoundingClientRect();
     const metadata = host.querySelector("form + div").getBoundingClientRect();
     const outer = host.getBoundingClientRect();
@@ -33,12 +33,12 @@ try {
     };
   });
   let bounds = await measure();
-  assert.equal(await page.locator('.silk-shield').count(), 1);
-  assert.equal(await page.locator('.silk-shield').evaluate(el => getComputedStyle(el).pointerEvents), 'none');
-  assert.match(await page.locator('.silk-shield').evaluate(el => getComputedStyle(el).backgroundImage), /^linear-gradient/);
-  assert.equal(await page.locator('.silk-composer-shadow').count(), 1);
-  assert.equal(await page.locator('.silk-composer-shadow').evaluate(el => getComputedStyle(el).pointerEvents), 'none');
-  assert.notEqual(await page.locator('.silk-composer-shadow').evaluate(el => getComputedStyle(el).boxShadow), 'none');
+  assert.equal(await page.locator('.dusk-shield').count(), 1);
+  assert.equal(await page.locator('.dusk-shield').evaluate(el => getComputedStyle(el).pointerEvents), 'none');
+  assert.match(await page.locator('.dusk-shield').evaluate(el => getComputedStyle(el).backgroundImage), /^linear-gradient/);
+  assert.equal(await page.locator('.dusk-composer-shadow').count(), 1);
+  assert.equal(await page.locator('.dusk-composer-shadow').evaluate(el => getComputedStyle(el).pointerEvents), 'none');
+  assert.notEqual(await page.locator('.dusk-composer-shadow').evaluate(el => getComputedStyle(el).boxShadow), 'none');
   assert(bounds.dx < 2 && bounds.dy < 12 && !bounds.overflow, JSON.stringify(bounds));
   const nativeComparison = await page.evaluate(() => {
     const shell = document.querySelector('[data-promptbox-shell]');
@@ -51,14 +51,14 @@ try {
       });
     };
     const centered = snapshot();
-    const changes = ['silk-home', 'silk-page', 'silk-column', 'silk-composer'].flatMap(name => [...document.querySelectorAll('.' + name)].map(el => [el, name]));
+    const changes = ['dusk-home', 'dusk-page', 'dusk-column', 'dusk-composer'].flatMap(name => [...document.querySelectorAll('.' + name)].map(el => [el, name]));
     changes.forEach(([el, name]) => el.classList.remove(name));
     const native = snapshot();
     changes.forEach(([el, name]) => el.classList.add(name));
     return { centered, native };
   });
   assert.deepEqual(nativeComparison.centered, nativeComparison.native, 'Composer pixels, geometry and styles must match native BB');
-  const artwork = page.locator('.silk-wallpaper');
+  const artwork = page.locator('.dusk-wallpaper');
   const beforeMotion = await artwork.evaluate(el => el.toDataURL());
   await page.waitForTimeout(850);
   assert.notEqual(await artwork.evaluate(el => el.toDataURL()), beforeMotion, 'Ambient background should animate');
@@ -80,10 +80,10 @@ try {
   await page.evaluate(() => document.documentElement.style.removeProperty('--primary'));
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   console.log('PASS: native composer geometry/styles, animation, primary theme color and reduced motion');
-  await page.locator('[id="root-compose-prompt"]').fill("Silk test draft — do not submit");
-  await page.locator('[id="root-compose-prompt"]').evaluate((el) => { window.silkOriginalEditor = el; });
+  await page.locator('[id="root-compose-prompt"]').fill("Dusk test draft — do not submit");
+  await page.locator('[id="root-compose-prompt"]').evaluate((el) => { window.duskOriginalEditor = el; });
   await page.screenshot({ path: `${artifacts}/homepage-dark.png` });
-  await page.getByRole("button", { name: "Customize Silk homepage" }).click();
+  await page.getByRole("button", { name: "Customize Dusk homepage" }).click();
   await page.getByRole("menuitem", { name: "Choose image", exact: true }).waitFor();
   assert.equal(await page.getByRole("dialog").count(), 0);
   assert.equal(await page.getByRole("slider").count(), 0);
@@ -102,27 +102,27 @@ try {
   await page.getByRole("menuitem", { name: "Choose image", exact: true }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles({ name: "test-background.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
-  await page.waitForFunction(() => document.querySelector('.silk-customize')?.getAttribute('aria-busy') === 'false');
+  await page.waitForFunction(() => document.querySelector('.dusk-customize')?.getAttribute('aria-busy') === 'false');
   assert(config.image.startsWith("data:image/webp;base64,"));
   assert(config.image.length <= 220_000);
   await page.keyboard.press("Escape");
-  assert(await page.locator('[id="root-compose-prompt"]').evaluate((el) => el === window.silkOriginalEditor));
-  assert.match(await page.locator('[id="root-compose-prompt"]').innerText(), /Silk test draft/);
+  assert(await page.locator('[id="root-compose-prompt"]').evaluate((el) => el === window.duskOriginalEditor));
+  assert.match(await page.locator('[id="root-compose-prompt"]').innerText(), /Dusk test draft/);
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${artifacts}/background-dark.png` });
   await page.emulateMedia({ colorScheme: "light" });
   await page.waitForFunction(() => !document.documentElement.classList.contains("dark"));
   await page.waitForTimeout(200);
   await page.screenshot({ path: `${artifacts}/background-light.png` });
-  await page.getByRole("button", { name: "Customize Silk homepage" }).click();
+  await page.getByRole("button", { name: "Customize Dusk homepage" }).click();
   await page.getByRole("menuitem", { name: "Change image", exact: true }).waitFor();
   await page.getByRole("menuitem", { name: "Remove image", exact: true }).click();
-  await page.waitForFunction(() => document.querySelector('.silk-customize')?.getAttribute('aria-busy') === 'false');
+  await page.waitForFunction(() => document.querySelector('.dusk-customize')?.getAttribute('aria-busy') === 'false');
   assert.equal(config.image, null);
   await page.keyboard.press("Escape");
   await page.reload();
-  await page.locator(".silk-customize").waitFor();
-  assert.equal(await page.locator(".silk-wallpaper").count(), 1);
+  await page.locator(".dusk-customize").waitFor();
+  assert.equal(await page.locator(".dusk-wallpaper").count(), 1);
 
   console.log("PASS: image upload, removal, theme changes, draft identity and refresh");
   for (const width of [390, 1024, 1440]) {
@@ -134,11 +134,11 @@ try {
   console.log("PASS: responsive bounds");
   for (let i = 0; i < 2; i++) {
     await page.getByText("Plugins", { exact: true }).first().click();
-    await page.waitForFunction(() => !document.querySelector(".silk-home"));
-    assert.equal(await page.locator(".silk-wallpaper, .silk-shield, .silk-composer-shadow, .silk-customize").count(), 0);
+    await page.waitForFunction(() => !document.querySelector(".dusk-home"));
+    assert.equal(await page.locator(".dusk-wallpaper, .dusk-shield, .dusk-composer-shadow, .dusk-customize").count(), 0);
     await page.goBack();
-    await page.locator(".silk-customize").waitFor();
-    assert.equal(await page.locator(".silk-wallpaper").count(), 1);
+    await page.locator(".dusk-customize").waitFor();
+    assert.equal(await page.locator(".dusk-wallpaper").count(), 1);
   }
   await context.close();
 
@@ -147,10 +147,10 @@ try {
   mobilePage.setDefaultTimeout(10000);
   mobilePage.on("pageerror", (error) => errors.push(error.message));
   await mobilePage.goto(base);
-  await mobilePage.locator(".silk-customize").waitFor();
+  await mobilePage.locator(".dusk-customize").waitFor();
   await mobilePage.screenshot({ path: `${artifacts}/homepage-mobile.png` });
   assert.equal(await mobilePage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-  await mobilePage.getByRole("button", { name: "Customize Silk homepage" }).click();
+  await mobilePage.getByRole("button", { name: "Customize Dusk homepage" }).click();
   await mobilePage.getByText("Change image", { exact: true }).waitFor();
   await mobile.close();
   assert.deepEqual(errors, []);

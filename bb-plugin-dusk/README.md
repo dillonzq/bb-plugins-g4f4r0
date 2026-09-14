@@ -1,26 +1,26 @@
-# Silk
+# Dusk
 
-Silk is a local appearance plugin for BB. It changes the palette, homepage wallpaper, composer controls, and thread sidebar. BB still owns the composer, navigation, thread state, icons, and submission logic.
+Dusk is a local appearance plugin for BB. It changes the palette, homepage wallpaper, composer controls, and thread sidebar. BB still owns the composer, navigation, thread state, icons, and submission logic.
 
 The plugin is intentionally small. If a change requires copying a whole BB component, stop and look for a narrower hook or CSS selector first.
 
-## Using Silk
+## Using Dusk
 
 Install dependencies and the plugin from this directory:
 
 ```sh
 npm install
 bb plugin install .
-bb theme set plugin:silk:silk
+bb theme set plugin:dusk:dusk
 ```
 
-Open BB's welcome launcher or **New thread** to see the Silk wallpaper. Use the pencil beside the sidebar toggle on either screen to choose, change, or remove it. Changes save immediately and apply to both screens.
+Open BB's welcome launcher or **New thread** to see the Dusk wallpaper. Use the pencil beside the sidebar toggle on either screen to choose, change, or remove it. Changes save immediately and apply to both screens.
 
-Silk processes uploads in the browser, converts them to WebP, and stores them in BB plugin KV. The original image does not enter the repository or leave the BB server.
+Dusk processes uploads in the browser, converts them to WebP, and stores them in BB plugin KV. The original image does not enter the repository or leave the BB server.
 
 Photos use Aura's animated color dithering, with a consistent two-pixel texture on desktop and mobile. The effect pauses for reduced motion and hidden pages, and retains the source texture while panels resize. Browsers without WebGL show the original image. Attribution and licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Disable Silk to restore BB's native layout. Switch back to the default palette with:
+Disable Dusk to restore BB's native layout. Switch back to the default palette with:
 
 ```sh
 bb theme set default
@@ -39,10 +39,10 @@ Before calling a change done, run:
 ```sh
 npm run typecheck
 bb plugin build
-bb plugin reload silk
+bb plugin reload dusk
 ```
 
-Install Silk from a durable checkout or local plugin directory. Do not make a temporary thread workspace the only copy of the source.
+Install Dusk from a durable checkout or local plugin directory. Do not make a temporary thread workspace the only copy of the source.
 
 ## Where things live
 
@@ -51,7 +51,7 @@ Install Silk from a durable checkout or local plugin directory. Do not make a te
 | `app.tsx` | Registers frontend overlays and content scripts. |
 | `server.ts` | Stores wallpaper settings and fetches message timestamps for sidebar ages. |
 | `app.css` | Handles component sizing, sidebar states, responsive layout, and small compatibility fixes. |
-| `themes/silk.css` | Defines the Silk palette and semantic button colors. |
+| `themes/dusk.css` | Defines the Dusk palette and semantic button colors. |
 | `lib/homepage.ts` | Finds the native welcome and New thread pages, mounts the wallpaper, and positions the pencil control. |
 | `lib/homepage-header.ts` | Keeps the right toggle pinned while forwarding native panel actions, and positions the pencil through sidebar transitions. |
 | `lib/wallpaper.ts` | Prepares uploads and selects the photo or ambient renderer. |
@@ -59,11 +59,11 @@ Install Silk from a durable checkout or local plugin directory. Do not make a te
 | `lib/photo-shaders.ts` | Attributed Aura/Paper image shaders and Aura's threshold-wave animation. |
 | `lib/ambient.ts` | Draws the animated fallback when no image is set. |
 | `lib/sidebar.tsx` | Adds branch or location, message age, and Pin or Unpin to native thread rows. |
-| `lib/observe-roots.ts` | Watches only the DOM areas Silk needs and cleans up on unload. |
+| `lib/observe-roots.ts` | Watches only the DOM areas Dusk needs and cleans up on unload. |
 
 ## Adding a visual rule
 
-Put palette values in `themes/silk.css`. Put component layout in `app.css`.
+Put palette values in `themes/dusk.css`. Put component layout in `app.css`.
 
 Scope rules to a stable BB attribute such as `data-testid`, `data-sidebar`, `data-promptbox`, or an accessible label. Avoid broad rules such as `button`, `svg`, or `.rounded-md`. Those leak into menus and panels that have nothing to do with the change.
 
@@ -71,12 +71,12 @@ Add both light and dark values when color is involved. Prefer semantic variables
 
 ## Adding homepage behavior
 
-Keep the native welcome actions and composer intact. `lib/homepage.ts` locates the welcome signature or `#root-compose-prompt`, then adds only Silk-owned elements around it.
+Keep the native welcome actions and composer intact. `lib/homepage.ts` locates the welcome signature or `#root-compose-prompt`, then adds only Dusk-owned elements around it.
 
 New homepage behavior should follow the same pattern:
 
 1. Find a stable native root.
-2. Add a clearly named `silk-*` element or class.
+2. Add a clearly named `dusk-*` element or class.
 3. Keep observers scoped to that root.
 4. Remove every class, node, observer, timer, and listener when the content script unloads.
 
@@ -117,6 +117,6 @@ At minimum, test:
 - Light, dark, and reduced-motion modes.
 - Navigation between the welcome launcher and New thread, then away and back again.
 
-Inspect positions frame by frame when Silk moves with native UI. Matching final coordinates is not enough. The two elements must start, progress, and finish together.
+Inspect positions frame by frame when Dusk moves with native UI. Matching final coordinates is not enough. The two elements must start, progress, and finish together.
 
 After a BB upgrade, recheck every selector that depends on BB's DOM. The main ones are the welcome `role="img"`/`aria-label="bb"` signature, `#root-compose-prompt`, `data-promptbox-shell`, `data-sidebar`, and the sidebar trigger test IDs.
