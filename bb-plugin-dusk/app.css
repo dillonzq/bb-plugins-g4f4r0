@@ -31,17 +31,12 @@ kbd {
 
 /* Sidebar command shortcuts share Search threads' inset and trailing slot. */
 [data-sidebar="sidebar"] :is(a, button):has(kbd) {
-  padding-inline-end: 4px;
+  padding-inline-end: 8px;
 }
 [data-sidebar="sidebar"] kbd {
   flex-shrink: 0;
   margin-inline-start: auto;
-  margin-inline-end: 0;
-}
-/* Thread jump hints live beside the row's hover-action slot, not inside its
-   link, so give them the same inset explicitly. */
-[data-sidebar="sidebar"] [data-dusk-thread-row] kbd {
-  margin-inline-end: 4px;
+  margin-inline-end: 8px;
 }
 
 /* Sidebar state artwork. BB retains its labels, state priority and hover controls.
