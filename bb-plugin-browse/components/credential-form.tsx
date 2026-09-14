@@ -59,15 +59,8 @@ export function CredentialForm({
         }
       }}
     >
-      <div>
-        <strong>Sign in to {new URL(origin).host}</strong>
-        <p className="text-sm text-muted-foreground break-all">{origin}</p>
-      </div>
+      <strong className="block break-all">Sign in to {new URL(origin).host}</strong>
       <p className="text-sm">{purpose}</p>
-      <p className="text-sm text-muted-foreground">
-        Use AutoFill → Passwords to choose 1Password. If the login is for
-        another website, select it manually and choose Allow Once.
-      </p>
       {fields.map((field, i) => (
         <label key={i} className="block text-sm space-y-1">
           <span>{field.label}</span>
@@ -90,13 +83,19 @@ export function CredentialForm({
         </label>
       ))}
       <p className="text-xs text-muted-foreground">
-        Fills this browser page and clicks its continue button. Values stay out
-        of chat and are not saved to an env file.
+        Your details stay out of chat.
       </p>
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer">Using a password manager?</summary>
+        <p className="pt-2">
+          Tap a field, then AutoFill → Passwords. Choose your login in 1Password
+          or your password manager. If prompted, choose Allow Once.
+        </p>
+      </details>
       {error && <p role="alert">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" disabled={busy}>
-          {busy ? "Submitting…" : "Fill and continue"}
+          {busy ? "Submitting…" : "Continue"}
         </Button>
         <Button
           type="button"
