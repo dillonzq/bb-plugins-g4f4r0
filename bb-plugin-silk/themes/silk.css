@@ -63,6 +63,16 @@
   --surface-raised-solid: #202021;
 }
 
+/* User-message image tiles use BB's selected-surface border, which tints primary. */
+button.cursor-zoom-in {
+  border-color: var(--border);
+}
+button.cursor-zoom-in:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: var(--border);
+}
+
 /* BB uses primary for tooltip surfaces and foreground for submit buttons.
    Correct those semantic roles only while this palette is loaded. */
 [data-radix-popper-content-wrapper] > .bg-primary:has([role="tooltip"]) {
@@ -79,13 +89,21 @@ button:is([aria-label="Stop and transcribe recording"], [aria-label="Transcribin
 button[aria-label="Stop and transcribe recording"]:hover {
   background-color: color-mix(in srgb, var(--primary) 90%, var(--foreground));
 }
-button[data-promptbox-submit-action][aria-label="Start voice input"] {
+/* Empty-composer mic uses BB's filled default variant; match the + ghost. */
+[data-promptbox] button[aria-label="Start voice input"] {
   background-color: transparent;
+  background-image: none;
   color: var(--foreground);
+  box-shadow: none;
+  border-color: transparent;
 }
-button[data-promptbox-submit-action][aria-label="Start voice input"]:hover {
+[data-promptbox] button[aria-label="Start voice input"]:hover:not(:disabled) {
   background-color: var(--state-hover);
   color: var(--foreground);
+}
+[data-promptbox] button[aria-label="Start voice input"]:disabled {
+  background-color: transparent;
+  color: var(--muted-foreground);
 }
 .dark [data-promptbox-shell] .group\/promptbox {
   background-color: #202021;

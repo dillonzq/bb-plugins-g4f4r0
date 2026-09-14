@@ -102,11 +102,6 @@ button[aria-label^="Provider, model and reasoning"] > .contents > span:has(> [da
   min-height: 14px;
 }
 
-/* Expanded Send has ml-1 in BB; Stop omitted it and shifted the adjacent mic. */
-[data-promptbox-submit-action][aria-label="Stop run"].size-auto {
-  margin-left: 4px;
-}
-
 /* Shared option-picker triggers need room around their content, including
    model/provider, permission mode and other native option dropdowns. */
 button.w-fit.px-1:has(> span.contents) {
@@ -303,16 +298,45 @@ button:is([aria-label="Cancel recording"], [aria-label="Cancel transcription"], 
   outline: 2px solid var(--primary);
   outline-offset: -1px;
 }
-/* New-thread footer uses the same compact controls as the thread footer. */
-.silk-home :is(button[data-promptbox-project-control], button[aria-label="Machine"], button[aria-label="Permission mode"]) {
+/* Composer footer: project, machine, environment, branch, and permission use
+   the same 24px control as access level and server. Native triggers are h-8. */
+:is(
+  button[data-promptbox-project-control],
+  button[aria-label="Machine"],
+  button[aria-label="Environment"],
+  button[aria-label="Branch"],
+  button[aria-label="Permission mode"]
+) {
   height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  padding-block: 0;
+  padding-inline: 8px;
+  gap: 6px;
 }
-.silk-home :is(button[data-promptbox-project-control], button[aria-label="Machine"]) [data-icon] {
-  width: 12px; height: 12px; min-width: 12px; min-height: 12px;
+:is(
+  button[data-promptbox-project-control],
+  button[aria-label="Machine"],
+  button[aria-label="Environment"],
+  button[aria-label="Branch"],
+  button[aria-label="Permission mode"]
+) [data-icon] {
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  min-height: 12px;
 }
 @media (max-width: 767px) and (pointer: coarse) {
-  .silk-home :is(button[data-promptbox-project-control], button[aria-label="Machine"], button[aria-label="Permission mode"]) {
+  :is(
+    button[data-promptbox-project-control],
+    button[aria-label="Machine"],
+    button[aria-label="Environment"],
+    button[aria-label="Branch"],
+    button[aria-label="Permission mode"]
+  ) {
     height: 32px;
+    min-height: 32px;
+    max-height: 32px;
   }
 }
 
@@ -337,10 +361,10 @@ div[class~="@container/page"]:has(#root-compose-prompt) > div:has(> [data-prompt
 .silk-background-header-action { z-index: 20; pointer-events: auto; }
 .silk-background-edit { width: 28px; height: 28px; app-region: no-drag; -webkit-app-region: no-drag; }
 @media (max-width: 767px) {
-  /* BB keeps data-sidebar-shelf="closed" until the 220ms shelf settle.
-     Hide as soon as the inset animation starts, then keep it hidden. */
-  [data-sidebar="inset"][data-vaul-animate] :is(.silk-background-header-action, .silk-background-header-cutout),
-  [data-sidebar-shelf="open"] :is(.silk-background-header-action, .silk-background-header-cutout) {
+  /* BB flips data-sidebar-shelf only after the 220ms settle. Hide while opening
+     or while the shelf is fully open; show as soon as the close animation starts. */
+  [data-sidebar="inset"][data-vaul-animate]:not([data-sidebar-shelf="open"]) :is(.silk-background-header-action, .silk-background-header-cutout),
+  [data-sidebar-shelf="open"]:not([data-vaul-animate]) :is(.silk-background-header-action, .silk-background-header-cutout) {
     visibility: hidden;
   }
 }
@@ -378,6 +402,20 @@ button.silk-panel-toggle[hidden] { display: none; }
 [data-root-compose-mobile-recents] li:has([aria-label="Thread has unsubmitted draft"], [aria-label="Thread working with unsubmitted draft"]):not(:hover, :active, .bg-surface-selected):not(:has([aria-current="page"])) {
   background-image: linear-gradient(90deg, #d4ac212e, #d4ac2118);
 }
+/* Same 4px step on every PromptBox (home, thread, compact). BB's + uses
+   -ml-1.5 and expanded Send uses ml-1, which unbalances the clusters. */
+[data-promptbox] [data-promptbox-action-row] [data-promptbox-standard-actions],
+[data-promptbox-shell] [data-promptbox-action-row] [data-promptbox-standard-actions],
+[data-promptbox] [data-promptbox-submit-group] {
+  gap: 4px;
+}
+[data-promptbox] button[aria-label="Prompt actions"],
+[data-promptbox-shell] button[aria-label="Prompt actions"],
+[data-promptbox] [data-promptbox-submit-action],
+[data-promptbox-shell] [data-promptbox-submit-action] {
+  margin-left: 0;
+}
+
 /* One square action size per composer layout, shared by home/thread and voice. */
 [data-promptbox] { --silk-action-size: 32px; }
 [data-promptbox] :is(button[aria-label="Prompt actions"], [data-promptbox-submit-action], button[aria-label="Start voice input"], button[aria-label="Cancel recording"], button[aria-label="Cancel transcription"], button[aria-label="Stop and transcribe recording"], button[aria-label="Transcribing voice input"]) {
@@ -389,4 +427,17 @@ button.silk-panel-toggle[hidden] { display: none; }
   max-height: var(--silk-action-size);
   flex: 0 0 var(--silk-action-size);
   padding: 0;
+}
+[data-promptbox] button[aria-label="Start voice input"],
+[data-promptbox] button.bg-primary[aria-label="Start voice input"] {
+  background-color: transparent;
+  background-image: none;
+  color: var(--foreground);
+  box-shadow: none;
+  border-color: transparent;
+}
+[data-promptbox] button[aria-label="Start voice input"]:hover:not(:disabled),
+[data-promptbox] button.bg-primary[aria-label="Start voice input"]:hover:not(:disabled) {
+  background-color: var(--state-hover);
+  color: var(--foreground);
 }

@@ -75,7 +75,12 @@ function HomepageController() {
   return <>{slots.map((slot, index) => createPortal(<BackgroundMenu />, slot, String(index)))}</>;
 }
 
+function SpinnerAsLoading({ className }: { className?: string }) {
+  return <Icon name="Loading" className={className} aria-hidden />;
+}
+
 export default definePluginApp((app) => {
+  app.experimental_icons.register({ name: "Spinner", component: SpinnerAsLoading });
   app.contentScripts.register({ id: "homepage", mount: ({ signal }) => mountHomepage(signal) });
   app.slots.experimental_appOverlay({ id: "background-controller", component: HomepageController });
   app.slots.experimental_appOverlay({ id: "sidebar-details", component: SidebarDetails });

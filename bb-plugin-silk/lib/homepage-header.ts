@@ -19,13 +19,21 @@ export function mountHomepageHeader(host: HTMLElement, control: HTMLElement, cut
   const click = () => (document.querySelector<HTMLButtonElement>(showSelector) ?? document.querySelector<HTMLButtonElement>(hideSelector))?.click();
   panel.addEventListener("click", click);
 
+  function mobileShelfActive() {
+    if (!window.matchMedia("(max-width: 767px)").matches) return false;
+    const inset = host.closest("[data-sidebar='inset']");
+    return inset?.hasAttribute("data-vaul-animate") || inset?.getAttribute("data-sidebar-shelf") === "open";
+  }
+
   function position() {
     if (disposed) return;
     const trigger = document.querySelector<HTMLElement>(leftSelector);
     const rect = trigger?.getBoundingClientRect(), bounds = host.getBoundingClientRect();
-    // The page supplies the sidebar motion. Clamp the pencil beside the left
-    // toggle near the collapsed edge; never start a second CSS transition.
-    const x = rect ? Math.max(12, rect.right + 4 - bounds.left) : 12;
+    // Desktop follows the left toggle through sidebar width. Mobile hides the
+    // pencil instead, so keep the resting x rather than sliding it with the shelf.
+    const x = mobileShelfActive()
+      ? Number.parseFloat(control.style.getPropertyValue("--silk-header-x")) || 12
+      : (rect ? Math.max(12, rect.right + 4 - bounds.left) : 12);
     const y = rect ? Math.max(0, rect.top - bounds.top) : 10;
     for (const element of [control, cutout]) {
       element.style.top = `${y}px`;
@@ -76,6 +84,7 @@ export function mountHomepageHeader(host: HTMLElement, control: HTMLElement, cut
   function transition(event: TransitionEvent) {
     const target = event.target;
     if (!(target instanceof Element) || !target.contains(host)) return;
+    if (window.matchMedia("(max-width: 767px)").matches && (event.propertyName === "translate" || event.propertyName === "transform")) return;
     if (!["translate", "transform", "width", "flex-basis", "flex-grow"].includes(event.propertyName)) return;
     if (event.type === "transitionrun") {
       const properties = transitions.get(target) ?? new Set<string>();
