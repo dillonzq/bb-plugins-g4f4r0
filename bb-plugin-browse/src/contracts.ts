@@ -167,6 +167,7 @@ export const viewerInput = z.discriminatedUnion("kind", [
       "Delete",
     ]),
   }),
+  z.object({ kind: z.literal("history"), action: z.enum(["back", "forward", "reload"]) }),
   z.object({ kind: z.literal("navigate"), url: z.string().max(4000) }),
 ]);
 const localServerList = z.object({ servers: z.array(z.object({ port: z.number(), name: z.string(), url: z.string() })), error: z.string().nullable() });

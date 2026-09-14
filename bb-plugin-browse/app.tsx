@@ -547,8 +547,8 @@ function LiveBrowser({
           />
           <Button type="submit" variant="ghost" size="icon" aria-label={opening ? "Opening" : "Go"} disabled={opening || !address.trim()}><Icon name="ArrowRight" className="size-4" /></Button>
         </form>
-        <div className="min-h-0 flex-1 overflow-auto">
-          <div className="mx-auto w-full max-w-3xl px-6 py-12">
+        <div className="min-h-0 flex-1 overflow-auto flex flex-col">
+          <div className="m-auto w-full max-w-3xl px-6 py-12">
             {error && <p role="alert" className="mb-4 text-sm">{error}</p>}
             {[{ title: "Recent", items: recent }, { title: "Sessions", items: active }].map(group => (
               <section key={group.title} className="mb-8" aria-label={group.title}>
@@ -588,46 +588,9 @@ function LiveBrowser({
       </div>
     );
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b p-2 text-sm">
-        <span>
-          {current ? `${current.hostLabel} · ${id}` : id}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            nav.openThreadPanel({ actionId: "live", params: {}, title: "Browsers" })
-          }
-        >
-          All sessions
-        </Button>
-        {current?.mode === "native" && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              try {
-                const result = await rpc.call("start", {
-                  threadId,
-                  hostId: current.hostId,
-                  mode: "managed",
-                  url: current.url,
-                  newTab: true,
-                });
-                nav.openThreadPanel({
-                  actionId: "live",
-                  params: { id: result.session.id },
-                  title: browserTitle(result.session),
-                });
-              } catch (e) {
-                setError(String(e));
-              }
-            }}
-          >
-            Open in Browse on {current.hostLabel}
-          </Button>
-        )}
+    <div className="relative flex h-full min-h-0 flex-col">
+      <Button variant="ghost" size="icon" className="absolute right-2 top-2 z-10" aria-label="All sessions" onClick={() => nav.openThreadPanel({ actionId: "live", params: {}, title: "Browser" })}><Icon name="List" className="size-4" /></Button>
+      <div className="absolute bottom-3 right-3 z-10 text-sm">
         {current && ["error", "released"].includes(current.status) && (
           <Button
             variant="outline"
@@ -653,7 +616,7 @@ function LiveBrowser({
       <iframe
         title="Live browser"
         className="min-h-0 w-full flex-1 border-0 bg-black"
-        src={`/api/v1/plugins/browse/http/viewer?id=${encodeURIComponent(id)}`}
+        src={`/api/v1/plugins/browse/http/viewer?id=${encodeURIComponent(id)}&embedded=1`}
       />
     </div>
   );

@@ -780,6 +780,9 @@ export default experimental_defineHostEntry({
             case "key":
               await command(s, ["press", input.key], signal);
               break;
+            case "history":
+              await command(s, [input.action], signal);
+              break;
             case "navigate":
               await command(s, ["open", safeUrl(input.url)], signal);
               break;
