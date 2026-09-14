@@ -151,6 +151,7 @@ export async function installManaged(
         [
           "--download-only",
           "--yes",
+          "--reinstall",
           "--no-install-recommends",
           "-o",
           "Debug::NoLocking=1",
