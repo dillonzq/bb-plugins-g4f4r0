@@ -147,6 +147,55 @@ function MachineDependencies({
         : "Not checked",
     },
   ];
+  if (!info || info.platform === "linux")
+    rows.push(
+      {
+        name: "Display",
+        icon: "Monitor",
+        ready: info ? info.display !== "missing" : undefined,
+        version: null,
+        status: info
+          ? info.display === "host"
+            ? "Host DISPLAY"
+            : info.display === "virtual"
+              ? "Virtual display (Xvfb)"
+              : "No display — install Xvfb and keyboard files"
+          : "Not checked",
+      },
+      {
+        name: "Xvfb",
+        icon: "AppWindow",
+        ready: info?.xvfb,
+        version: null,
+        status: info
+          ? info.xvfb
+            ? "Installed"
+            : "Not installed"
+          : "Not checked",
+      },
+      {
+        name: "xkbcomp",
+        icon: "Keyboard",
+        ready: info?.xkbcomp,
+        version: null,
+        status: info
+          ? info.xkbcomp
+            ? "Keyboard compiler ready"
+            : "Not installed — x11-xkb-utils"
+          : "Not checked",
+      },
+      {
+        name: "XKB keymap data",
+        icon: "FileCode",
+        ready: info?.xkbData,
+        version: null,
+        status: info
+          ? info.xkbData
+            ? "Installed"
+            : "Not installed — xkb-data"
+          : "Not checked",
+      },
+    );
   return (
     <section aria-label={machine.label}>
       <SettingsSection
@@ -424,26 +473,21 @@ function AutoShowBrowsers() {
   const { threadId } = useBbContext();
   const nav = useBbNavigate();
   const rpc = useRpc<typeof rpcContract>();
-  const shown = useRef(new Set<string>());
   const sync = useCallback(async () => {
     if (!threadId) return;
     try {
       const sessions = await rpc.call("list", { threadId });
       for (const s of sessions) {
         if (!["ready", "connecting"].includes(s.status)) continue;
-        if (shown.current.has(s.id)) continue;
         let title = "Browser";
         try {
           title = new URL(s.url).hostname || title;
         } catch {}
-        if (
-          nav.openThreadPanel({
-            actionId: "live",
-            params: { id: s.id },
-            title,
-          })
-        )
-          shown.current.add(s.id);
+        nav.openThreadPanel({
+          actionId: "live",
+          params: { id: s.id },
+          title,
+        });
       }
     } catch {}
   }, [nav, rpc, threadId]);
@@ -451,7 +495,6 @@ function AutoShowBrowsers() {
     void sync();
   });
   useEffect(() => {
-    shown.current.clear();
     void sync();
   }, [sync]);
   return null;

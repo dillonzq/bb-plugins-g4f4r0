@@ -476,6 +476,7 @@ export default async function plugin(bb: BbPluginApi) {
           await host.call("inspect", { id: sid }, { hostId: s.hostId }),
         );
         await persist(s);
+        await showLive(s.threadId);
         return { session: s, job: j };
       } catch (e) {
         await browser
@@ -531,6 +532,8 @@ export default async function plugin(bb: BbPluginApi) {
         throw new Error(
           "Control has been released. Reconnect to the existing tab.",
         );
+      await showLive(s.threadId);
+      changed();
       return enrich(
         s.hostId,
         await host.call("submit", input, { hostId: s.hostId }),
@@ -560,10 +563,11 @@ export default async function plugin(bb: BbPluginApi) {
     },
     cancel: ({ hostId, id }) => host.call("cancel", { id }, { hostId }),
     release: ({ id }) => release(get(id)),
-    reveal: ({ id }) => {
+    reveal: async ({ id }) => {
       const s = get(id);
-      if (s.mode === "managed")
-        return Promise.resolve({ ok: true, url: viewerUrl(s.id) });
+      await showLive(s.threadId);
+      changed();
+      if (s.mode === "managed") return { ok: true, url: viewerUrl(s.id) };
       return bb.sdk.experimental_desktopBrowsers.revealTab({
         ...scopeOf(s),
         tabId: s.tabId,

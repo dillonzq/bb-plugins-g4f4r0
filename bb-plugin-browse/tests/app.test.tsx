@@ -20,6 +20,10 @@ function health(hostId: string) {
     chromePath: "/chrome",
     chromeVersion: "Chrome 153",
     launchError: null,
+    display: "virtual",
+    xvfb: true,
+    xkbcomp: true,
+    xkbData: true,
   };
 }
 it("shows every machine, probes connected hosts independently, and keeps offline hosts out of RPC checks", async () => {
@@ -51,6 +55,14 @@ it("shows every machine, probes connected hosts independently, and keeps offline
     expect(
       within(slot.getByRole("region", { name: "server" })).getByText(
         "Launch verified",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(slot.getByRole("region", { name: "server" })).getByText("Xvfb"),
+    ).toBeTruthy();
+    expect(
+      within(slot.getByRole("region", { name: "server" })).getByText(
+        "Keyboard compiler ready",
       ),
     ).toBeTruthy();
     expect(
@@ -183,6 +195,45 @@ it("opens a live thread panel when a managed session starts", async () => {
           }),
         }),
       ]),
+    );
+  } finally {
+    slot.lifecycle.unmount();
+  }
+});
+it("reopens the live panel when the agent keeps working", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  const slot = renderSlot(
+    app.appOverlays[0]!,
+    {},
+    {
+      context: { threadId: "thread_one" },
+      rpc: {
+        list: () => [
+          {
+            id: "ab-live-1",
+            status: "ready",
+            url: "https://example.com/path",
+          },
+        ],
+      },
+    },
+  );
+  try {
+    await waitFor(() =>
+      expect(slot.inspection.navigateCalls).toHaveLength(1),
+    );
+    await slot.emitRealtime("browser-changed", {});
+    await waitFor(() =>
+      expect(slot.inspection.navigateCalls).toHaveLength(2),
+    );
+    expect(slot.inspection.navigateCalls[1]).toEqual(
+      expect.objectContaining({
+        method: "openThreadPanel",
+        options: expect.objectContaining({
+          actionId: "live",
+          params: { id: "ab-live-1" },
+        }),
+      }),
     );
   } finally {
     slot.lifecycle.unmount();

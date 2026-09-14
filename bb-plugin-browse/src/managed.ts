@@ -24,6 +24,7 @@ export function managedEnv(root: string) {
     .filter(Boolean)
     .join(delimiter);
   env.PATH = [join(libs, "usr/bin"), env.PATH].filter(Boolean).join(delimiter);
+  env.XKB_CONFIG_ROOT = join(libs, "usr/share/X11/xkb");
   return env;
 }
 export async function diagnostics(root: string) {
@@ -66,6 +67,7 @@ export async function diagnostics(root: string) {
     () => true,
     () => false,
   );
+  const display = displayFiles(root, env);
   return {
     platform: process.platform,
     arch: process.arch,
@@ -76,6 +78,52 @@ export async function diagnostics(root: string) {
     chromeVersion: chromeVersion ?? null,
     launchError: launchError ?? null,
     ffmpeg,
+    ...display,
+  };
+}
+export const LINUX_DEP_PACKAGES = [
+  "libnss3",
+  "libatk-bridge2.0-0",
+  "libasound2",
+  "libgbm1",
+  "libcups2",
+  "libpango-1.0-0",
+  "libcairo2",
+  "libxcomposite1",
+  "libxdamage1",
+  "libxrandr2",
+  "libxkbcommon0",
+  "fonts-liberation",
+  "ffmpeg",
+  "xvfb",
+  "x11-xkb-utils",
+  "xkb-data",
+] as const;
+export function displayFiles(root: string, env = managedEnv(root)) {
+  if (process.platform !== "linux")
+    return {
+      display: "host" as const,
+      xvfb: true,
+      xkbcomp: true,
+      xkbData: true,
+    };
+  const libs = join(root, "linux-deps", "root");
+  const xvfb = !!findOnPath(env, "Xvfb");
+  const xkbcomp =
+    existsSync("/usr/bin/xkbcomp") ||
+    existsSync(join(libs, "usr/bin/xkbcomp"));
+  const xkbData =
+    existsSync("/usr/share/X11/xkb/symbols") ||
+    existsSync(join(libs, "usr/share/X11/xkb/symbols"));
+  return {
+    display: process.env.DISPLAY
+      ? ("host" as const)
+      : xvfb && xkbcomp && xkbData
+        ? ("virtual" as const)
+        : ("missing" as const),
+    xvfb,
+    xkbcomp,
+    xkbData,
   };
 }
 let install: Promise<void> | undefined;
@@ -109,20 +157,7 @@ export async function installManaged(
           "-o",
           `Dir::Cache::archives=${archives}`,
           "install",
-          "libnss3",
-          "libatk-bridge2.0-0",
-          "libasound2",
-          "libgbm1",
-          "libcups2",
-          "libpango-1.0-0",
-          "libcairo2",
-          "libxcomposite1",
-          "libxdamage1",
-          "libxrandr2",
-          "libxkbcommon0",
-          "fonts-liberation",
-          "ffmpeg",
-          "xvfb",
+          ...LINUX_DEP_PACKAGES,
         ],
         { signal, limit: 1000000 },
       );
@@ -148,10 +183,64 @@ export function chromeArgs(profile: string) {
     "--no-default-browser-check",
     "--disable-dev-shm-usage",
     "--window-size=1280,800",
+    ...(process.platform === "linux" ? ["--ozone-platform=x11"] : []),
     "--disable-backgrounding-occluded-windows",
     "--disable-renderer-backgrounding",
     "about:blank",
   ];
+}
+export function xvfbArgs(display: number) {
+  return [
+    `:${display}`,
+    "-screen",
+    "0",
+    "1280x800x24",
+    "-nolisten",
+    "tcp",
+    "-ac",
+  ];
+}
+const XVFB_WRAP = `set -eu
+ovl="\${TMPDIR:-/tmp}/browse-xvfb-$$"
+mkdir -p "$ovl/upper" "$ovl/work"
+mount -t overlay overlay -o "lowerdir=/usr/bin,upperdir=$ovl/upper,workdir=$ovl/work" /usr/bin
+cp -f "$BROWSE_XKBCOMP" /usr/bin/xkbcomp
+chmod +x /usr/bin/xkbcomp
+if [ -n "\${BROWSE_XKBDATA:-}" ] && [ ! -e /usr/share/X11/xkb/symbols ]; then
+  mkdir -p "$ovl/x11u" "$ovl/x11w"
+  mount -t overlay overlay -o "lowerdir=/usr/share/X11,upperdir=$ovl/x11u,workdir=$ovl/x11w" /usr/share/X11
+  mkdir -p /usr/share/X11/xkb
+  cp -a "$BROWSE_XKBDATA/." /usr/share/X11/xkb/
+fi
+exec "$BROWSE_XVFB" "$BROWSE_DISPLAY" -screen 0 1280x800x24 -nolisten tcp -ac
+`;
+export function xvfbLaunch(
+  binary: string,
+  display: number,
+  env: NodeJS.ProcessEnv,
+  root: string,
+) {
+  const args = xvfbArgs(display);
+  const libs = join(root, "linux-deps", "root");
+  const xkbcomp = join(libs, "usr/bin/xkbcomp");
+  const xkbdata = join(libs, "usr/share/X11/xkb");
+  const unshare =
+    findOnPath(env, "unshare") ||
+    findOnPath(process.env, "unshare") ||
+    (existsSync("/usr/bin/unshare") ? "/usr/bin/unshare" : undefined);
+  if (!existsSync("/usr/bin/xkbcomp") && existsSync(xkbcomp) && unshare)
+    return {
+      command: unshare,
+      args: ["-rm", "--", "/bin/sh", "-c", XVFB_WRAP],
+      env: {
+        ...env,
+        BROWSE_XVFB: binary,
+        BROWSE_XKBCOMP: xkbcomp,
+        BROWSE_XKBDATA: existsSync(join(xkbdata, "symbols")) ? xkbdata : "",
+        BROWSE_DISPLAY: `:${display}`,
+      },
+    };
+  return { command: binary, args, env };
 }
 function findOnPath(env: NodeJS.ProcessEnv, name: string) {
   for (const dir of (env.PATH ?? "").split(delimiter)) {
@@ -161,6 +250,7 @@ function findOnPath(env: NodeJS.ProcessEnv, name: string) {
 }
 let xvfb: { n: number; child: ChildProcess; users: number } | undefined;
 async function acquireDisplay(
+  root: string,
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
 ): Promise<{ env: NodeJS.ProcessEnv; release: () => Promise<void> }> {
@@ -184,11 +274,32 @@ async function acquireDisplay(
   let n = 90;
   while (n < 120 && (existsSync(`/tmp/.X${n}-lock`) || existsSync(`/tmp/.X11-unix/X${n}`)))
     n++;
-  const child = spawn(
-    binary,
-    [`:${n}`, "-screen", "0", "1280x800x24", "-nolisten", "tcp", "-ac"],
-    { env, stdio: ["ignore", "ignore", "pipe"] },
-  );
+  const files = displayFiles(root, env);
+  if (!files.xvfb)
+    throw new Error(
+      "Headed Chrome needs Xvfb on this Linux host. Install dependencies in Browse Settings, then retry.",
+    );
+  if (!files.xkbcomp)
+    throw new Error(
+      "Headed Chrome needs xkbcomp (x11-xkb-utils). Install dependencies in Browse Settings, then retry.",
+    );
+  if (!files.xkbData)
+    throw new Error(
+      "Headed Chrome needs XKB keymap data (xkb-data). Install dependencies in Browse Settings, then retry.",
+    );
+  if (
+    !existsSync("/usr/bin/xkbcomp") &&
+    !findOnPath(env, "unshare") &&
+    !existsSync("/usr/bin/unshare")
+  )
+    throw new Error(
+      "Headed Chrome needs unshare (util-linux) to provide xkbcomp without root.",
+    );
+  const launch = xvfbLaunch(binary, n, env, root);
+  const child = spawn(launch.command, launch.args, {
+    env: launch.env,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
   let stderr = "";
   child.stderr?.on("data", (b) => (stderr = (stderr + b.toString()).slice(-4000)));
   const deadline = Date.now() + 8000;
@@ -281,7 +392,7 @@ async function launchBrowser(
   const profile = join(root, "profiles", profileId);
   await fs.mkdir(profile, { recursive: true, mode: 0o700 });
   await fs.rm(join(profile, "DevToolsActivePort"), { force: true });
-  const display = await acquireDisplay(managedEnv(root), signal);
+  const display = await acquireDisplay(root, managedEnv(root), signal);
   const child = spawn(info.chromePath, chromeArgs(profile), {
     env: display.env,
     stdio: ["ignore", "ignore", "pipe"],

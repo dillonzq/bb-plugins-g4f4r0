@@ -21,7 +21,8 @@ async function fixture(
     credentialFailure?: boolean;
   } = {},
 ) {
-  const release = vi.fn(async () => ({ ok: true })),
+  const paneAction = vi.fn(async () => ({ delivered: 1 })),
+    release = vi.fn(async () => ({ ok: true })),
     close = vi.fn(async () => ({ ok: true })),
     create = vi.fn(async () => ({ tab: { tabId: "tab_new" } }));
   const calls: any[] = [];
@@ -31,7 +32,7 @@ async function fixture(
     sdk: {
       threads: {
         get: async () => ({ environmentId: "env_thread" }) as any,
-        paneAction: async () => ({ delivered: 1 }),
+        paneAction,
       },
       environments: {
         get: async () =>
@@ -108,6 +109,16 @@ async function fixture(
           recording: false,
           artifactRoot: "/private/artifacts/session",
         };
+      if (call.method === "submit")
+        return {
+          id: "job_run",
+          sessionId: input.id,
+          kind: "command",
+          status: "succeeded",
+          startedAt: Date.now(),
+          durationMs: 1,
+          artifacts: [],
+        };
       if (call.method === "release") return { released: true };
       if (call.method === "credentialPrepare")
         return {
@@ -124,7 +135,7 @@ async function fixture(
     },
   });
   await plugin(bb);
-  return { harness, release, close, create, calls };
+  return { harness, release, close, create, calls, paneAction };
 }
 describe("BB browser lifecycle", () => {
   it("routes attachment to the selected browser host without exposing CDP credentials", async () => {
@@ -218,6 +229,15 @@ describe("Thread-host routing", () => {
     expect(r.session.viewerUrl).toContain("/http/viewer?id=");
     expect(f.create).not.toHaveBeenCalled();
     expect(JSON.stringify(r)).not.toContain("ws://");
+    f.paneAction.mockClear();
+    await f.harness.behavior.callRpc("run", {
+      id: r.session.id,
+      operation: { kind: "command", args: ["true"] },
+    });
+    expect(f.paneAction).toHaveBeenCalledWith({
+      threadId: "thread_one",
+      action: "spotlight",
+    });
     await f.harness.lifecycle.dispose();
     expect(f.release).not.toHaveBeenCalled();
   });

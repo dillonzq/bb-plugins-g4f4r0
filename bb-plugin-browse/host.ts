@@ -719,6 +719,10 @@ export default experimental_defineHostEntry({
               info.launchError ??
                 "Chrome installation did not produce a runnable executable",
             );
+          if (info.display === "missing")
+            throw new Error(
+              "Headed display is not ready (Xvfb, xkbcomp, and XKB keymap data). Re-run Install dependencies.",
+            );
           j.output = JSON.stringify(info);
         },
         undefined,

@@ -133,6 +133,10 @@ export const health = z.object({
   chromePath: z.string().nullable(),
   chromeVersion: z.string().nullable(),
   launchError: z.string().nullable(),
+  display: z.enum(["host", "virtual", "missing"]),
+  xvfb: z.boolean(),
+  xkbcomp: z.boolean(),
+  xkbData: z.boolean(),
 });
 export const viewerInput = z.discriminatedUnion("kind", [
   z.object({
