@@ -43,6 +43,12 @@ export class Cdp {
   private casting = false;
   private seq = 0;
   private latest?: LiveFrame;
+  private liveAcks = new Set<number>();
+  private acknowledgeLiveFrames() {
+    const ids = [...this.liveAcks];
+    this.liveAcks.clear();
+    for (const sessionId of ids) void this.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
+  }
   private waiters = new Set<{
     after: number;
     resolve: (f: LiveFrame) => void;
@@ -189,13 +195,14 @@ export class Cdp {
   }
   private onScreencast(params: any) {
     if (this.casting) {
-      void this.send("Page.screencastFrameAck", {
-        sessionId: params.sessionId,
-      }).catch(() => {});
+      // Grant capture credit only when a consumer asks for a frame. Slow or
+      // hidden viewers must not keep the encoder running at the display rate.
+      this.liveAcks.add(params.sessionId);
       this.latest = liveFrameFromEvent(params, ++this.seq);
       for (const w of [...this.waiters])
         if (this.latest.seq > w.after) {
           this.waiters.delete(w);
+          this.acknowledgeLiveFrames();
           w.resolve(this.latest);
         }
       return;
@@ -221,10 +228,12 @@ export class Cdp {
   async stopLiveCast() {
     if (!this.casting) return;
     this.casting = false;
+    this.acknowledgeLiveFrames();
     await this.send("Page.stopScreencast").catch(() => {});
   }
   async nextLiveFrame(after = 0, timeoutMs = 8000): Promise<LiveFrame> {
     if (!this.casting) await this.startLiveCast();
+    this.acknowledgeLiveFrames();
     if (this.latest && this.latest.seq > after) return this.latest;
     return new Promise((resolve, reject) => {
       const waiter = { after, resolve, reject };
@@ -290,6 +299,7 @@ export class Cdp {
     this.onDisconnect?.();
     this.onDisconnect = undefined;
     this.frameFailure?.();
+    this.liveAcks.clear();
     this.casting = false;
     for (const w of this.waiters)
       w.reject(
