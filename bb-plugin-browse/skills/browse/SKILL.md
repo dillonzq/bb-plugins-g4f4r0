@@ -77,3 +77,21 @@ bb browse release '{"id":"SESSION"}'
 ```
 
 Artifacts live on the browser machine. Use returned preview links or BB host-aware file APIs to transfer them; do not treat a remote path as a server-local file. Links expire after one hour and can be refreshed with artifacts. Browser connection credentials never belong in reports, tools, user-facing files or published URLs.
+
+## Private browser login
+
+Use `agent_browser_credentials` or `bb browse credentials` to request login fields from the user through BB's private input form. It uses the same SDK input mechanism as Secrets, without writing a dotenv file. Never ask for credentials in chat, put values in tool arguments, or use ordinary `fill` for a user's password.
+
+Inspect the page first. Pass unique CSS selectors for visible top-document input fields and the continue/submit button. Example:
+
+```sh
+bb browse credentials '{"id":"SESSION","purpose":"Sign in to the requested store","fields":[{"selector":"#email","label":"Email","kind":"username"},{"selector":"#password","label":"Password","kind":"password"}],"submitSelector":"button[type=submit]"}'
+```
+
+The private form lets the user choose 1Password through their device's AutoFill. On iPhone, the form belongs to BB's domain, so they may need to manually select the intended login and choose Allow Once. This is ordinary password-manager autofill; no 1Password account connection or service token is needed. Actual iPhone picker behavior needs device testing.
+
+Only managed sessions are supported. Stop recording first. The request holds the browser lock for at most five minutes, checks that the exact document, URL, fields and form destination have not changed, fills once, and clicks the requested button. It accepts HTTPS or loopback HTTP test pages. HTML forms must use same-origin POST. Iframes, shadow-root inputs, custom submit controls, and cross-origin form actions are not supported by this first version.
+
+A result of `filled:true` confirms delivery and clicking, not successful authentication. Inspect the resulting page without reading password fields, console logs, network bodies, or credentials. For another login step, request a fresh form with kind `username`, `password`, or `one-time-code`. Never retry a timed-out submission blindly. CAPTCHA and other interactions require user takeover through the viewer.
+
+This keeps values out of the request's CLI output, job history, chat and dotenv files. The destination website and the trusted BB/browser host necessarily handle them; this is not vault isolation from an agent with arbitrary shell or browser scripting access. Use only the user's intended website. A page's JavaScript can retain what was filled even after Browse clears original input nodes.

@@ -17,6 +17,7 @@ import {
   type Artifact,
 } from "./src/contracts";
 import { viewerHtml } from "./src/viewer";
+import { credentialRequest, credentialValues } from "./src/credentials";
 import { safeUrl, redact } from "./src/policy";
 export { rpcContract } from "./src/contracts";
 export type { Session, Job, Artifact } from "./src/contracts";
@@ -620,6 +621,63 @@ export default async function plugin(bb: BbPluginApi) {
     }
   });
 
+  async function requestCredentials(
+    raw: unknown,
+    threadId: string | undefined,
+    signal: AbortSignal = new AbortController().signal,
+  ) {
+    const input = credentialRequest.parse(raw);
+    if (!threadId) throw new Error("Request credentials from a BB thread.");
+    const s = own(input.id, threadId);
+    await ensurePlacement(s);
+    const prepared = await host.call("credentialPrepare", input, {
+      hostId: s.hostId,
+      signal,
+    });
+    let values: string[] = [];
+    try {
+      const answer = await bb.ui.requestInput(
+        {
+          threadId,
+          rendererId: "browser-credentials",
+          title: "Browser sign-in",
+          payload: {
+            origin: prepared.origin,
+            purpose: input.purpose,
+            fields: input.fields.map(({ label, kind }) => ({ label, kind })),
+          },
+          timeoutMs: 300000,
+        },
+        { signal },
+      );
+      if (answer.outcome !== "submitted")
+        return { filled: false, cancelled: true };
+      const parsed = credentialValues.safeParse(answer.value);
+      if (!parsed.success || parsed.data.length !== input.fields.length)
+        throw new Error("Invalid credential form response. Request again.");
+      values = parsed.data;
+      signal.throwIfAborted();
+      await ensurePlacement(s);
+      return await host.call(
+        "credentialFill",
+        { id: s.id, token: prepared.token, values },
+        { hostId: s.hostId, signal, timeoutMs: 30000 },
+      );
+    } catch {
+      throw new Error(
+        "Browser credential request did not complete. Inspect the page before requesting again.",
+      );
+    } finally {
+      values.fill("");
+      await host
+        .call(
+          "credentialCancel",
+          { id: s.id, token: prepared.token },
+          { hostId: s.hostId },
+        )
+        .catch(() => {});
+    }
+  }
   async function invoke(method: string, input: unknown) {
     if (!(method in rpcContract)) throw new Error(`Unknown command ${method}`);
     const key = method as keyof typeof rpcContract;
@@ -627,11 +685,11 @@ export default async function plugin(bb: BbPluginApi) {
     return (handlers[key] as (a: any) => any)(parsed);
   }
   const usage =
-    'Browse — browsers run on the thread host; native desktop tabs are optional.\n\nUsage: bb browse <method> [JSON input] [--json]\nMethods: preferences, discover, tabs, list, start, probe, setup, reconnect, run, job, cancel, release, reveal, close, artifacts\nExamples:\n  bb browse discover\n  bb browse list\n  bb browse run \'{"id":"SESSION","operation":{"kind":"command","args":["snapshot","-i"]}}\'\nJobs return immediately; poll with: bb browse job \'{"hostId":"HOST","id":"JOB"}\'';
+    'Browse — browsers run on the thread host; native desktop tabs are optional.\n\nUsage: bb browse <method> [JSON input] [--json]\nMethods: credentials, preferences, discover, tabs, list, start, probe, setup, reconnect, run, job, cancel, release, reveal, close, artifacts\nExamples:\n  bb browse discover\n  bb browse list\n  bb browse run \'{"id":"SESSION","operation":{"kind":"command","args":["snapshot","-i"]}}\'\nJobs return immediately; poll with: bb browse job \'{"hostId":"HOST","id":"JOB"}\'';
   bb.cli.register({
     name: "browse",
     summary: "Browse on the thread’s execution host",
-    commands: Object.keys(rpcContract).map((name) => ({
+    commands: [...Object.keys(rpcContract), "credentials"].map((name) => ({
       name,
       summary: `Browser ${name}`,
       usage: `bb browse ${name} [JSON input]`,
@@ -654,7 +712,13 @@ export default async function plugin(bb: BbPluginApi) {
           input.threadId = ctx.threadId;
         return {
           exitCode: 0,
-          stdout: JSON.stringify(await invoke(args[0], input), null, 2),
+          stdout: JSON.stringify(
+            args[0] === "credentials"
+              ? await requestCredentials(input, ctx.threadId, ctx.signal)
+              : await invoke(args[0], input),
+            null,
+            2,
+          ),
         };
       } catch (e) {
         return {
@@ -701,6 +765,14 @@ export default async function plugin(bb: BbPluginApi) {
       throw new Error("This session belongs to another thread.");
     return s;
   }
+  bb.agents.registerTool({
+    name: "agent_browser_credentials",
+    description:
+      "Ask the user for login fields through a private BB form, then fill and continue in this thread's managed browser. Pass observed CSS selectors, never credential values. Supports username, password, and verification codes. The browser is locked during the request. Returns delivery status only; inspect afterward to verify login.",
+    parameters: credentialRequest,
+    execute: async (input, ctx) =>
+      JSON.stringify(await requestCredentials(input, ctx.threadId, ctx.signal)),
+  });
   bb.agents.registerTool({
     name: "agent_browser_discover",
     description:
@@ -809,6 +881,7 @@ export default async function plugin(bb: BbPluginApi) {
   });
   bb.agents.configure(() => ({
     tools: [
+      "agent_browser_credentials",
       "agent_browser_discover",
       "agent_browser_session",
       "agent_browser_action",

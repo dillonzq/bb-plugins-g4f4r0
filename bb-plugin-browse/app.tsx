@@ -6,6 +6,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import type { rpcContract, health, Job } from "./src/contracts";
 import type { z } from "zod";
+import { CredentialForm } from "./components/credential-form";
 import { Button } from "./components/ui/button";
 import {
   SettingsSection,
@@ -367,6 +368,10 @@ function BrowseSettings() {
   );
 }
 export default definePluginApp((app) => {
+  app.slots.pendingInteraction({
+    id: "browser-credentials",
+    component: CredentialForm,
+  });
   app.slots.settingsSection({
     id: "browse-settings",
     component: BrowseSettings,

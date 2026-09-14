@@ -6,6 +6,7 @@ import {
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { CredentialBinding } from "./src/credentials";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   hostContract,
@@ -40,6 +41,12 @@ import { Bridge } from "./src/bridge";
 import { validateCommand, redact } from "./src/policy";
 
 type LocalSession = {
+  credential?: {
+    token: string;
+    binding?: CredentialBinding;
+    timer?: ReturnType<typeof setTimeout>;
+    expiresAt: number;
+  };
   id: string;
   managed?: ManagedBrowser;
   mode?: "managed" | "native";
@@ -104,6 +111,8 @@ function startJob(
   s?: LocalSession,
   timeoutMs = 120000,
 ): Job {
+  if (s?.credential)
+    throw new Error("Browser is waiting for private credential input.");
   if (s?.busy)
     throw new Error(
       `Session is busy with job ${s.busy}. Poll it or cancel it first.`,
@@ -544,6 +553,14 @@ async function perform(
     }
   }
 }
+async function finishCredential(
+  s: LocalSession,
+  pending: NonNullable<LocalSession["credential"]>,
+) {
+  clearTimeout(pending.timer);
+  await pending.binding?.dispose();
+  if (s.credential === pending) delete s.credential;
+}
 function release(s: LocalSession): Promise<void> {
   if (s.closing) return s.closing;
   if (s.status === "released") return Promise.resolve();
@@ -551,6 +568,7 @@ function release(s: LocalSession): Promise<void> {
 }
 async function closeSession(s: LocalSession) {
   clearTimeout(s.timer);
+  if (s.credential) await finishCredential(s, s.credential);
   if (s.busy) {
     const t = task(s.busy);
     t.controller.abort();
@@ -580,6 +598,74 @@ async function closeSession(s: LocalSession) {
 export default experimental_defineHostEntry({
   contract: hostContract,
   handlers: {
+    credentialPrepare: async (input, ctx) => {
+      const s = session(input.id);
+      if (
+        s.status !== "ready" ||
+        !s.managed ||
+        s.busy ||
+        s.framing ||
+        s.recording ||
+        s.credential
+      )
+        throw new Error(
+          "Use an idle managed browser with recording stopped for credentials.",
+        );
+      const pending: NonNullable<LocalSession["credential"]> = {
+        token: randomUUID(),
+        expiresAt: Date.now() + 300000,
+      };
+      s.credential = pending;
+      try {
+        ctx.signal.throwIfAborted();
+        pending.binding = await CredentialBinding.prepare(s.cdp!, input);
+        ctx.signal.throwIfAborted();
+        if (s.credential !== pending || s.closing)
+          throw new Error("Session closed");
+        pending.timer = setTimeout(() => {
+          void finishCredential(s, pending);
+        }, 300000);
+        return { token: pending.token, origin: pending.binding.origin };
+      } catch {
+        await finishCredential(s, pending);
+        throw new Error(
+          "Login fields are unavailable or unsafe. Inspect the page and request again.",
+        );
+      }
+    },
+    credentialFill: async ({ id, token, values }, ctx) => {
+      const s = session(id),
+        pending = s.credential;
+      if (
+        !pending ||
+        pending.token !== token ||
+        !pending.binding ||
+        pending.expiresAt <= Date.now()
+      )
+        throw new Error("Credential request expired. Request again.");
+      pending.token = "";
+      clearTimeout(pending.timer);
+      const count = values.length;
+      try {
+        ctx.signal.throwIfAborted();
+        await pending.binding.fill(values);
+        await sleep(1200, undefined, { signal: ctx.signal });
+        return { filled: true, count };
+      } catch {
+        throw new Error(
+          "Could not complete credential delivery. Inspect the page and request again if needed.",
+        );
+      } finally {
+        values.fill("");
+        await finishCredential(s, pending);
+      }
+    },
+    credentialCancel: async ({ id, token }) => {
+      const s = sessions.get(id);
+      if (s?.credential?.token === token)
+        await finishCredential(s, s.credential);
+      return { cancelled: true };
+    },
     probe: async (_, ctx) => {
       const root = ctx.experimental_paths.dataDir,
         info = await diagnostics(root);
@@ -643,6 +729,8 @@ export default experimental_defineHostEntry({
       if (s.status !== "ready" || !s.managed)
         throw new Error("Browser is not ready");
       if (s.framing) throw new Error("A frame is already being captured");
+      if (s.credential)
+        throw new Error("Browser is waiting for private credential input.");
       s.framing = true;
       try {
         const metrics = await s.cdp!.send("Page.getLayoutMetrics");

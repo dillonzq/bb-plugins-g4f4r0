@@ -1,5 +1,6 @@
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
+import { credentialRequest, credentialValues } from "./credentials";
 export const VERSION = "0.37.1";
 export const id = z.string().min(1).max(200);
 export const point = z.object({
@@ -161,6 +162,18 @@ export const viewerInput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("navigate"), url: z.string().max(4000) }),
 ]);
 export const hostContract = defineRpcContract({
+  credentialPrepare: {
+    input: credentialRequest,
+    output: z.object({ token: z.string(), origin: z.string() }),
+  },
+  credentialFill: {
+    input: z.object({ id, token: z.string(), values: credentialValues }),
+    output: z.object({ filled: z.boolean(), count: z.number() }),
+  },
+  credentialCancel: {
+    input: z.object({ id, token: z.string() }),
+    output: z.object({ cancelled: z.boolean() }),
+  },
   probe: { input: z.null(), output: health },
   setup: {
     input: z.object({ dependencies: z.boolean().default(true) }).nullable(),

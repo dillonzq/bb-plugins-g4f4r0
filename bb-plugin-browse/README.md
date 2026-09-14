@@ -16,16 +16,27 @@ The viewer is a custom authenticated web view with periodic frames, clicking, ty
 
 `mode:"native"` retains the existing desktop backend and requires fresh hostId, instanceId and generation. The legacy preferredHost applies only to native discovery; it never changes managed placement.
 
-Agents get four tools:
+Agents get five tools:
 
 | Tool                     | Purpose                                                                  |
 | ------------------------ | ------------------------------------------------------------------------ |
 | `agent_browser_discover` | Machines, desktops, and this thread’s sessions                           |
 | `agent_browser_session`  | Attach/create, tabs, setup, reveal, release, explicit close, files       |
 | `agent_browser_action`   | Inspection, commands, batches, shadow DOM controls, strokes and captures |
+| `agent_browser_credentials` | Private user form → bound browser login, with device AutoFill |
 | `agent_browser_job`      | Poll or cancel long actions                                              |
 
 Tools and the bundled skill become available when BB refreshes the agent session. The same functionality is available immediately through `bb browse help`.
+
+## Private login forms
+
+Browse can request username, password, or verification-code fields through BB's private input UI, using the same SDK mechanism as the built-in Secrets plugin. Device password managers such as 1Password can fill this form. No vault connection or service account is required. Environment-variable requests still use Secrets.
+
+Use `agent_browser_credentials`, or `bb browse credentials` with the session ID, purpose, field selectors/labels/kinds, and `submitSelector`. See the bundled skill for an example. The request locks an idle managed browser for up to five minutes, binds to the original document and fields, then fills and clicks once. Values are excluded from its result and job history, and are not written to dotenv files. Existing input nodes are cleared after delivery. Cancellation before filling preserves the page.
+
+The first version supports top-document inputs and a standard button, HTTPS or loopback HTTP fixtures, and same-origin POST forms. Stop recording before requesting. Unsupported forms and page changes fail closed. A delivery result is not proof of successful login; inspect the following page. Browser/host access remains trusted: destination scripts can retain submitted values, and this feature does not isolate secrets from arbitrary browser scripting or shell access.
+
+On iPhone, use AutoFill → Passwords and choose 1Password. Since the form is on BB's domain, selecting another site's login may require manual selection and Allow Once. iPhone hardware validation is separate from the automated Chromium tests.
 
 ## What improves browser use
 

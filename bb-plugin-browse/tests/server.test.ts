@@ -18,6 +18,7 @@ async function fixture(
     connectFails?: boolean;
     executionHost?: string;
     busyOnce?: boolean;
+    credentialFailure?: boolean;
   } = {},
 ) {
   const release = vi.fn(async () => ({ ok: true })),
@@ -105,6 +106,17 @@ async function fixture(
           artifactRoot: "/private/artifacts/session",
         };
       if (call.method === "release") return { released: true };
+      if (call.method === "credentialPrepare")
+        return {
+          token: "private-request",
+          origin: "https://accounts.shopify.com",
+        };
+      if (call.method === "credentialCancel") return { cancelled: true };
+      if (call.method === "credentialFill") {
+        if (options.credentialFailure)
+          throw Error("Downstream error containing dummy-secret");
+        return { filled: true, count: input.values.length };
+      }
       throw new Error(`Unexpected host method ${call.method}`);
     },
   });
@@ -310,4 +322,73 @@ it("clears a finished job’s busy indicator when the host omits optional fields
   expect(reused.session.busy).toBeUndefined();
   expect(reused.job.output).not.toContain("Wait for active job");
   await f.harness.lifecycle.dispose();
+});
+
+describe("private browser credential requests", () => {
+  const request = (id: string) => ({
+    id,
+    purpose: "Sign in for the requested task",
+    fields: [{ selector: "#password", label: "Password", kind: "password" }],
+    submitSelector: "button",
+  });
+  it.each(["submit", "cancel", "error"])(
+    "handles %s without putting values in the result",
+    async (outcome) => {
+      const f = await fixture({ credentialFailure: outcome === "error" });
+      try {
+        const started: any = await f.harness.behavior.callRpc("start", {
+          threadId: base.threadId,
+          mode: "managed",
+          url: "https://accounts.shopify.com",
+        });
+        const result = f.harness.behavior.runCli(
+          ["credentials", JSON.stringify(request(started.session.id))],
+          { threadId: base.threadId },
+        );
+        await vi.waitFor(() =>
+          expect(f.harness.inspection.pendingInteractions).toHaveLength(1),
+        );
+        const interaction = f.harness.inspection.pendingInteractions[0];
+        expect(interaction.payload).toEqual({
+          origin: "https://accounts.shopify.com",
+          purpose: "Sign in for the requested task",
+          fields: [{ label: "Password", kind: "password" }],
+        });
+        if (outcome === "cancel")
+          f.harness.behavior.cancelInteraction(interaction.id);
+        else
+          f.harness.behavior.submitInteraction(interaction.id, [
+            "dummy-secret",
+          ]);
+        const completed = await result;
+        expect(JSON.stringify(completed)).not.toContain("dummy-secret");
+        expect(completed.exitCode).toBe(outcome === "error" ? 1 : 0);
+        expect(
+          f.calls.filter((c) => c.method === "credentialFill"),
+        ).toHaveLength(outcome === "cancel" ? 0 : 1);
+        expect(
+          f.calls.filter((c) => c.method === "credentialCancel"),
+        ).toHaveLength(1);
+      } finally {
+        await f.harness.lifecycle.dispose();
+      }
+    },
+  );
+  it("refuses another thread before preparing credentials", async () => {
+    const f = await fixture();
+    try {
+      const started: any = await f.harness.behavior.callRpc("start", {
+        threadId: base.threadId,
+        mode: "managed",
+      });
+      const result = await f.harness.behavior.runCli(
+        ["credentials", JSON.stringify(request(started.session.id))],
+        { threadId: "another-thread" },
+      );
+      expect(result.exitCode).toBe(1);
+      expect(f.calls.some((c) => c.method === "credentialPrepare")).toBe(false);
+    } finally {
+      await f.harness.lifecycle.dispose();
+    }
+  });
 });
