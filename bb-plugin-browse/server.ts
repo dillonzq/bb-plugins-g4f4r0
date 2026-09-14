@@ -1143,7 +1143,8 @@ export default async function plugin(bb: BbPluginApi) {
             placement: "thread host by default; explicit hostId allowed",
             remoteViewer: true,
             secureCredentials: true,
-            lifetimeMinutes: 480,
+            lifetimeMinutes: SESSION_TTL_MS / 60000,
+            lifetimePolicy: "Idle timeout; user/agent actions and active-thread keepalive renew it. Frame polling does not.",
           },
           native: {
             requires: "connected BB Desktop instance with Stagehand extension installation and extension debugging support; otherwise use managed Chrome on that host",
