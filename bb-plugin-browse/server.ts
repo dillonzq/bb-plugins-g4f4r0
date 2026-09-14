@@ -213,6 +213,7 @@ export default async function plugin(bb: BbPluginApi) {
   function viewCredentialJob(j: Job): Job {
     return { ...j, durationMs: (j.endedAt ?? Date.now()) - j.startedAt };
   }
+  const viewerErrors = new Map<string, string>();
   const presence = new Map<string, Map<string, number>>();
   function visibleClients(id: string) {
     const clients = presence.get(id);
@@ -550,11 +551,22 @@ export default async function plugin(bb: BbPluginApi) {
       if (s.status !== "ready")
         throw new Error("Browser is not ready. Reconnect the session.");
       if (s.mode === "managed") s.expiresAt = Date.now() + SESSION_TTL_MS;
-      return host.call(
-        "frame",
-        { id, after },
-        { hostId: s.hostId, timeoutMs: 20000 },
-      );
+      try {
+        const frame = await host.call(
+          "frame",
+          { id, after },
+          { hostId: s.hostId, timeoutMs: 20000 },
+        );
+        viewerErrors.delete(id);
+        return frame;
+      } catch (e) {
+        const message =
+          s.mode === "native"
+            ? `Native desktop on ${s.hostLabel} did not provide a live frame. Keep this thread and native tab visible in BB Desktop on that machine. For an independent remote viewer, start a separate managed browser with hostId ${s.hostId}; it will have its own login session. ${redact(String(e))}`
+            : redact(String(e));
+        viewerErrors.set(id, message);
+        throw new Error(message);
+      }
     },
     input: async (input) => {
       const s = get(input.id);
@@ -792,7 +804,7 @@ export default async function plugin(bb: BbPluginApi) {
     reveal: async ({ id }) => {
       const s = get(id);
       const requested = await showLive(s.threadId, s.id);
-      let nativeError = "";
+      let nativeError = viewerErrors.get(s.id) ?? "";
       if (s.mode === "native") {
         try {
           await bb.sdk.experimental_desktopBrowsers.revealTab({
@@ -800,7 +812,7 @@ export default async function plugin(bb: BbPluginApi) {
             tabId: s.tabId,
           });
         } catch (e) {
-          nativeError = redact(String(e));
+          nativeError += ` ${redact(String(e))}`;
         }
       }
       const visible = visibleClients(s.id);

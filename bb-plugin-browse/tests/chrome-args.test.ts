@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
+  acquireDisplay,
   LINUX_DEP_PACKAGES,
   chromeArgs,
   xvfbArgs,
@@ -48,3 +49,18 @@ it("wraps Xvfb so Debian can find xkbcomp without root", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it.each(["darwin", "win32"] as const)(
+  "uses the %s desktop without requiring Linux Xvfb",
+  async (platform) => {
+    const env = { PATH: "" };
+    const display = await acquireDisplay(
+      "/no-linux-dependencies",
+      env,
+      new AbortController().signal,
+      platform,
+    );
+    expect(display.env).toEqual(env);
+    await display.release();
+  },
+);

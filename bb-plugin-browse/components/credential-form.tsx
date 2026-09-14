@@ -88,9 +88,6 @@ export function CredentialForm({
           />
         </label>
       ))}
-      <p className="text-xs text-muted-foreground">
-        Your details stay out of chat.
-      </p>
       {error && <p role="alert">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" disabled={busy}>

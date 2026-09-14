@@ -110,8 +110,7 @@ export function displayFiles(root: string, env = managedEnv(root)) {
   const libs = join(root, "linux-deps", "root");
   const xvfb = !!findOnPath(env, "Xvfb");
   const xkbcomp =
-    existsSync("/usr/bin/xkbcomp") ||
-    existsSync(join(libs, "usr/bin/xkbcomp"));
+    existsSync("/usr/bin/xkbcomp") || existsSync(join(libs, "usr/bin/xkbcomp"));
   const xkbData =
     existsSync("/usr/share/X11/xkb/symbols") ||
     existsSync(join(libs, "usr/share/X11/xkb/symbols"));
@@ -250,11 +249,14 @@ function findOnPath(env: NodeJS.ProcessEnv, name: string) {
   }
 }
 let xvfb: { n: number; child: ChildProcess; users: number } | undefined;
-async function acquireDisplay(
+export async function acquireDisplay(
   root: string,
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<{ env: NodeJS.ProcessEnv; release: () => Promise<void> }> {
+  // macOS and Windows use their native desktop session, not X11/Xvfb.
+  if (platform !== "linux") return { env, release: async () => {} };
   if (process.env.DISPLAY)
     return {
       env: { ...env, DISPLAY: process.env.DISPLAY },
@@ -273,7 +275,10 @@ async function acquireDisplay(
       "Headed Chrome needs a display. On this Linux host install Xvfb via Browse Settings, then retry.",
     );
   let n = 90;
-  while (n < 120 && (existsSync(`/tmp/.X${n}-lock`) || existsSync(`/tmp/.X11-unix/X${n}`)))
+  while (
+    n < 120 &&
+    (existsSync(`/tmp/.X${n}-lock`) || existsSync(`/tmp/.X11-unix/X${n}`))
+  )
     n++;
   const files = displayFiles(root, env);
   if (!files.xvfb)
@@ -302,12 +307,14 @@ async function acquireDisplay(
     stdio: ["ignore", "ignore", "pipe"],
   });
   let stderr = "";
-  child.stderr?.on("data", (b) => (stderr = (stderr + b.toString()).slice(-4000)));
+  child.stderr?.on(
+    "data",
+    (b) => (stderr = (stderr + b.toString()).slice(-4000)),
+  );
   const deadline = Date.now() + 8000;
   while (!existsSync(`/tmp/.X11-unix/X${n}`)) {
     signal.throwIfAborted();
-    if (child.exitCode !== null)
-      throw new Error("Xvfb exited: " + stderr);
+    if (child.exitCode !== null) throw new Error("Xvfb exited: " + stderr);
     if (Date.now() > deadline) {
       child.kill("SIGKILL");
       throw new Error("Xvfb startup timed out: " + stderr);

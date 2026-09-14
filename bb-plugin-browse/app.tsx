@@ -516,6 +516,32 @@ function LiveBrowser({
         >
           All sessions
         </Button>
+        {current?.mode === "native" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                const result = await rpc.call("start", {
+                  threadId,
+                  hostId: current.hostId,
+                  mode: "managed",
+                  url: current.url,
+                  newTab: true,
+                });
+                nav.openThreadPanel({
+                  actionId: "live",
+                  params: { id: result.session.id },
+                  title: browserTitle(result.session),
+                });
+              } catch (e) {
+                setError(String(e));
+              }
+            }}
+          >
+            Separate browser on {current.hostLabel} (new login)
+          </Button>
+        )}
         {current && ["error", "released"].includes(current.status) && (
           <Button
             variant="outline"
