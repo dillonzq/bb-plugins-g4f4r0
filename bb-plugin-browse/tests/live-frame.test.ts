@@ -43,3 +43,13 @@ it('acknowledges each captured frame even when Chrome repeats its session id',as
  c.onScreencast({sessionId:7,data:'one',metadata:{}});c.onScreencast({sessionId:7,data:'two',metadata:{}});
  await c.nextLiveFrame();expect(calls).toEqual([['Page.screencastFrameAck',{sessionId:7}],['Page.screencastFrameAck',{sessionId:7}]]);
 });
+
+it('refreshes a static image when resuming after capture backpressure',async()=>{
+ const {Cdp}=await import('../src/cdp');const c:any=Object.create(Cdp.prototype);const calls:any[]=[];
+ c.casting=true;c.liveAcks=[1,1];c.waiters=new Set();c.seq=2;c.latest={data:'stale',seq:2};c.lastFrameDemand=Date.now()-1000;
+ c.send=async(method:string,params:any)=>{calls.push(method);if(method==='Page.startScreencast')setTimeout(()=>c.onScreencast({sessionId:2,data:'fresh',metadata:{}}),0);return{};};
+ const [one,two]=await Promise.all([c.nextLiveFrame(0),c.nextLiveFrame(0)]);
+ expect(one.data).toBe('fresh');expect(two.data).toBe('fresh');
+ expect(calls.filter(m=>m==='Page.startScreencast')).toHaveLength(1);
+ expect(calls.filter(m=>m==='Page.stopScreencast')).toHaveLength(1);
+});

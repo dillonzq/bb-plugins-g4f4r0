@@ -45,6 +45,7 @@ export class Cdp {
   private latest?: LiveFrame;
   private liveAcks: number[] = [];
   private lastFrameDemand = 0;
+  private restartingCast?: Promise<void>;
   private acknowledgeLiveFrames() {
     const ids = this.liveAcks;
     this.liveAcks = [];
@@ -235,7 +236,19 @@ export class Cdp {
     await this.send("Page.stopScreencast").catch(() => {});
   }
   async nextLiveFrame(after = 0, timeoutMs = 8000): Promise<LiveFrame> {
-    this.lastFrameDemand = Date.now();
+    const now = Date.now();
+    const resume = this.casting && this.liveAcks.length > 0 && now - this.lastFrameDemand > 250;
+    this.lastFrameDemand = now;
+    // Withheld frames can predate a static page change. Restarting requests a
+    // fresh compositor image even when the page produces no further damage.
+    if (resume && !this.restartingCast) {
+      this.restartingCast = (async () => {
+        await this.stopLiveCast();
+        this.latest = undefined;
+        await this.startLiveCast();
+      })().finally(() => { this.restartingCast = undefined; });
+    }
+    if (this.restartingCast) await this.restartingCast;
     if (!this.casting) await this.startLiveCast();
     this.acknowledgeLiveFrames();
     if (this.latest && this.latest.seq > after) return this.latest;

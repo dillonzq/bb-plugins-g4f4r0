@@ -66,4 +66,11 @@ try{
  await evaluate(`viewport.style.display=''`);await sleep(1000);
  assert.ok(await evaluate('inViewport&&cast?.readyState===WebSocket.OPEN&&control?.readyState===WebSocket.OPEN'));
  assert.ok(await evaluate(`browseMetrics.displayed>${stopped}`));out('visible-panel-resumes',{pass:true});
+ await source.evaluate(`document.activeElement?.blur();document.querySelector('#animation').style.animation='none';document.body.insertAdjacentHTML('beforeend','<div id="pause-signal" style="position:fixed;left:0;top:0;width:30px;height:30px;background:blue;z-index:999999;pointer-events:none"></div>');`);
+ await sleep(500);await evaluate('paused=true;cast?.close()');await sleep(2000);
+ for(const color of ['red','green','red','green','yellow']){await source.evaluate(`document.querySelector('#pause-signal').style.background=${JSON.stringify(color)}`);await sleep(150);}
+ await evaluate('paused=false;openCast()');
+ const fresh=await evaluate(`(async()=>{const start=performance.now();while(performance.now()-start<2000){await new Promise(requestAnimationFrame);const p=paint.getImageData(Math.floor(12*screen.width/vw),Math.floor(12*screen.height/vh),1,1).data;if(p[0]>200&&p[1]>200&&p[2]<50)return{fresh:true,ms:performance.now()-start};}return{fresh:false};})()`);
+ assert.equal(fresh.fresh,true);out('static-page-resumes-fresh',fresh);
+
 }finally{source.ws.close();viewer.ws.close();}
