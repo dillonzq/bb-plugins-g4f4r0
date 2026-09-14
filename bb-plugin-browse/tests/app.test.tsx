@@ -305,3 +305,48 @@ it("opens separate tabs for sessions on different hosts and keeps the newest sel
     slot.lifecycle.unmount();
   }
 });
+
+it("routes ordinary external clicks to the thread and reports recoverable launch errors", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  let fail = true;
+  const slot = renderSlot(app.appOverlays[0]!, {}, {
+    context: { threadId: "thread_one" }, openThreadPanel: () => true,
+    rpc: { list: () => [], start: () => {
+      if (fail) throw new Error("Host offline");
+      return { session: { id: "clicked", url: "https://example.com/", hostLabel: "server" } };
+    } },
+  });
+  const link = document.createElement("a");
+  link.href = "https://example.com/"; link.target = "_blank";
+  document.body.append(link);
+  try {
+    expect(fireEvent.click(link)).toBe(false);
+    await slot.findByRole("alert");
+    expect(slot.getByRole("alert").textContent).toContain("Host offline");
+    expect(slot.inspection.rpcCalls.find(c => c.method === "start")?.input).toEqual({ threadId: "thread_one", mode: "managed", url: link.href });
+    fail = false;
+    fireEvent.click(slot.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(slot.inspection.navigateCalls).toContainEqual(expect.objectContaining({ options: expect.objectContaining({ params: { id: "clicked" } }) })));
+  } finally { slot.lifecycle.unmount(); link.remove(); }
+});
+
+it("preserves app routes, modified clicks, downloads, and removes interception on unmount", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  const slot = renderSlot(app.appOverlays[0]!, {}, { context: { threadId: "thread_one" }, rpc: { list: () => [] } });
+  const link = document.createElement("a"); document.body.append(link);
+  // A bubble listener prevents jsdom navigation, and records whether Browse consumed the event.
+  let bubbled = 0;
+  link.addEventListener("click", e => { bubbled++; e.preventDefault(); });
+  try {
+    link.href = "/projects/project"; fireEvent.click(link);
+    link.href = window.location.origin + "/settings"; fireEvent.click(link);
+    link.href = "https://example.com/"; fireEvent.click(link, { ctrlKey: true });
+    fireEvent.click(link, { metaKey: true });
+    link.download = "file"; fireEvent.click(link); link.removeAttribute("download");
+    link.target = "_parent"; fireEvent.click(link); link.target = "";
+    link.dataset.browseLinkRouting = "off"; fireEvent.click(link); delete link.dataset.browseLinkRouting;
+    expect(bubbled).toBe(7);
+    expect(slot.inspection.rpcCalls.filter(c => c.method === "start")).toHaveLength(0);
+    slot.lifecycle.unmount(); fireEvent.click(link); expect(bubbled).toBe(8);
+  } finally { link.remove(); }
+});

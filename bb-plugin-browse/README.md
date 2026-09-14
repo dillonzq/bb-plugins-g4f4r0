@@ -150,3 +150,9 @@ See [multi-host validation](MULTI-HOST-VALIDATION.md) for the September 2026 bro
 ### Native launcher visibility
 
 While Browse is enabled, its client content script hides BB’s built-in “Open browser” action and its reorder handle. The Browse “Browser” action remains available. Disabling Browse restores the native launcher. This is a scoped UI override using the core action’s DOM ID; it does not disable the native browser engine, existing tabs, external-link preferences or core shortcuts. A BB update that changes that ID will need a selector update.
+
+### Web links
+
+While viewing a thread, ordinary clicks on absolute external HTTP(S) links in the BB app open a managed Browse session on that thread's host. This includes ordinary clicks on links marked `_blank`. Repeated clicks during launch are coalesced, and an existing session at that URL can be reused. The resulting session opens in a Browse panel; failures offer Retry.
+
+Modified clicks, middle clicks, downloads, named frame targets, editable content, relative URLs, same-origin BB routes and links outside a thread keep their normal behavior. Viewer iframe links stay within that browser. A container can opt out with `data-browse-link-routing="off"`. Disabling Browse removes the listener. Programmatic core navigation, native shortcuts and the native engine remain available; this does not change BB's saved browser preference.

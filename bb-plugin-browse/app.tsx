@@ -9,6 +9,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import type { rpcContract, health, Job, Session } from "./src/contracts";
 import type { z } from "zod";
+import { browseLink } from "./src/link-routing";
 import { CredentialForm } from "./components/credential-form";
 import { Button } from "./components/ui/button";
 import {
@@ -599,9 +600,63 @@ function AutoShowBrowsers() {
   const { threadId } = useBbContext();
   const nav = useBbNavigate();
   const rpc = useRpc<typeof rpcContract>();
+  const [linkState, setLinkState] = useState<{
+    url: string;
+    error?: string;
+  } | null>(null);
+  const pendingLinks = useRef(new Set<string>());
   const opened = useRef(new Set<string>());
   const activeThread = useRef(threadId);
   activeThread.current = threadId;
+  const openLink = useCallback(
+    async (url: string) => {
+      if (!threadId) return;
+      const key = `${threadId}:${url}`;
+      if (pendingLinks.current.has(key)) return;
+      pendingLinks.current.add(key);
+      setLinkState({ url });
+      try {
+        const result = await rpc.call("start", {
+          threadId,
+          mode: "managed",
+          url,
+        });
+        if (activeThread.current !== threadId) return;
+        if (
+          !nav.openThreadPanel({
+            actionId: "live",
+            params: { id: result.session.id },
+            title: browserTitle(result.session),
+          })
+        ) {
+          throw new Error(
+            "Browser started. Open Browser from the new-tab menu to view this session.",
+          );
+        }
+        opened.current.add(result.session.id);
+        setLinkState((state) => (state?.url === url ? null : state));
+      } catch (error) {
+        if (activeThread.current === threadId)
+          setLinkState({ url, error: String(error) });
+      } finally {
+        pendingLinks.current.delete(key);
+      }
+    },
+    [threadId, rpc, nav],
+  );
+  useEffect(() => {
+    setLinkState(null);
+    if (!threadId) return;
+    const click = (event: MouseEvent) => {
+      const url = browseLink(event, window.location);
+      if (!url) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void openLink(url);
+    };
+    document.addEventListener("click", click, true);
+    return () => document.removeEventListener("click", click, true);
+  }, [threadId, openLink]);
   const sync = useCallback(
     async (revealId?: string) => {
       if (!threadId) return;
@@ -644,5 +699,24 @@ function AutoShowBrowsers() {
   useEffect(() => {
     void sync();
   }, [sync]);
-  return null;
+  return linkState ? (
+    <div
+      role={linkState.error ? "alert" : "status"}
+      className="fixed bottom-4 right-4 z-50 max-w-md rounded-md border bg-background p-3 text-sm shadow-lg"
+    >
+      <p>{linkState.error || "Opening in Browser…"}</p>
+      {linkState.error && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void openLink(linkState.url)}
+        >
+          Retry
+        </Button>
+      )}
+      <Button variant="ghost" size="sm" onClick={() => setLinkState(null)}>
+        Dismiss
+      </Button>
+    </div>
+  ) : null;
 }
