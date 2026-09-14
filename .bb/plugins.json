@@ -6,6 +6,7 @@
     { "name": "browse", "source": "./bb-plugin-browse" },
     { "name": "beacon", "source": "./bb-plugin-beacon" },
     { "name": "sidetree", "source": "./bb-plugin-sidetree" },
-    { "name": "dusk", "source": "./bb-plugin-dusk" }
+    { "name": "dusk", "source": "./bb-plugin-dusk" },
+    { "name": "reserve", "source": "./bb-plugin-reserve" }
   ]
 }

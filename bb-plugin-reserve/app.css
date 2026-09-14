@@ -1,0 +1,4 @@
+/* Clip full-bleed dividers to the card, including the scrollbar gutter. */
+section:has([data-reserve-shell]) > div {
+  overflow-x: hidden;
+}

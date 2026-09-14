@@ -17,8 +17,9 @@
   --primary: #2383e2;
   --primary-foreground: #ffffff;
   --ring: var(--primary);
-  --timeline-accent: #176fbd;
-  --file-accent: var(--timeline-accent);
+  /* Keep transcript dividers and file accents on Dusk's primary blue. */
+  --timeline-accent: var(--primary);
+  --file-accent: var(--primary);
   --secondary: #f1f1ef;
   --secondary-foreground: var(--ink);
   --accent: #eeeeec;
@@ -50,8 +51,8 @@
   --primary: #2383e2;
   --primary-foreground: #ffffff;
   --ring: var(--primary);
-  --timeline-accent: #529fe9;
-  --file-accent: var(--timeline-accent);
+  --timeline-accent: var(--primary);
+  --file-accent: var(--primary);
   --secondary: #262626;
   --secondary-foreground: var(--ink);
   --accent: #252525;
@@ -116,11 +117,10 @@ button[aria-label="Stop and transcribe recording"]:hover {
   background-color: #202021;
 }
 
-/* Thread selection uses state-active, not sidebar-accent. Keep the sidebar's
-   active and hover surfaces close to the sampled near-black background. */
+/* Transparent lift: opaque #161617 hover disappears on popover/footer chips. */
 .dark [data-sidebar="sidebar"] {
   --state-active: #1d1d1e;
-  --state-hover: #161617;
+  --state-hover: color-mix(in srgb, var(--foreground) 12%, transparent);
 }
 
 [data-promptbox-submit-action][aria-label="Stop run"] {
