@@ -490,16 +490,48 @@ function LiveBrowser({
   useRealtime("browser-changed", () => {
     void sync();
   });
+  const [address, setAddress] = useState("");
+  const [opening, setOpening] = useState(false);
+  const launching = useRef(false);
+  async function openAddress() {
+    if (launching.current) return;
+    launching.current = true;
+    setOpening(true);
+    setError("");
+    try {
+      const text = address.trim();
+      const url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(text) ? text : `https://${text}`);
+      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
+        throw new Error("Enter an http or https address without login details.");
+      const result = await rpc.call("start", { threadId, mode: "managed", url: url.href });
+      await sync();
+      if (!nav.openThreadPanel({ actionId: "live", params: { id: result.session.id }, title: browserTitle(result.session) }))
+        throw new Error("Browser started. Select its session below to open it.");
+    } catch (e) { setError(String(e)); }
+    finally { launching.current = false; setOpening(false); }
+  }
   const current = sessions.find((s) => s.id === id);
   if (!id)
     return (
       <div className="p-4 space-y-3">
-        <p>
-          Browsers for this thread. Each session stays on its selected machine.
-        </p>
+        <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
+          <input
+            aria-label="Website address"
+            className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+            placeholder="Enter a website address"
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+          />
+          <Button type="submit" disabled={opening || !address.trim()}>{opening ? "Opening…" : "Open"}</Button>
+        </form>
+        <p className="text-sm text-muted-foreground">Opens on this thread’s machine. You and the agent share the same page.</p>
         {error && <p role="alert">{error}</p>}
         {!sessions.length && (
-          <p>No browser sessions yet. Ask the agent to open a page.</p>
+          <p>No browser sessions yet.</p>
         )}
         {sessions.map((s) => (
           <Button
@@ -513,7 +545,7 @@ function LiveBrowser({
               })
             }
           >
-            {s.hostLabel} · {s.mode} · {s.url} · {s.status}
+            {s.hostLabel} · {s.url} · {s.status}
           </Button>
         ))}
       </div>
@@ -522,7 +554,7 @@ function LiveBrowser({
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b p-2 text-sm">
         <span>
-          {current ? `${current.hostLabel} · ${current.mode} · ${id}` : id}
+          {current ? `${current.hostLabel} · ${id}` : id}
         </span>
         <Button
           variant="outline"
@@ -556,7 +588,7 @@ function LiveBrowser({
               }
             }}
           >
-            Separate browser on {current.hostLabel} (new login)
+            Open in Browse on {current.hostLabel}
           </Button>
         )}
         {current && ["error", "released"].includes(current.status) && (
@@ -648,7 +680,24 @@ function AutoShowBrowsers({ threadId }: { threadId: string }) {
   useEffect(() => {
     setLinkState(null);
     if (!threadId || selectedThreadId !== threadId) return;
+    const routeLauncher = (event: Event) => {
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      nav.openThreadPanel({ actionId: "live", title: "Browser" });
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("#file-search-result-open-browser") ||
+          (event.key === "Enter" && target?.getAttribute("aria-activedescendant") === "file-search-result-open-browser"))
+        routeLauncher(event);
+    };
     const click = (event: MouseEvent) => {
+      if (event.composedPath().some(node => node instanceof Element && node.id === "file-search-result-open-browser")) {
+        routeLauncher(event);
+        return;
+      }
       const url = browseLink(event, window.location);
       if (!url) return;
       event.preventDefault();
@@ -656,8 +705,12 @@ function AutoShowBrowsers({ threadId }: { threadId: string }) {
       void openLink(url);
     };
     document.addEventListener("click", click, true);
-    return () => document.removeEventListener("click", click, true);
-  }, [threadId, selectedThreadId, openLink]);
+    document.addEventListener("keydown", keydown, true);
+    return () => {
+      document.removeEventListener("click", click, true);
+      document.removeEventListener("keydown", keydown, true);
+    };
+  }, [threadId, selectedThreadId, openLink, nav]);
   const sync = useCallback(
     async (revealId?: string) => {
       if (!threadId) return;

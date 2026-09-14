@@ -350,3 +350,44 @@ it("preserves app routes, modified clicks, downloads, and removes interception o
     slot.lifecycle.unmount(); fireEvent.click(link); expect(bubbled).toBe(8);
   } finally { link.remove(); }
 });
+
+it("opens typed addresses on the thread host and rejects credential-bearing URLs", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  const slot = renderSlot(app.threadPanelActions[0]!, { threadId: "thread_one", params: {} }, {
+    openThreadPanel: () => true,
+    rpc: { list: () => [], start: () => ({ session: { id: "typed", url: "https://example.com/", hostLabel: "server" } }) },
+  });
+  try {
+    const input = slot.getByRole("textbox", { name: "Website address" });
+    fireEvent.change(input, { target: { value: "https://user:secret@example.com" } });
+    fireEvent.submit(input.closest("form")!);
+    await slot.findByRole("alert");
+    expect(slot.inspection.rpcCalls.filter(c => c.method === "start")).toHaveLength(0);
+    fireEvent.change(input, { target: { value: "example.com" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() => expect(slot.inspection.navigateCalls).toHaveLength(1));
+    expect(slot.inspection.rpcCalls.find(c => c.method === "start")?.input).toEqual({ threadId: "thread_one", mode: "managed", url: "https://example.com/" });
+  } finally { slot.lifecycle.unmount(); }
+});
+
+it("redirects original launcher clicks and keyboard selection without invoking core", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  const slot = renderSlot(app.threadHeaderActions[0]!, { threadId: "thread_one", projectId: "project_one", isCompactViewport: false }, {
+    context: { threadId: "thread_one" }, openThreadPanel: () => true, rpc: { list: () => [] },
+  });
+  const button = document.createElement("button"); button.id = "file-search-result-open-browser";
+  const input = document.createElement("input"); input.setAttribute("aria-activedescendant", button.id);
+  document.body.append(button, input);
+  let coreCalls = 0;
+  button.addEventListener("click", () => coreCalls++);
+  input.addEventListener("keydown", () => coreCalls++);
+  try {
+    fireEvent.click(button);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(coreCalls).toBe(0);
+    expect(slot.inspection.navigateCalls).toHaveLength(2);
+    slot.lifecycle.unmount();
+    fireEvent.click(button);
+    expect(coreCalls).toBe(1);
+  } finally { button.remove(); input.remove(); }
+});

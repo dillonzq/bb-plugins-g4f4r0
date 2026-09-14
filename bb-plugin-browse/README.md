@@ -169,3 +169,17 @@ Snapshot IDs are Stagehand IDs such as `[0-19]`; pass `@0-19` to actions. `snaps
 Supported command families: open/back/forward/reload, snapshot, click/dblclick/hover/fill/type/press/keyboard, select/check/uncheck/upload, scroll/scrollintoview/drag, wait/frame, get/is/focus/eval, storage/cookies/dialog/console/errors, set viewport/headers, network requests/route/unroute, and a11y. `get attr` and `focus` currently require a top-page DOM selector; use native locator operations for nested elements. Network route supports pass-through, `--abort`, or a fixed `--body` response.
 
 Streaming, secure credentials, exact gestures, canvas/link export and printing remain Browse-owned CDP features. Recording uses the shared screencast plus FFmpeg; requested FPS samples frames and does not guarantee that every frame is new. This migration does not establish a 60 FPS viewer or measured speed superiority.
+
+### Replacing the original browser entry points
+
+Browse hides BB's original New tab → Open browser action, including its row.
+Activation by click or keyboard in the current thread opens Browse's panel.
+The Browser action offers a website address field that launches Chrome on the
+thread host. Ordinary external web links also open Browse. Modified clicks,
+downloads, internal BB routes, and viewer navigation retain their own behavior.
+
+This is a plugin UI override, not removal of BB's browser subsystem. Existing
+native tabs and core CLI/API calls remain available, and the DOM selector may
+need updating after a BB UI change. Browse does not automatically close existing
+native tabs or transfer their cookies. Streaming performance is independent of
+which automation SDK controls Chrome.
