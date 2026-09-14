@@ -13,6 +13,7 @@ import type { rpcContract, health, Job, Session } from "./src/contracts";
 import type { z } from "zod";
 import { browseLink } from "./src/link-routing";
 import { CredentialForm } from "./components/credential-form";
+import { Input } from "./components/ui/input";
 import { Button } from "./components/ui/button";
 import {
   SettingsSection,
@@ -21,7 +22,7 @@ import {
 } from "./components/ui/settings-section";
 
 function BrowserActionTooltip({ label, children }: { label: string; children: React.ReactNode }) {
-  return <TooltipPrimitive.Provider delayDuration={400}><TooltipPrimitive.Root><TooltipPrimitive.Trigger asChild><span className="inline-flex">{children}</span></TooltipPrimitive.Trigger><TooltipPrimitive.Portal><TooltipPrimitive.Content side="bottom" sideOffset={4} collisionPadding={8} className="z-50 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground">{label}</TooltipPrimitive.Content></TooltipPrimitive.Portal></TooltipPrimitive.Root></TooltipPrimitive.Provider>;
+  return <TooltipPrimitive.Provider delayDuration={400}><TooltipPrimitive.Root><TooltipPrimitive.Trigger asChild><span className="inline-flex">{children}</span></TooltipPrimitive.Trigger><TooltipPrimitive.Portal><TooltipPrimitive.Content side="bottom" sideOffset={4} collisionPadding={8} className="z-50 rounded-md border border-border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md">{label}</TooltipPrimitive.Content></TooltipPrimitive.Portal></TooltipPrimitive.Root></TooltipPrimitive.Provider>;
 }
 
 type Health = z.infer<typeof health>;
@@ -546,9 +547,10 @@ function LiveBrowser({
           <BrowserActionTooltip label="Back"><Button type="button" variant="ghost" size="icon-sm" aria-label="Back" disabled><BrowseIcon name="ArrowLeft" className="size-4" /></Button></BrowserActionTooltip>
           <BrowserActionTooltip label="Forward"><Button type="button" variant="ghost" size="icon-sm" aria-label="Forward" disabled><BrowseIcon name="ArrowRight" className="size-4" /></Button></BrowserActionTooltip>
           <BrowserActionTooltip label="Refresh sessions"><Button type="button" variant="ghost" size="icon-sm" aria-label="Refresh sessions" onClick={() => void sync()}><BrowseIcon name="RefreshCw" className="size-4" /></Button></BrowserActionTooltip>
-          <input
+          <Input
             aria-label="Website address"
-            className="h-8 min-w-0 flex-1 rounded-md bg-transparent px-2 py-0 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="min-w-0 flex-1"
+            disabled={opening}
             placeholder="Enter URL"
             value={address}
             onChange={(event) => setAddress(event.target.value)}
@@ -557,7 +559,6 @@ function LiveBrowser({
             spellCheck={false}
             required
           />
-          <BrowserActionTooltip label={opening ? "Opening" : "Go"}><Button type="submit" variant="ghost" size="icon-sm" aria-label={opening ? "Opening" : "Go"} disabled={opening || !address.trim()}><BrowseIcon name="ArrowRight" className="size-4" /></Button></BrowserActionTooltip>
         </form>
         <div className="min-h-0 flex-1 overflow-auto flex flex-col">
           <div className="m-auto w-full max-w-3xl px-6 py-12">
