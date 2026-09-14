@@ -64,6 +64,18 @@ test("multi-record writes roll back atomically and state survives a store reopen
   assert.equal(store.alerts().length, 2);
 });
 
+test("overlapping stores allocate fresh sequences without overwriting each other's logs", async (t) => {
+  const { bb, harness } = createFakePluginHost({ pluginId: "beacon" }); t.after(() => harness.lifecycle.dispose());
+  const first = createMonitorStore(bb), second = createMonitorStore(bb);
+  first.write([{ type: "summary", timestamp: 1 }]);
+  assert.equal(second.cursor(), 1);
+  second.write([{ ...notice(0) }]);
+  first.write([{ type: "summary", timestamp: 3 }]);
+  assert.deepEqual(second.read().map((entry) => entry.sequence), [1, 2, 3]);
+  assert.equal(first.cursor(), 3);
+  assert.equal(second.currentNotices()[0].sequence, 2);
+});
+
 async function setupMonitor(t, read = async () => base) {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 100_000 });
   t.mock.method(performance, "now", () => Date.now());
@@ -108,7 +120,8 @@ test("slow monitor reads never overlap and late results are discarded after disa
   const s = await setupMonitor(t, (signal) => { readSignal = signal; return pending.promise; });
   s.monitor.configure(true, true); await flush(); await s.tick(120_000); assert.equal(s.calls(), 1);
   s.monitor.configure(false, true); assert.equal(readSignal.aborted, true); pending.resolve({ ...base, cpu: 100, memory: 100 }); await flush();
-  assert.equal(s.harness.realtimeSignals.length, 0); assert.equal(s.monitor.logs(100).length, 0);
+  assert.equal(s.harness.realtimeSignals.length, 0);
+  assert.deepEqual(s.monitor.logs(100).map((entry) => entry.type), ["monitor_disabled"]);
 });
 test("dispose wakes a disabled service and leaves no running loop", async (t) => {
   const s = await setupMonitor(t); s.monitor.dispose(); await s.running; assert.equal(s.calls(), 0);
@@ -125,6 +138,63 @@ test("failed samples persist broken streaks so reload cannot bridge the missing 
   failed = false; await s.tick(); failed = true; await s.tick();
   assert.equal(createMonitorStore(s.bb).state().memory.since, null);
   assert.equal(s.monitor.logs(100).filter((e) => e.type === "error").length, 1);
+});
+
+test("repeated read failures cannot keep old incidents fresh, including after a store reopen", async (t) => {
+  let failed = false;
+  const s = await setupMonitor(t, async () => {
+    if (failed) throw new Error("read failed");
+    return { ...base, cpu: 99, memory: 99 };
+  });
+  s.monitor.configure(true, true); await flush(); await s.tick(); await s.tick();
+  assert.equal(s.monitor.status().active.length, 2);
+  const sampledAt = Date.now();
+  failed = true;
+  for (let i = 0; i < 12; i++) await s.tick();
+  assert.deepEqual(s.monitor.status().active, []);
+  const restored = createMonitorStore(s.bb).state();
+  assert.equal(restored.lastSampleAt, sampledAt);
+  assert.equal(restored.cpu.active, true, "missing readings cannot prove recovery");
+  failed = false; await s.tick();
+  assert.equal(s.monitor.status().active.length, 2);
+  assert.equal(s.harness.realtimeSignals.length, 2, "resuming must not duplicate incidents");
+});
+
+test("quiet samples persist broken candidates and recoveries before the next summary", async (t) => {
+  let sample = { ...base, memory: 99 };
+  const s = await setupMonitor(t, async () => sample);
+  s.monitor.configure(true, true); await flush();
+  sample = base; await s.tick();
+  const restored = createMonitorStore(s.bb).state();
+  assert.equal(restored.memory.since, null);
+  assert.deepEqual(stepPressure(restored, { cpu: null, memory: 99 }, Date.now() + 30_000).events, []);
+  sample = { ...base, memory: 99 }; await s.tick(); await s.tick(); await s.tick();
+  sample = base; await s.tick();
+  assert.equal(createMonitorStore(s.bb).state().memory.recoveringSince, Date.now());
+  sample = { ...base, memory: 99 }; await s.tick();
+  assert.equal(createMonitorStore(s.bb).state().memory.recoveringSince, null);
+});
+
+test("the first failed read after restart breaks persisted confirmation streaks", async (t) => {
+  const s = await setupMonitor(t, async () => { throw new Error("read failed"); });
+  const previous = stepPressure(freshPressureState(), { cpu: null, memory: 99 }, Date.now() - 30_000).state;
+  createMonitorStore(s.bb).write([], previous);
+  s.monitor.configure(true, true); await flush();
+  assert.equal(createMonitorStore(s.bb).state().memory.since, null);
+});
+
+test("disable clears persisted incidents before a restarted monitor has sampled", async (t) => {
+  const s = await setupMonitor(t);
+  const previous = freshPressureState();
+  Object.assign(previous.memory, { active: true, since: Date.now() - 60_000, peak: 99 });
+  previous.lastSampleAt = Date.now();
+  const storage = createMonitorStore(s.bb);
+  storage.write([{ ...notice(1, "incident", "memory") }], previous);
+  s.monitor.configure(true, true);
+  s.monitor.configure(false, true);
+  assert.equal(storage.state().memory.active, false);
+  assert.deepEqual(storage.alerts(), []);
+  await flush(); assert.equal(s.calls(), 0);
 });
 
 test("monitor restart preserves active incidents without duplicate alerts; disable clears them", async (t) => {
@@ -181,6 +251,14 @@ test("a new tab only surfaces active incidents, not historical resolved incident
   assert.equal(shown.length, 0); r.receive(notice(6)); assert.equal(shown.length, 1);
   assert.equal(isAlertNotice({ type: "incident", metric: "memory" }), false);
 });
+test("live traffic before the first reconciliation does not replay a new tab's historical recoveries", () => {
+  const shown = []; const r = createAlertReceiver(null, (n) => shown.push(n), () => {});
+  r.receive(notice(10));
+  r.reconcile({ enabled: true, notifications: true, cursor: 10, active: [notice(10)], recent: [notice(8, "recovery", "memory"), notice(10)] });
+  assert.deepEqual(shown.map((n) => n.sequence), [10]);
+  r.reconcile({ enabled: true, notifications: true, cursor: 12, active: [notice(10)], recent: [notice(12, "recovery", "memory")] });
+  assert.deepEqual(shown.map((n) => n.sequence), [10, 12]);
+});
 test("reconnect collapses missed transitions to one latest notice per metric", () => {
   const shown = []; const r = createAlertReceiver(1, (n) => shown.push(n), () => {});
   r.reconcile({ enabled: true, notifications: true, cursor: 8, active: [], recent: [notice(2), notice(3, "recovery"), notice(4, "incident", "memory"), notice(5, "recovery", "memory")] });
@@ -228,4 +306,20 @@ test("malformed persisted notices are ignored without breaking status or state r
   db.prepare("UPDATE pressure_state SET payload = ?").run("invalid JSON");
   assert.deepEqual(store.alerts(), []); assert.deepEqual(store.currentNotices(), []);
   assert.deepEqual(store.state(), freshPressureState());
+});
+
+test("damaged diagnostic rows cannot prevent exporting the remaining logs", async (t) => {
+  const { bb, harness } = createFakePluginHost({ pluginId: "beacon" }); t.after(() => harness.lifecycle.dispose()); await plugin(bb);
+  const store = createMonitorStore(bb);
+  const payloads = ["invalid JSON", "null", "[]", '{"type":"summary","timestamp":1e100}', '{"type":"summary","timestamp":"yesterday"}', '{"type":"summary","timestamp":1,"nested":{}}'];
+  store.write(Array.from({ length: payloads.length + 2 }, (_, timestamp) => ({ type: "summary", timestamp })));
+  const update = bb.storage.database().prepare("UPDATE pressure_logs SET payload = ? WHERE sequence = ?");
+  payloads.forEach((payload, index) => update.run(payload, index + 2));
+  assert.deepEqual(store.read().map((entry) => entry.sequence), [1, payloads.length + 2]);
+  for (const args of [["logs"], ["logs", "--json"]]) {
+    const result = await harness.behavior.runCli(args);
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.stdout.split("\n").length, 2);
+  }
+  assert.equal(store.cursor(), payloads.length + 2, "invalid rows still count toward the alert cursor");
 });

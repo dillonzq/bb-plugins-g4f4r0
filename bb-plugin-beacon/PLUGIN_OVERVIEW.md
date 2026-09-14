@@ -8,7 +8,7 @@ Turn on background monitoring to watch CPU and memory every 30 seconds while Sta
 
 ## How it works
 
-Dashboard colors turn amber at 75% and red at 95%. CLI health warns at 85% and goes critical at 95%, and it also compares five-minute load with core count. Background alerts wait a full minute of samples at higher thresholds. Those scales are independent on purpose.
+Dashboard colors turn amber at 75% and red at 95%. CLI health warns at 85% and goes critical at 95%. It also compares five-minute load with core count. Background alerts wait a full minute of samples at higher thresholds. Those scales are independent on purpose.
 
 Metrics stay on the BB server. Chart history is memory-only and expires when nobody is looking. Beacon never calls an external API. It does not change server settings, enable swap, or kill processes.
 

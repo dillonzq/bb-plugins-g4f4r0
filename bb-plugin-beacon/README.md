@@ -78,7 +78,7 @@ Disk is `/`. Used space is allocated blocks. Available excludes reserved blocks,
 
 Network is received and sent bytes per second on the non-loopback interface with the most cumulative traffic. Not a sum of interfaces. Rates go unavailable when the interface changes or counters reset. Linux only.
 
-Processes lists six PIDs by lifetime-average CPU, PID as tie-break. Process CPU is relative to one core and can exceed 100%. That is not the sampled host CPU.
+Snapshots list six PIDs by lifetime-average CPU, PID as tie-break. The popover shows the first three. Process CPU is relative to one core and can exceed 100%. That is not the sampled host CPU.
 
 Runtime is the BB server process, including loaded plugins, not Beacon alone.
 
@@ -90,7 +90,7 @@ A failed process scan returns `processes.available: false`. Zero counts in that 
 
 The popover polls only while it is visible. Hiding it drops the view. The server keeps a shared cache for the greater of 15 seconds and twice the dashboard interval, then forgets history. Reopening after that starts cold, so CPU and network need a second sample.
 
-History holds at most 72 points. Visible failures back off from 5 seconds to 60. Meters are green below 75%, amber from 75%, red from 95%. Network download is blue, upload orange. Those colors do not fire alerts.
+History holds at most 72 points. Visible failures back off from 5 seconds to 60. Meters are green below 75%, amber from 75%, red from 95%. Those colors do not fire alerts.
 
 ## Background alerts
 

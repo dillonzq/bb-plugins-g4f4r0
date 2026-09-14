@@ -13,6 +13,7 @@ const validCursor = (value: unknown): number => typeof value === "number" && Num
 export function createAlertReceiver(initial: unknown, show: (notice: AlertNotice) => void, save: (cursor: AlertCursor) => void) {
   const seed = initial && typeof initial === "object" ? initial as AlertCursor : { cpu: initial, memory: initial };
   const cursor: AlertCursor = { cpu: validCursor(seed.cpu), memory: validCursor(seed.memory) };
+  let reconciled = cursor.cpu > 0 || cursor.memory > 0;
   function receive(value: unknown) {
     if (!isAlertNotice(value) || value.sequence <= cursor[value.metric]) return;
     cursor[value.metric] = value.sequence;
@@ -24,7 +25,10 @@ export function createAlertReceiver(initial: unknown, show: (notice: AlertNotice
     reconcile(status: { enabled: boolean; notifications: boolean; cursor: number; active: AlertNotice[]; recent: AlertNotice[] }) {
       if (!status.enabled || !status.notifications) return;
       // A slow status response can predate a live event. Never rewind its cursor.
-      const notices = cursor.cpu === 0 && cursor.memory === 0 ? status.active : [...status.recent, ...status.active];
+      // A live event can arrive before the first status response. It must not
+      // make a new tab replay historical recoveries for the other metric.
+      const notices = reconciled ? [...status.recent, ...status.active] : status.active;
+      reconciled = true;
       const latest = new Map<string, AlertNotice>();
       for (const notice of notices) if (isAlertNotice(notice) && notice.sequence > (latest.get(notice.metric)?.sequence ?? -1)) latest.set(notice.metric, notice);
       [...latest.values()].sort((a, b) => a.sequence - b.sequence).forEach(receive);

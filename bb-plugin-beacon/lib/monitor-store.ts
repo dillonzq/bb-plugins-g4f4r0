@@ -30,11 +30,15 @@ export function createMonitorStore(bb: Pick<BbPluginApi, "storage">) {
   // Dedicated Beacon DB: cap the main file at 10 MiB; WAL checkpoints every 64 pages.
   const pageSize = Number(db.pragma("page_size", { simple: true }));
   db.pragma(`max_page_count = ${Math.floor(10 * 1024 * 1024 / pageSize)}`);
-  let sequence = (db.prepare("SELECT COALESCE(MAX(sequence), 0) AS sequence FROM pressure_logs").get() as { sequence: number }).sequence;
+  const latestSequence = db.prepare("SELECT COALESCE(MAX(sequence), 0) AS sequence FROM pressure_logs");
+  const cursor = () => (latestSequence.get() as { sequence: number }).sequence;
   const insert = db.prepare("INSERT OR REPLACE INTO pressure_logs(slot, sequence, type, payload) VALUES (?, ?, ?, ?)");
   const saveState = db.prepare("INSERT OR REPLACE INTO pressure_state(id, payload) VALUES (1, ?)");
   const saveNotice = db.prepare("INSERT OR REPLACE INTO pressure_notices(metric, payload) VALUES (?, ?)");
   const commit = db.transaction((entries: LogEntry[], state?: PressureState) => {
+    // Allocate under the write lock: another store or plugin generation may have
+    // appended since this instance opened the database.
+    const sequence = cursor();
     const saved = entries.map((entry, index) => {
       const payload = JSON.stringify(entry);
       if (Buffer.byteLength(payload) > 1024) throw new Error("Beacon log record exceeds 1 KiB");
@@ -48,13 +52,20 @@ export function createMonitorStore(bb: Pick<BbPluginApi, "storage">) {
   });
   return {
     write(entries: LogEntry[], state?: PressureState): SavedLog[] {
-      const saved = commit(entries, state);
-      sequence += saved.length;
-      return saved;
+      return commit.immediate(entries, state);
     },
     read(limit = 100): SavedLog[] {
       const count = Math.min(500, Math.max(1, Math.floor(limit)));
-      return (db.prepare("SELECT sequence, payload FROM pressure_logs ORDER BY sequence DESC LIMIT ?").all(count) as Array<{ sequence: number; payload: string }>).reverse().map((row) => ({ ...JSON.parse(row.payload), sequence: row.sequence }));
+      return (db.prepare("SELECT sequence, payload FROM pressure_logs ORDER BY sequence DESC LIMIT ?").all(count) as Array<{ sequence: number; payload: string }>).reverse().flatMap((row) => {
+        try {
+          const entry = JSON.parse(row.payload);
+          // One damaged record must not hide the rest of the diagnostics or make
+          // the human-readable CLI throw while formatting its timestamp.
+          if (!entry || typeof entry !== "object" || Array.isArray(entry) || typeof entry.type !== "string" || typeof entry.timestamp !== "number" || !Number.isFinite(new Date(entry.timestamp).getTime())) return [];
+          if (!Object.values(entry).every((value) => value === null || typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)))) return [];
+          return [{ ...entry, sequence: row.sequence }];
+        } catch { return []; }
+      });
     },
     alerts(): AlertNotice[] {
       return (db.prepare("SELECT sequence, payload FROM pressure_logs WHERE type IN ('incident','recovery') AND sequence > COALESCE((SELECT MAX(sequence) FROM pressure_logs WHERE type = 'monitor_disabled'), 0) ORDER BY sequence DESC LIMIT 32").all() as Array<{ sequence: number; payload: string }>).reverse().flatMap((row) => parseNotice(row.payload, row.sequence));
@@ -67,6 +78,6 @@ export function createMonitorStore(bb: Pick<BbPluginApi, "storage">) {
       try { const value: unknown = JSON.parse(row?.payload ?? "null"); return isPressureState(value) ? value : freshPressureState(); }
       catch { return freshPressureState(); }
     },
-    cursor: () => sequence,
+    cursor,
   };
 }

@@ -494,7 +494,7 @@ export default async function plugin(bb: BbPluginApi) {
             `Load: ${snapshot.cpu.loadAverage.map((value) => value.toFixed(2)).join(" / ")}`,
             `Memory: ${snapshot.memory.usagePercent.toFixed(1)}% used`,
             `Disk: ${snapshot.disk ? `${snapshot.disk.usagePercent.toFixed(1)}% used` : "unavailable"}`,
-            `Processes: ${snapshot.processes.total} total, ${snapshot.processes.running} running`,
+            snapshot.processes.available ? `Processes: ${snapshot.processes.total} total, ${snapshot.processes.running} running` : "Processes: unavailable",
             `Updated: ${snapshot.timestamp}`,
           ].join("\n"),
         };

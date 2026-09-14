@@ -4,8 +4,7 @@ import type { ServerSnapshot } from "./server";
 import { useServerSnapshot } from "./hooks/use-server-snapshot";
 import { PressureNotifications, bindStatusOpener } from "./components/pressure-notifications";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ServerIcon } from "@hugeicons/core-free-icons";
-import { Icon } from "@/components/ui/icon";
+import { Loading03Icon, ServerIcon } from "@hugeicons/core-free-icons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const GREEN = "#22c55e";
@@ -25,7 +24,7 @@ function formatBytes(bytes: number): string {
 
 // The first reading of rate-based counters needs a second sample.
 function Sampling() {
-  return <Icon name="Loading" className="inline-block size-3.5 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Sampling" />;
+  return <HugeiconsIcon icon={Loading03Icon} className="inline-block size-3.5 animate-spin text-muted-foreground motion-reduce:animate-none" role="img" aria-label="Sampling" />;
 }
 
 function formatRate(bytes: number | null): ReactNode {
@@ -150,13 +149,13 @@ function LoadingPopover() {
 }
 
 function ServerMark({ className }: { className?: string }) {
-  return <HugeiconsIcon icon={ServerIcon} className={className} aria-hidden="true" />;
+  return <HugeiconsIcon icon={ServerIcon} className={className} strokeWidth={2} style={{ opacity: 0.8 }} aria-hidden="true" />;
 }
 
 function StatusDisclosure(_props: ExperimentalSidebarFooterDisclosureProps) {
   const { container, active, snapshot, error } = useServerSnapshot();
   return (
-    <div ref={container} data-beacon-shell aria-busy={!(active && snapshot)} className="w-full min-w-64 divide-y divide-sidebar-border">
+    <div ref={container} data-beacon-shell aria-busy={active && !snapshot && !error} className="w-full min-w-64 divide-y divide-sidebar-border">
       {error ? <div role="alert" className="px-3 py-2 text-xs text-destructive">Could not refresh: {error}</div> : null}
       {/* The skeleton gives the shell height so the visibility observer can activate polling. */}
       {active && snapshot ? <StatusPopover snapshot={snapshot} /> : (

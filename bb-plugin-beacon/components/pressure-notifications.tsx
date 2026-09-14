@@ -35,6 +35,7 @@ function ActiveNotifications() {
     let disposed = false;
     let pending = false;
     let repeat = false;
+    let generation = 0;
     let saved: unknown = null;
     try { saved = JSON.parse(sessionStorage.getItem(CURSOR_KEY) ?? "null"); } catch { /* Storage may be disabled. */ }
     const nextReceiver = createAlertReceiver(saved, (notice) => {
@@ -50,17 +51,20 @@ function ActiveNotifications() {
       if (disposed || document.visibilityState !== "visible") return;
       if (pending) { repeat = true; return; }
       pending = true;
+      const requestGeneration = generation;
       try {
         const status = await rpc.call("monitor_status");
-        if (!disposed && document.visibilityState === "visible") nextReceiver.reconcile(status);
+        if (!disposed && requestGeneration === generation && document.visibilityState === "visible") nextReceiver.reconcile(status);
       } catch { /* Reconcile at the next reconnect/visibility event, never in a retry loop. */ }
       finally {
         pending = false;
         if (repeat && !disposed) { repeat = false; void reconcile(); }
       }
     };
-    sync.current = () => { void reconcile(); };
-    const visible = () => { if (document.visibilityState === "visible") void reconcile(); };
+    // A response from before hide/show or reconnect can contain an incident that
+    // has since recovered. Discard it before advancing cursors or showing toasts.
+    sync.current = () => { generation++; void reconcile(); };
+    const visible = () => { generation++; if (document.visibilityState === "visible") void reconcile(); };
     document.addEventListener("visibilitychange", visible);
     void reconcile();
     return () => {
