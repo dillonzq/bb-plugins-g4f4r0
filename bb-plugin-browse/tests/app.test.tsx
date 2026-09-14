@@ -391,3 +391,25 @@ it("redirects original launcher clicks and keyboard selection without invoking c
     expect(coreCalls).toBe(1);
   } finally { button.remove(); input.remove(); }
 });
+
+it("separates this thread's active sessions and recent pages from local web servers", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  const slot = renderSlot(app.threadPanelActions[0]!, { threadId: "thread_one", params: {} }, {
+    rpc: {
+      list: () => [
+        { id: "active", threadId: "thread_one", status: "ready", url: "https://active.example", hostLabel: "server" },
+        { id: "closed", threadId: "thread_one", status: "released", url: "https://recent.example", hostLabel: "server" },
+        { id: "duplicate", threadId: "thread_one", status: "released", url: "https://recent.example", hostLabel: "server" },
+        { id: "foreign", threadId: "thread_two", status: "ready", url: "https://other.example", hostLabel: "server" },
+      ],
+      "local-servers": () => ({ servers: [{ port: 5173, name: "node", url: "http://localhost:5173" }], error: null }),
+    },
+  });
+  try {
+    await slot.findByText("active.example");
+    expect(within(slot.getByRole("region", { name: "Sessions" })).queryByText("recent.example")).toBeNull();
+    expect(within(slot.getByRole("region", { name: "Recent" })).getAllByRole("button")).toHaveLength(1);
+    expect(slot.queryByText("other.example")).toBeNull();
+    expect(within(slot.getByRole("region", { name: "Local servers" })).getByText("localhost:5173")).toBeTruthy();
+  } finally { slot.lifecycle.unmount(); }
+});

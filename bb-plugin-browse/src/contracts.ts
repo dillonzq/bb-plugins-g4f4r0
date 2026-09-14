@@ -169,7 +169,9 @@ export const viewerInput = z.discriminatedUnion("kind", [
   }),
   z.object({ kind: z.literal("navigate"), url: z.string().max(4000) }),
 ]);
+const localServerList = z.object({ servers: z.array(z.object({ port: z.number(), name: z.string(), url: z.string() })), error: z.string().nullable() });
 export const hostContract = defineRpcContract({
+  "local-servers": { input: z.null(), output: localServerList },
   credentialPrepare: {
     input: credentialRequest,
     output: z.object({ token: z.string(), origin: z.string() }),
@@ -285,6 +287,7 @@ export const rpcContract = defineRpcContract({
       }),
     ),
   },
+  "local-servers": { input: z.object({ threadId: id }), output: localServerList },
   list: {
     input: z.object({ threadId: id.optional() }),
     output: z.array(session),

@@ -183,3 +183,10 @@ native tabs and core CLI/API calls remain available, and the DOM selector may
 need updating after a BB UI change. Browse does not automatically close existing
 native tabs or transfer their cookies. Streaming performance is independent of
 which automation SDK controls Chrome.
+
+The new-tab page separates this thread's active Sessions from Recent closed
+pages (deduplicated by URL, eight entries). Local servers are host-wide web apps
+on the thread's current machine, discovered with `ss` on Linux or `lsof` on macOS
+and a bounded HTTP HEAD check. They refresh every 15 seconds while the launcher
+is open. HTTPS-only apps and servers that reject HEAD may not appear; an address
+can still be entered manually. This list does not include every running process.

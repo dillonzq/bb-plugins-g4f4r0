@@ -521,6 +521,7 @@ export default async function plugin(bb: BbPluginApi) {
         controller: t.control?.controllerLabel ?? null,
       }));
     },
+    "local-servers": async ({ threadId }) => host.call("local-servers", null, { hostId: await threadHost(threadId), timeoutMs: 12000 }),
     list: async ({ threadId }) =>
       Promise.all(
         [...sessions.values()]
@@ -1031,7 +1032,7 @@ export default async function plugin(bb: BbPluginApi) {
             : {};
         if (
           input &&
-          ["start", "tabs", "probe", "setup"].includes(args[0]) &&
+          ["start", "tabs", "probe", "setup", "local-servers"].includes(args[0]) &&
           !input.threadId
         )
           input.threadId = ctx.threadId;

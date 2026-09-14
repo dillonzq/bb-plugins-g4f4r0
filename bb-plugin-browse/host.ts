@@ -1,3 +1,4 @@
+import { localServers } from "./src/local-servers";
 import {
   experimental_defineHostEntry,
   type ExperimentalHostRpcContext,
@@ -663,6 +664,7 @@ export default experimental_defineHostEntry({
         await finishCredential(s, s.credential);
       return { cancelled: true };
     },
+    "local-servers": async () => localServers(),
     probe: async (_, ctx) => {
       const root = ctx.experimental_paths.dataDir,
         info = await diagnostics(root);

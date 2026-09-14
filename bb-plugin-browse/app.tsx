@@ -479,7 +479,7 @@ function LiveBrowser({
       : "";
   const sync = useCallback(async () => {
     try {
-      setSessions(await rpc.call("list", { threadId }));
+      setSessions((await rpc.call("list", { threadId })).filter(s => s.threadId === threadId));
       setError("");
     } catch (e) {
       setError(String(e));
@@ -494,14 +494,14 @@ function LiveBrowser({
   const [address, setAddress] = useState("");
   const [opening, setOpening] = useState(false);
   const launching = useRef(false);
-  async function openAddress() {
+  async function openAddress(raw = address) {
     if (launching.current) return;
     launching.current = true;
     setOpening(true);
     setError("");
     try {
-      const text = address.trim();
-      const url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(text) ? text : `https://${text}`);
+      const text = raw.trim();
+      const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`);
       if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
         throw new Error("Enter an http or https address without login details.");
       const result = await rpc.call("start", { threadId, mode: "managed", url: url.href });
@@ -511,6 +511,21 @@ function LiveBrowser({
     } catch (e) { setError(String(e)); }
     finally { launching.current = false; setOpening(false); }
   }
+  const [local, setLocal] = useState<{ servers: Array<{ port: number; name: string; url: string }>; error: string | null }>({ servers: [], error: null });
+  useEffect(() => {
+    if (id) return;
+    let live = true;
+    const refresh = () => { void rpc.call("local-servers", { threadId }).then(value => { if (live) setLocal(value); }).catch(() => { if (live) setLocal({ servers: [], error: "Local server discovery is unavailable." }); }); };
+    refresh();
+    const timer = setInterval(refresh, 15000);
+    return () => { live = false; clearInterval(timer); };
+  }, [id, threadId, rpc]);
+  const active = sessions.filter(s => ["ready", "connecting"].includes(s.status));
+  const seen = new Set(active.map(s => s.url));
+  const recent = sessions.filter(s => {
+    if (!["released", "error"].includes(s.status) || seen.has(s.url)) return false;
+    seen.add(s.url); return true;
+  }).slice(0, 8);
   const current = sessions.find((s) => s.id === id);
   if (!id)
     return (
@@ -535,10 +550,12 @@ function LiveBrowser({
         <div className="min-h-0 flex-1 overflow-auto">
           <div className="mx-auto w-full max-w-3xl px-6 py-12">
             {error && <p role="alert" className="mb-4 text-sm">{error}</p>}
-            <h2 className="mb-4 flex items-center gap-2 text-sm font-medium text-muted-foreground"><Icon name="History" className="size-4" />Sessions</h2>
-            {!sessions.length && <p className="text-sm text-muted-foreground">No sessions yet.</p>}
+            {[{ title: "Recent", items: recent }, { title: "Sessions", items: active }].map(group => (
+              <section key={group.title} className="mb-8" aria-label={group.title}>
+                <h2 className="mb-4 text-sm font-medium text-muted-foreground">{group.title}</h2>
+                {!group.items.length && <p className="text-sm text-muted-foreground">{group.title === "Recent" ? "No recent pages." : "No active sessions in this thread."}</p>}
             <ul className="space-y-2">
-              {sessions.map((s) => (
+              {group.items.map((s) => (
                 <li key={s.id}>
                   <button type="button" className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" onClick={async () => {
                     try {
@@ -548,11 +565,24 @@ function LiveBrowser({
                   }}>
                     <Icon name="Globe" className="size-5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{browserTitle(s)}</span><span className="block truncate text-xs text-muted-foreground">{s.url}</span></span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{s.hostLabel} · {s.status === "released" ? "Closed" : s.status}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{group.title === "Sessions" ? s.status : ""}</span>
                   </button>
                 </li>
               ))}
             </ul>
+              </section>
+            ))}
+            <section aria-label="Local servers">
+              <h2 className="mb-4 text-sm font-medium text-muted-foreground">Local servers</h2>
+              {local.error && <p className="text-sm text-muted-foreground">{local.error}</p>}
+              {!local.error && !local.servers.length && <p className="text-sm text-muted-foreground">No web servers detected on this thread’s machine.</p>}
+              <ul className="space-y-2">{local.servers.map(server => <li key={server.port}>
+                <button type="button" disabled={opening} className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left hover:bg-accent" onClick={() => void openAddress(server.url)}>
+                  <Icon name="Terminal" className="size-5 text-muted-foreground" />
+                  <span><span className="block text-sm font-medium">{server.name}</span><span className="block text-xs text-muted-foreground">localhost:{server.port}</span></span>
+                </button>
+              </li>)}</ul>
+            </section>
           </div>
         </div>
       </div>
