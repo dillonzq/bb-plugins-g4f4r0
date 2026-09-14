@@ -560,7 +560,7 @@ function LiveBrowser({
           variant="outline"
           size="sm"
           onClick={() =>
-            nav.openThreadPanel({ actionId: "live", title: "Browsers" })
+            nav.openThreadPanel({ actionId: "live", params: {}, title: "Browsers" })
           }
         >
           All sessions
@@ -684,7 +684,7 @@ function AutoShowBrowsers({ threadId }: { threadId: string }) {
       if (event.defaultPrevented) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      nav.openThreadPanel({ actionId: "live", title: "Browser" });
+      nav.openThreadPanel({ actionId: "live", params: {}, title: "Browser" });
     };
     const keydown = (event: KeyboardEvent) => {
       if (event.key !== "Enter" && event.key !== " ") return;
