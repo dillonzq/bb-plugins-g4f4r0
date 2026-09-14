@@ -1,6 +1,8 @@
 # Beacon
 
-See CPU, memory, disk, and process pressure on the BB server from the sidebar, without leaving the workspace.
+See CPU, memory, disk, and processes on the BB server from the footer.
+
+![Status in the BB footer](assets/screenshot.jpg)
 
 Status sits in the sidebar footer. Open it while you work. An optional background monitor can toast when CPU or memory stays high. The two collectors do not share a timer.
 
@@ -29,7 +31,7 @@ bb plugin build bb-plugin-beacon
 bb plugin reload beacon
 ```
 
-A Community marketplace listing needs a `beacon/vX.Y.Z` git tag, then an entry in [get-bb/marketplace](https://github.com/get-bb/marketplace) with `subdir` `bb-plugin-beacon` and `tagPrefix` `beacon/`. Do not tag or open that PR until the release commit is approved.
+A Community listing uses a `beacon/vX.Y.Z` tag and an entry in [get-bb/marketplace](https://github.com/get-bb/marketplace) with `subdir` `bb-plugin-beacon` and `tagPrefix` `beacon/`. The open entry is [PR 279](https://github.com/get-bb/marketplace/pull/279).
 
 ## Settings
 
