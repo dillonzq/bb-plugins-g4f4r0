@@ -4,7 +4,6 @@ import type { ServerSnapshot } from "./server";
 import { useServerSnapshot } from "./hooks/use-server-snapshot";
 import { PressureNotifications, bindStatusOpener } from "./components/pressure-notifications";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 
 const BLUE = "#3b82f6";
 const ORANGE = "#f97316";
@@ -88,6 +87,14 @@ function StatusPopover({ snapshot }: { snapshot: ServerSnapshot }) {
     <>
       <Metric label="CPU" value={formatPercent(cpu.usagePercent)} detail={`${cpu.cores} cores · load ${cpu.loadAverage.map((load) => load.toFixed(2)).join(" ")}`}>
         <Bars values={history.map((point) => point.cpuPercent)} max={100} color={colorForPercent} label={`CPU history, latest ${formatPercent(cpu.usagePercent)}`} />
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-x-3 gap-y-1.5 pt-1">
+          {cpu.perCoreUsagePercent.map((value, index) => (
+            <div key={index} className="min-w-0 space-y-1">
+              <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground"><span>C{index}</span><span>{value === null ? "–" : `${Math.round(value)}%`}</span></div>
+              <div className="h-1 bg-foreground/[0.07]"><div className="h-full" style={{ width: `${value ?? 0}%`, backgroundColor: colorForPercent(value) }} /></div>
+            </div>
+          ))}
+        </div>
       </Metric>
       <Metric label="Memory" value={formatPercent(memory.usagePercent)} detail={`${formatBytes(memory.usedBytes)} of ${formatBytes(memory.totalBytes)}${memory.swapTotalBytes > 0 ? ` · swap ${formatBytes(memory.swapUsedBytes)}` : ""}`}>
         <Meter value={memory.usagePercent} label="Memory usage" />
@@ -110,9 +117,18 @@ function StatusPopover({ snapshot }: { snapshot: ServerSnapshot }) {
           </div>
         ))}
       </section>
-      <div className="truncate px-4 py-3 text-[11px] tabular-nums text-muted-foreground" title={`Node ${runtime.nodeVersion} · ${host.platform} ${host.arch}`}>
-        Up {formatDuration(host.uptimeSeconds)} · BB {formatDuration(runtime.processUptimeSeconds)} · {formatBytes(runtime.rssBytes)}
-      </div>
+      <section className={SECTION} aria-label="Uptime">
+        {[
+          ["Server uptime", formatDuration(host.uptimeSeconds)],
+          ["BB uptime", formatDuration(runtime.processUptimeSeconds)],
+          ["BB memory", formatBytes(runtime.rssBytes)],
+        ].map(([label, value]) => (
+          <div key={label} className="flex items-baseline justify-between gap-3 text-xs">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="tabular-nums">{value}</span>
+          </div>
+        ))}
+      </section>
     </>
   );
 }
@@ -124,8 +140,8 @@ function StatusDisclosure(_props: ExperimentalSidebarFooterDisclosureProps) {
       {error ? <div role="alert" className="px-4 py-2 text-xs text-destructive">Could not refresh: {error}</div> : null}
       {/* The skeleton gives the shell height so the visibility observer can activate polling. */}
       {active && snapshot ? <StatusPopover snapshot={snapshot} /> : (
-        <div className="space-y-4 p-4" aria-busy="true" aria-label="Loading server metrics">
-          {Array.from({ length: 4 }, (_, i) => <div key={i} className="space-y-2"><Skeleton className="h-3 w-full" /><Skeleton className={cn("w-full rounded-none", i === 0 ? "h-6" : "h-2")} /></div>)}
+        <div className="space-y-3 p-4" aria-busy="true" aria-label="Loading server metrics">
+          {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-4 w-full" />)}
         </div>
       )}
     </div>
