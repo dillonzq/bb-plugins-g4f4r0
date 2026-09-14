@@ -1,6 +1,8 @@
 # Custom BB plugins
 
-This is the permanent source directory for Browse, Beacon, Sidetree, Silk, and Agent Plugins on this server. BB loads these directories in place. They must stay outside thread workspaces and disposable worktrees.
+Off-server Git copy of Browse, Beacon, Sidetree, Silk, Agent Plugins, and the Studio/Composio agent-plugin packages. Remote: https://github.com/hellogafaro/bb-plugins
+
+Live BB installations on this server still load from `/home/g4f4r0/.bb/local-plugins`. Edit and deploy there unless the install paths are migrated with a path-to-path install. The live packages must stay outside thread workspaces and disposable worktrees.
 
 | Plugin | Stable ID | Source directory |
 | --- | --- | --- |
@@ -36,7 +38,7 @@ Source and dependency lockfiles belong in this Git repository. Generated bundles
 
 `bb plugin install path:/absolute/permanent/package --yes` can change an existing local installation's source without deleting its settings. The helper uses this during migration and `bb plugin reload <id>` for an unchanged source path.
 
-Local Git history and bundles protect against thread-workspace cleanup and accidental source edits. They do **not** protect against loss of the server. No remote repository or off-server backup is configured by this recovery.
+Local Git history and bundles protect against thread-workspace cleanup and accidental source edits. The GitHub repository is the off-server backup.
 
 To inspect a saved bundle, clone it into a separate directory under this permanent root's parent and compare the required revision. Restore reviewed files to the permanent package, commit, and deploy with the helper. Do not reset a dirty live source tree or point BB at a temporary recovery checkout.
 
