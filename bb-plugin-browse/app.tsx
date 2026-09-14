@@ -513,12 +513,15 @@ function LiveBrowser({
   const current = sessions.find((s) => s.id === id);
   if (!id)
     return (
-      <div className="p-4 space-y-3">
-        <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <form aria-label="Browser navigation" className="flex shrink-0 items-center gap-1 border-b px-3 py-2" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
+          <Button type="button" variant="ghost" size="icon" aria-label="Back" disabled><Icon name="ArrowLeft" className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon" aria-label="Forward" disabled><Icon name="ArrowRight" className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon" aria-label="Refresh sessions" onClick={() => void sync()}><Icon name="RefreshCw" className="size-4" /></Button>
           <input
             aria-label="Website address"
-            className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
-            placeholder="Enter a website address"
+            className="min-w-0 flex-1 rounded-md bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            placeholder="Enter URL"
             value={address}
             onChange={(event) => setAddress(event.target.value)}
             autoCapitalize="none"
@@ -526,28 +529,31 @@ function LiveBrowser({
             spellCheck={false}
             required
           />
-          <Button type="submit" disabled={opening || !address.trim()}>{opening ? "Opening…" : "Open"}</Button>
+          <Button type="submit" variant="ghost" size="icon" aria-label={opening ? "Opening" : "Go"} disabled={opening || !address.trim()}><Icon name="ArrowRight" className="size-4" /></Button>
         </form>
-        <p className="text-sm text-muted-foreground">Opens on this thread’s machine. You and the agent share the same page.</p>
-        {error && <p role="alert">{error}</p>}
-        {!sessions.length && (
-          <p>No browser sessions yet.</p>
-        )}
-        {sessions.map((s) => (
-          <Button
-            key={s.id}
-            variant="outline"
-            onClick={() =>
-              nav.openThreadPanel({
-                actionId: "live",
-                params: { id: s.id },
-                title: browserTitle(s),
-              })
-            }
-          >
-            {s.hostLabel} · {s.url} · {s.status}
-          </Button>
-        ))}
+        <div className="min-h-0 flex-1 overflow-auto">
+          <div className="mx-auto w-full max-w-3xl px-6 py-12">
+            {error && <p role="alert" className="mb-4 text-sm">{error}</p>}
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-medium text-muted-foreground"><Icon name="History" className="size-4" />Sessions</h2>
+            {!sessions.length && <p className="text-sm text-muted-foreground">No sessions yet.</p>}
+            <ul className="space-y-2">
+              {sessions.map((s) => (
+                <li key={s.id}>
+                  <button type="button" className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" onClick={async () => {
+                    try {
+                      const target = ["released", "error"].includes(s.status) ? (await rpc.call("reconnect", { id: s.id })).session : s;
+                      nav.openThreadPanel({ actionId: "live", params: { id: target.id }, title: browserTitle(target) });
+                    } catch (e) { setError(String(e)); }
+                  }}>
+                    <Icon name="Globe" className="size-5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{browserTitle(s)}</span><span className="block truncate text-xs text-muted-foreground">{s.url}</span></span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{s.hostLabel} · {s.status === "released" ? "Closed" : s.status}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </div>
     );
   return (
