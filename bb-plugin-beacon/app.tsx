@@ -5,13 +5,11 @@ import { useServerSnapshot } from "./hooks/use-server-snapshot";
 import { PressureNotifications, bindStatusOpener } from "./components/pressure-notifications";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const BLUE = "#3b82f6";
-const ORANGE = "#f97316";
 const GREEN = "#22c55e";
 const AMBER = "#eab308";
 const RED = "#ef4444";
 // Compact popover: one stacked column, each metric a small row of the same shape.
-const SECTION = "min-w-0 space-y-2 px-4 py-3";
+const SECTION = "min-w-0 space-y-2 p-3";
 const HISTORY_BARS = 36;
 
 function formatBytes(bytes: number): string {
@@ -48,87 +46,88 @@ function colorForPercent(value: number | null): string {
 function Meter({ value, label }: { value: number | null; label: string }) {
   const clamped = value === null ? 0 : Math.max(0, Math.min(100, value));
   return (
-    <div className="relative h-2 min-w-0 w-full overflow-hidden rounded-none bg-foreground/[0.07]" style={{ maskImage: "linear-gradient(to right, black calc(100% - 1px), transparent 0)", maskSize: "2% 100%", maskRepeat: "repeat-x" }} role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value ?? undefined} aria-valuetext={value === null ? "Unavailable" : `${value.toFixed(1)}%`} title="Green below 75% · amber from 75% · red from 95%">
+    <div className="relative h-2 min-w-0 w-full overflow-hidden rounded-none bg-sidebar-border" style={{ maskImage: "linear-gradient(to right, black calc(100% - 1px), transparent 0)", maskSize: "2% 100%", maskRepeat: "repeat-x" }} role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value ?? undefined} aria-valuetext={value === null ? "Unavailable" : `${value.toFixed(1)}%`} title="Green below 75% · amber from 75% · red from 95%">
       <span aria-hidden="true" className="absolute inset-y-0 left-0" style={{ width: `${clamped}%`, backgroundColor: colorForPercent(value) }} />
     </div>
   );
 }
 
-// Recent samples as thin columns; empty slots stay visible so the strip never jumps.
-function Bars({ values, max, color, label }: { values: Array<number | null>; max: number; color: (value: number) => string; label: string }) {
+// Recent samples as thin columns, oldest left; empty slots keep the strip from jumping.
+function Bars({ values }: { values: Array<number | null> }) {
   const recent = values.slice(-HISTORY_BARS);
   const slots = [...Array.from({ length: HISTORY_BARS - recent.length }, () => null), ...recent];
   return (
-    <div className="flex h-6 items-end gap-px" role="img" aria-label={label}>
+    <div className="flex h-6 items-end gap-px" role="img" aria-label="CPU usage over the last few minutes" title="CPU usage, recent samples">
       {slots.map((value, index) => (
-        <span key={index} className="flex-1 bg-foreground/[0.07]" style={value === null ? { height: "100%" } : { height: `${Math.max(8, (value / max) * 100)}%`, backgroundColor: color(value) }} />
+        <span key={index} className="flex-1 bg-sidebar-border" style={value === null ? { height: "100%" } : { height: `${Math.max(8, value)}%`, backgroundColor: colorForPercent(value) }} />
       ))}
     </div>
   );
 }
 
-function Metric({ label, value, detail, children }: { label: string; value: string; detail?: ReactNode; children?: ReactNode }) {
+// Every section shares one header shape: name left, headline value right.
+function Section({ label, value, children }: { label: string; value?: string; children: ReactNode }) {
   return (
     <section className={SECTION} aria-label={label}>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <span className="truncate text-sm font-medium tabular-nums">{value === "Sampling…" ? <Skeleton className="h-4 w-14" aria-label="Loading measurement" /> : value}</span>
+      <div className="flex items-baseline justify-between gap-3 text-xs">
+        <span className="font-medium text-sidebar-foreground">{label}</span>
+        {value === undefined ? null : <span className="truncate tabular-nums text-sidebar-foreground">{value}</span>}
       </div>
       {children}
-      {detail ? <div className="truncate text-[11px] leading-4 text-muted-foreground">{detail}</div> : null}
     </section>
+  );
+}
+
+function Row({ label, value, title }: { label: string; value: string; title?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-xs" title={title}>
+      <span className="min-w-0 truncate text-muted-foreground">{label}</span>
+      <span className="shrink-0 tabular-nums text-muted-foreground">{value}</span>
+    </div>
   );
 }
 
 function StatusPopover({ snapshot }: { snapshot: ServerSnapshot }) {
   const { cpu, memory, disk, network, processes, runtime, host, history } = snapshot;
-  const peakRate = Math.max(1, ...history.flatMap((point) => [point.networkRxBytesPerSecond ?? 0, point.networkTxBytesPerSecond ?? 0]));
   return (
     <>
-      <Metric label="CPU" value={formatPercent(cpu.usagePercent)} detail={`${cpu.cores} cores · load ${cpu.loadAverage.map((load) => load.toFixed(2)).join(" ")}`}>
-        <Bars values={history.map((point) => point.cpuPercent)} max={100} color={colorForPercent} label={`CPU history, latest ${formatPercent(cpu.usagePercent)}`} />
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-x-3 gap-y-1.5 pt-1">
+      <Section label="CPU" value={formatPercent(cpu.usagePercent)}>
+        <Bars values={history.map((point) => point.cpuPercent)} />
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-x-3 gap-y-2 pt-0.5">
           {cpu.perCoreUsagePercent.map((value, index) => (
-            <div key={index} className="min-w-0 space-y-1">
-              <div className="flex justify-between text-[10px] tabular-nums text-muted-foreground"><span>C{index}</span><span>{value === null ? "–" : `${Math.round(value)}%`}</span></div>
-              <div className="h-1 bg-foreground/[0.07]"><div className="h-full" style={{ width: `${value ?? 0}%`, backgroundColor: colorForPercent(value) }} /></div>
+            <div key={index} className="min-w-0 space-y-1" title={`Core ${index + 1}`}>
+              <div className="flex justify-between text-2xs tabular-nums text-muted-foreground"><span>Core {index + 1}</span><span>{value === null ? "–" : `${Math.round(value)}%`}</span></div>
+              <div className="h-1 overflow-hidden rounded-full bg-sidebar-border"><div className="h-full rounded-full" style={{ width: `${value ?? 0}%`, backgroundColor: colorForPercent(value) }} /></div>
             </div>
           ))}
         </div>
-      </Metric>
-      <Metric label="Memory" value={formatPercent(memory.usagePercent)} detail={`${formatBytes(memory.usedBytes)} of ${formatBytes(memory.totalBytes)}${memory.swapTotalBytes > 0 ? ` · swap ${formatBytes(memory.swapUsedBytes)}` : ""}`}>
+      </Section>
+      <Section label="Memory" value={formatPercent(memory.usagePercent)}>
         <Meter value={memory.usagePercent} label="Memory usage" />
-      </Metric>
-      <Metric label="Disk" value={disk ? formatPercent(disk.usagePercent) : "Unavailable"} detail={disk ? `${formatBytes(disk.freeBytes)} available` : undefined}>
-        {disk ? <Meter value={disk.usagePercent} label="Disk usage" /> : null}
-      </Metric>
-      <Metric label="Network" value={network ? `↓ ${formatRate(network.rxBytesPerSecond)}` : "Unavailable"} detail={network ? <span style={{ color: ORANGE }}>↑ {formatRate(network.txBytesPerSecond)}</span> : undefined}>
-        {network ? <Bars values={history.map((point) => point.networkRxBytesPerSecond)} max={peakRate} color={() => BLUE} label="Download history" /> : null}
-      </Metric>
-      <section className={SECTION} aria-label="Processes">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="text-xs text-muted-foreground">Processes</span>
-          <span className="text-[11px] tabular-nums text-muted-foreground">{processes.available ? `${processes.running} running · ${processes.total}` : "Unavailable"}</span>
-        </div>
+        <Row label="Used" value={`${formatBytes(memory.usedBytes)} of ${formatBytes(memory.totalBytes)}`} />
+        {memory.swapTotalBytes > 0 ? <Row label="Swap" value={`${formatBytes(memory.swapUsedBytes)} of ${formatBytes(memory.swapTotalBytes)}`} /> : null}
+      </Section>
+      <Section label="Disk" value={disk ? formatPercent(disk.usagePercent) : "Unavailable"}>
+        {disk ? <>
+          <Meter value={disk.usagePercent} label="Disk usage" />
+          <Row label="Free" value={`${formatBytes(disk.freeBytes)} of ${formatBytes(disk.totalBytes)}`} />
+        </> : null}
+      </Section>
+      <Section label="Network" value={network ? undefined : "Unavailable"}>
+        {network ? <>
+          <Row label="Download" value={formatRate(network.rxBytesPerSecond)} />
+          <Row label="Upload" value={formatRate(network.txBytesPerSecond)} />
+        </> : null}
+      </Section>
+      <Section label="Top processes" value={processes.available ? `${processes.total} total` : "Unavailable"}>
         {processes.top.slice(0, 3).map((process) => (
-          <div key={process.pid} className="flex items-baseline justify-between gap-3 text-xs">
-            <span className="truncate" title={`${process.name} · PID ${process.pid}`}>{process.name}</span>
-            <span className="shrink-0 tabular-nums text-muted-foreground">{process.cpuPercent.toFixed(1)}% · {formatBytes(process.rssBytes)}</span>
-          </div>
+          <Row key={process.pid} label={process.name} value={formatBytes(process.rssBytes)} title={`PID ${process.pid} · ${process.cpuPercent.toFixed(1)}% CPU average · ${formatBytes(process.rssBytes)} memory`} />
         ))}
-      </section>
-      <section className={SECTION} aria-label="Uptime">
-        {[
-          ["Server uptime", formatDuration(host.uptimeSeconds)],
-          ["BB uptime", formatDuration(runtime.processUptimeSeconds)],
-          ["BB memory", formatBytes(runtime.rssBytes)],
-        ].map(([label, value]) => (
-          <div key={label} className="flex items-baseline justify-between gap-3 text-xs">
-            <span className="text-muted-foreground">{label}</span>
-            <span className="tabular-nums">{value}</span>
-          </div>
-        ))}
-      </section>
+      </Section>
+      <Section label="Uptime">
+        <Row label="Server" value={formatDuration(host.uptimeSeconds)} />
+        <Row label="BB" value={formatDuration(runtime.processUptimeSeconds)} />
+      </Section>
     </>
   );
 }
@@ -136,11 +135,11 @@ function StatusPopover({ snapshot }: { snapshot: ServerSnapshot }) {
 function StatusDisclosure(_props: ExperimentalSidebarFooterDisclosureProps) {
   const { container, active, snapshot, error } = useServerSnapshot();
   return (
-    <div ref={container} data-beacon-shell className="w-72 max-w-[calc(100vw-2rem)] divide-y divide-border">
-      {error ? <div role="alert" className="px-4 py-2 text-xs text-destructive">Could not refresh: {error}</div> : null}
+    <div ref={container} data-beacon-shell className="w-full min-w-64 divide-y divide-sidebar-border">
+      {error ? <div role="alert" className="px-3 py-2 text-xs text-destructive">Could not refresh: {error}</div> : null}
       {/* The skeleton gives the shell height so the visibility observer can activate polling. */}
       {active && snapshot ? <StatusPopover snapshot={snapshot} /> : (
-        <div className="space-y-3 p-4" aria-busy="true" aria-label="Loading server metrics">
+        <div className="space-y-3 p-3" aria-busy="true" aria-label="Loading server metrics">
           {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-4 w-full" />)}
         </div>
       )}
