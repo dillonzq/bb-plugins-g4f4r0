@@ -8,12 +8,12 @@ worktree, one folder at a time.
   full-page explorer.
 - Folders expand on click. A large repo costs the same as a small one until
   you open a folder.
-- Click a file to open BB's own preview. Right-click for Open with, copy
-  path, and the rest of BB's file menu. Sidetree does not ship an editor.
+- Click a file to open Sidetree's CodeMirror editor. The ⋮ menu copies contents or
+  path, downloads, and deletes (with a confirm dialog). Cmd/Ctrl+S saves.
+  Sidetree does not use BB's built-in preview for claimed extensions.
 
 ## How it works
 
 Each listing is one directory on the machine that owns the environment. The
 tree never walks `node_modules` or the rest of the disk on its own. File
-opens go through BB, so a preview or a plugin file opener (for example File
-Editor) handles the bytes.
+opens go through Sidetree's `fileOpener` for the extensions it claims.

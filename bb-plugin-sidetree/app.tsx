@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   definePluginApp,
   experimental_FileLink as FileLink,
   experimental_Icon as Icon,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
-import { Button, buttonVariants } from "./components/ui/button";
+import { Button } from "./components/ui/button";
 import {
   COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS,
   COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
@@ -13,42 +13,51 @@ import {
 } from "./components/ui/coarse-pointer-sizing";
 import { Input } from "./components/ui/input";
 import { Skeleton } from "./components/ui/skeleton";
-import { FileGlyph } from "./file-icon";
+import { FileGlyph, FolderGlyph } from "./file-icon";
+import { FileOpener } from "./opener";
 import { cn } from "./lib/utils";
 import type { Entry, Root, rpcContract } from "./server";
-import { fileIconToken, folderIconName } from "./tree";
+import { fileIconToken, OPENER_EXTENSIONS } from "./tree";
 
 type Rpc = ReturnType<typeof useRpc<typeof rpcContract>>;
 
-/** 14px slot — search glyph, chevron, folder, and file all share it. */
-const SLOT = "size-3.5 shrink-0";
-
-/**
- * Ghost sm (h-8, rounded-md, hover:bg-state-hover) with tree overrides:
- * start-aligned, 10px inset to match the search icon, 14px glyphs.
- */
-const ROW = cn(
-  "h-8 w-full min-w-0 justify-start gap-1 px-2.5 font-normal text-sm",
-  "no-underline hover:no-underline",
-  "[&_svg]:size-3.5",
-  "max-md:pointer-coarse:h-10",
+/** Ghost row; one spacing token under the search field. */
+const LINE = "flex w-full min-w-0 items-center";
+const ITEM = cn(
+  "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-left text-sm font-normal text-foreground",
+  "appearance-none cursor-pointer border-0 bg-transparent no-underline hover:no-underline hover:bg-state-hover",
+  "focus-visible:bg-state-hover focus-visible:outline-none",
+  "max-md:pointer-coarse:h-9",
 );
 
-function Indent({ depth }: { depth: number }) {
-  return <span className="shrink-0" style={{ width: depth * 12 }} aria-hidden="true" />;
+function IndentGuides({ depth }: { depth: number }) {
+  if (depth <= 0) return null;
+  return (
+    <span
+      className="flex h-7 shrink-0 self-stretch max-md:pointer-coarse:h-9"
+      aria-hidden="true"
+    >
+      {Array.from({ length: depth }, (_, index) => (
+        <span key={index} className="relative w-3 self-stretch">
+          <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
+        </span>
+      ))}
+    </span>
+  );
 }
 
-function ChevronSlot({ open }: { open?: boolean }) {
-  if (open === undefined) {
-    return <span className={SLOT} aria-hidden="true" />;
-  }
+function TreeLine({
+  depth,
+  children,
+}: {
+  depth: number;
+  children: ReactNode;
+}) {
   return (
-    <Icon
-      name="ChevronRight"
-      fallback="ChevronRight"
-      className={cn(SLOT, "text-muted-foreground transition-transform", open && "rotate-90")}
-      aria-hidden
-    />
+    <div className={LINE}>
+      <IndentGuides depth={depth} />
+      {children}
+    </div>
   );
 }
 
@@ -63,14 +72,15 @@ function TreeSkeleton({
     <ul className="m-0 list-none p-0" aria-busy="true" aria-label="Loading">
       {Array.from({ length: rows }, (_, index) => (
         <li key={index} className="min-w-0">
-          <div className={cn(ROW, "flex pointer-events-none items-center hover:bg-transparent")}>
-            <Indent depth={depth} />
-            <span className={SLOT} aria-hidden="true" />
-            <Skeleton className="size-3.5 shrink-0 rounded-sm" />
-            <Skeleton
-              className="h-3 rounded-sm"
-              style={{ width: `${42 + ((index * 17) % 36)}%` }}
-            />
+          <div className={cn(LINE, "pointer-events-none")}>
+            <IndentGuides depth={depth} />
+            <div className={cn(ITEM, "hover:bg-transparent")}>
+              <Skeleton className="size-4 shrink-0 rounded-[3px]" />
+              <Skeleton
+                className="h-3 rounded-sm"
+                style={{ width: `${42 + ((index * 17) % 36)}%` }}
+              />
+            </div>
           </div>
         </li>
       ))}
@@ -91,11 +101,11 @@ function StatusLine({
     <p
       role={tone === "destructive" ? "alert" : undefined}
       className={cn(
-        "flex h-8 items-center px-2.5 text-sm",
+        "flex h-7 items-center px-2 text-sm max-md:pointer-coarse:h-9",
         tone === "destructive" ? "text-destructive" : "text-muted-foreground",
       )}
     >
-      <Indent depth={depth} />
+      <IndentGuides depth={depth} />
       {children}
     </p>
   );
@@ -169,25 +179,18 @@ function TreeLevel({
         if (entry.kind === "directory") {
           return (
             <li key={entry.relativePath} className="min-w-0">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={ROW}
-                aria-expanded={open}
-                aria-label={entry.name}
-                onClick={() => onToggle(entry.relativePath)}
-              >
-                <Indent depth={depth} />
-                <ChevronSlot open={open} />
-                <Icon
-                  name={folderIconName(open)}
-                  fallback="FolderOpen"
-                  className={cn(SLOT, "text-muted-foreground")}
-                  aria-hidden
-                />
-                <span className="min-w-0 truncate">{entry.name}</span>
-              </Button>
+              <TreeLine depth={depth}>
+                <button
+                  type="button"
+                  className={ITEM}
+                  aria-expanded={open}
+                  aria-label={entry.name}
+                  onClick={() => onToggle(entry.relativePath)}
+                >
+                  <FolderGlyph open={open} />
+                  <span className="min-w-0 truncate">{entry.name}</span>
+                </button>
+              </TreeLine>
               {open ? (
                 <TreeLevel
                   rpc={rpc}
@@ -205,19 +208,19 @@ function TreeLevel({
         }
         return (
           <li key={entry.relativePath} className="min-w-0">
-            <FileLink
-              target={{
-                kind: "workspace",
-                environmentId,
-                path: entry.relativePath,
-              }}
-              className={cn(buttonVariants({ variant: "ghost", size: "sm" }), ROW)}
-            >
-              <Indent depth={depth} />
-              <ChevronSlot />
-              <FileGlyph token={fileIconToken(entry.relativePath)} />
-              <span className="min-w-0 truncate">{entry.name}</span>
-            </FileLink>
+            <TreeLine depth={depth}>
+              <FileLink
+                target={{
+                  kind: "workspace",
+                  environmentId,
+                  path: entry.relativePath,
+                }}
+                className={ITEM}
+              >
+                <FileGlyph token={fileIconToken(entry.relativePath)} />
+                <span className="min-w-0 truncate">{entry.name}</span>
+              </FileLink>
+            </TreeLine>
           </li>
         );
       })}
@@ -245,16 +248,11 @@ function FilterHits({
               environmentId,
               path: entry.relativePath,
             }}
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), ROW)}
+            className={ITEM}
             title={entry.relativePath}
           >
             {entry.kind === "directory" ? (
-              <Icon
-                name={folderIconName(false)}
-                fallback="FolderOpen"
-                className={cn(SLOT, "text-muted-foreground")}
-                aria-hidden
-              />
+              <FolderGlyph open={false} />
             ) : (
               <FileGlyph token={fileIconToken(entry.relativePath)} />
             )}
@@ -345,7 +343,7 @@ function FilesPanel({ threadId }: { threadId: string }) {
   const filtering = filter.trim() !== "";
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 p-2.5">
+    <div className="flex h-full min-h-0 flex-col gap-1.5 p-1.5">
       <div className="relative min-w-0 shrink-0">
         <Icon
           name="Search"
@@ -538,5 +536,11 @@ export default definePluginApp((app) => {
     icon: "FolderOpen",
     layout: "flush",
     component: FilesPanel,
+  });
+  app.slots.fileOpener({
+    id: "file",
+    title: "Sidetree",
+    extensions: OPENER_EXTENSIONS,
+    component: FileOpener,
   });
 });

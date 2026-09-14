@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  assertAbsoluteHostPath,
   compareEntries,
   fileIconToken,
   folderIconName,
+  isImagePath,
   isInsideRoot,
   joinRoot,
+  languageIdForPath,
+  OPENER_EXTENSIONS,
   toRelative,
 } from "./tree.ts";
 
@@ -39,6 +43,22 @@ test("directories sort before files", () => {
   );
 });
 
+test("opener extensions are unique lowercase tokens", () => {
+  assert.equal(new Set(OPENER_EXTENSIONS).size, OPENER_EXTENSIONS.length);
+  for (const ext of OPENER_EXTENSIONS) {
+    assert.match(ext, /^[a-z0-9]+$/);
+  }
+});
+
+test("assertAbsoluteHostPath rejects traversal", () => {
+  assert.equal(assertAbsoluteHostPath("/repo/a.ts"), "/repo/a.ts");
+  assert.throws(() => assertAbsoluteHostPath("../a.ts"));
+  assert.throws(() => assertAbsoluteHostPath("/repo/../etc/passwd"));
+  assert.throws(() => assertAbsoluteHostPath("//etc/passwd"));
+  assert.equal(isImagePath("shot.png"), true);
+  assert.equal(isImagePath("app.ts"), false);
+});
+
 test("file icons follow BB filename and extension tokens", () => {
   assert.equal(folderIconName(false), "Folder");
   assert.equal(folderIconName(true), "FolderOpen");
@@ -49,4 +69,12 @@ test("file icons follow BB filename and extension tokens", () => {
   assert.equal(fileIconToken(".gitignore"), "git");
   assert.equal(fileIconToken("Dockerfile"), "docker");
   assert.equal(fileIconToken("unknown.bin"), "default");
+});
+
+test("language ids follow filename and extension", () => {
+  assert.equal(languageIdForPath("src/app.ts"), "ts");
+  assert.equal(languageIdForPath("src/app.tsx"), "tsx");
+  assert.equal(languageIdForPath("README.md"), "md");
+  assert.equal(languageIdForPath("Dockerfile"), "dockerfile");
+  assert.equal(languageIdForPath("notes.txt"), null);
 });

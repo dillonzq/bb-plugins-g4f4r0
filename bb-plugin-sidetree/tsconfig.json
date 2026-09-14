@@ -24,6 +24,10 @@
   "include": [
     "server.ts",
     "app.tsx",
+    "opener.tsx",
+    "code-editor.tsx",
+    "editor-language.ts",
+    "editor-theme.ts",
     "tree.ts",
     "file-icon.tsx",
     "components",

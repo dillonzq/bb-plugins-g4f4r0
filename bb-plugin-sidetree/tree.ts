@@ -144,6 +144,232 @@ const BY_EXT: Record<string, string> = {
   zsh: "bash",
 };
 
+export function fileName(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? path : path.slice(slash + 1);
+}
+
+export function fileExt(path: string): string {
+  const name = fileName(path).toLowerCase();
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return "";
+  return name.slice(dot + 1);
+}
+
+const IMAGE_EXT = new Set([
+  "apng",
+  "avif",
+  "bmp",
+  "gif",
+  "ico",
+  "jpeg",
+  "jpg",
+  "png",
+  "webp",
+]);
+
+export function isImagePath(path: string): boolean {
+  return IMAGE_EXT.has(fileExt(path));
+}
+
+const HIGHLIGHT_EXT = new Set([
+  "astro",
+  "bash",
+  "bib",
+  "c",
+  "cc",
+  "cfg",
+  "cjs",
+  "clj",
+  "cljs",
+  "cmake",
+  "conf",
+  "cpp",
+  "cs",
+  "css",
+  "cts",
+  "cxx",
+  "dart",
+  "diff",
+  "edn",
+  "erl",
+  "go",
+  "h",
+  "hpp",
+  "hrl",
+  "hs",
+  "htm",
+  "html",
+  "ini",
+  "java",
+  "js",
+  "json",
+  "jsonc",
+  "jsx",
+  "kt",
+  "kts",
+  "less",
+  "lua",
+  "m",
+  "markdown",
+  "md",
+  "mdx",
+  "mjs",
+  "mk",
+  "ml",
+  "mli",
+  "mm",
+  "mts",
+  "php",
+  "pl",
+  "pm",
+  "properties",
+  "proto",
+  "py",
+  "pyi",
+  "rb",
+  "rs",
+  "scss",
+  "sh",
+  "sql",
+  "svelte",
+  "svg",
+  "swift",
+  "tex",
+  "toml",
+  "ts",
+  "tsx",
+  "vue",
+  "xml",
+  "yaml",
+  "yml",
+  "zsh",
+]);
+
+export function languageIdForPath(path: string): string | null {
+  const name = fileName(path).toLowerCase();
+  if (name === "dockerfile" || name.startsWith("dockerfile.")) return "dockerfile";
+  if (name === "makefile") return "makefile";
+  if (name === "cmakelists.txt") return "cmake";
+  const ext = fileExt(path);
+  return HIGHLIGHT_EXT.has(ext) ? ext : null;
+}
+
+/** Absolute host paths only; no `.` / `..` segments. */
+export function assertAbsoluteHostPath(path: string): string {
+  if (!path.startsWith("/") || path.startsWith("//")) {
+    throw new Error("Path is outside the workspace root.");
+  }
+  const segments = path.split("/");
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    throw new Error("Path is outside the workspace root.");
+  }
+  if (path !== "/" && path.endsWith("/")) {
+    throw new Error("Path is outside the workspace root.");
+  }
+  return path;
+}
+
+/** Extensions Sidetree claims as the default opener. */
+export const OPENER_EXTENSIONS: readonly string[] = [
+  "astro",
+  "avif",
+  "bash",
+  "bib",
+  "bmp",
+  "c",
+  "cc",
+  "cfg",
+  "cjs",
+  "clj",
+  "cljs",
+  "cmake",
+  "conf",
+  "cpp",
+  "cs",
+  "css",
+  "csv",
+  "cts",
+  "cxx",
+  "dart",
+  "diff",
+  "edn",
+  "env",
+  "erl",
+  "ex",
+  "exs",
+  "gif",
+  "go",
+  "graphql",
+  "gz",
+  "h",
+  "hpp",
+  "hrl",
+  "hs",
+  "htm",
+  "html",
+  "ico",
+  "ini",
+  "ipynb",
+  "java",
+  "jpeg",
+  "jpg",
+  "js",
+  "json",
+  "jsonc",
+  "jsx",
+  "kt",
+  "kts",
+  "less",
+  "lock",
+  "log",
+  "lua",
+  "m",
+  "markdown",
+  "md",
+  "mdx",
+  "mjs",
+  "mk",
+  "ml",
+  "mli",
+  "mm",
+  "mts",
+  "nix",
+  "php",
+  "pl",
+  "pm",
+  "png",
+  "prisma",
+  "properties",
+  "proto",
+  "py",
+  "pyi",
+  "rb",
+  "rs",
+  "rst",
+  "scss",
+  "sh",
+  "sql",
+  "svelte",
+  "svg",
+  "swift",
+  "tex",
+  "tf",
+  "toml",
+  "ts",
+  "tsv",
+  "tsx",
+  "txt",
+  "vue",
+  "wasm",
+  "webp",
+  "xml",
+  "yaml",
+  "yml",
+  "zig",
+  "zsh",
+];
+
 export function fileIconToken(relativePath: string): string {
   const slash = relativePath.lastIndexOf("/");
   const name = slash === -1 ? relativePath : relativePath.slice(slash + 1);
