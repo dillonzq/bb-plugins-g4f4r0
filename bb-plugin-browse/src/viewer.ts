@@ -7,7 +7,7 @@ body{background:var(--background,#0b0b0d);color:var(--foreground,#d4d4d8)}header
 
 #status{pointer-events:auto}#status,#machine{display:flex;align-items:center;gap:6px}#machine svg{width:13px;height:13px;flex:none}#machine-label{overflow:hidden;text-overflow:ellipsis}.status-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--warning,#eab308)}#status[data-state=ready] .status-dot{background:var(--success,#22c55e)}#status[data-state=error] .status-dot{background:var(--destructive,#ef4444)}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 #action-tooltip{position:fixed;z-index:100;max-width:calc(100vw - 16px);padding:6px 12px;border-radius:6px;border:1px solid var(--border,#ffffff18);background:var(--popover,#18181b);color:var(--popover-foreground,#e4e4e7);box-shadow:0 4px 12px #0003;font-size:12px;line-height:16px;pointer-events:none}#action-tooltip[hidden]{display:none}
-@keyframes spin{to{transform:rotate(360deg)}}#copy-url[data-state=loading] svg{animation:spin 1s linear infinite}#copy-url:disabled{cursor:default}
+@keyframes spin{to{transform:rotate(360deg)}}#copy-url[data-state=loading] svg{animation:spin 1s linear infinite}#copy-url:disabled{cursor:default}#copy-url,#copy-url:hover,#copy-url:active,#copy-url:focus-visible{background:transparent}#copy-url:hover,#copy-url[data-state=copied]{color:#fff}
 </style></head><body>
 <header aria-label="Browser navigation">
 <div class="toolbar-group" role="group" aria-label="Navigation">
