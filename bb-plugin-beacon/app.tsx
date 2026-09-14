@@ -3,6 +3,7 @@ import { definePluginApp, type ExperimentalSidebarFooterDisclosureProps } from "
 import type { ServerSnapshot } from "./server";
 import { useServerSnapshot } from "./hooks/use-server-snapshot";
 import { PressureNotifications, bindStatusOpener } from "./components/pressure-notifications";
+import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const GREEN = "#22c55e";
@@ -20,8 +21,13 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 ** index).toFixed(precision)} ${units[index]}`;
 }
 
-function formatRate(bytes: number | null): string {
-  return bytes === null ? "Sampling…" : `${formatBytes(bytes)}/s`;
+// The first reading of rate-based counters needs a second sample.
+function Sampling() {
+  return <Icon name="Loading" className="inline-block size-3.5 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Sampling" />;
+}
+
+function formatRate(bytes: number | null): ReactNode {
+  return bytes === null ? <Sampling /> : `${formatBytes(bytes)}/s`;
 }
 
 function formatDuration(seconds: number): string {
@@ -33,8 +39,8 @@ function formatDuration(seconds: number): string {
   return `${minutes}m`;
 }
 
-function formatPercent(value: number | null): string {
-  return value === null ? "Sampling…" : `${value.toFixed(1)}%`;
+function formatPercent(value: number | null): ReactNode {
+  return value === null ? <Sampling /> : `${value.toFixed(1)}%`;
 }
 
 function colorForPercent(value: number | null): string {
@@ -66,7 +72,7 @@ function Bars({ values }: { values: Array<number | null> }) {
 }
 
 // Every section shares one header shape: name left, headline value right.
-function Section({ label, value, children }: { label: string; value?: string; children: ReactNode }) {
+function Section({ label, value, children }: { label: string; value?: ReactNode; children: ReactNode }) {
   return (
     <section className={SECTION} aria-label={label}>
       <div className="flex items-baseline justify-between gap-3 text-xs">
@@ -78,7 +84,7 @@ function Section({ label, value, children }: { label: string; value?: string; ch
   );
 }
 
-function Row({ label, value, title }: { label: string; value: string; title?: string }) {
+function Row({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 text-xs" title={title}>
       <span className="min-w-0 truncate text-muted-foreground">{label}</span>
