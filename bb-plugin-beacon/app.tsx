@@ -138,19 +138,13 @@ function StatusPopover({ snapshot }: { snapshot: ServerSnapshot }) {
   );
 }
 
-// Mirrors the loaded sections row for row so the popover does not grow when data arrives.
+// One block per section, sized to its loaded content so the popover does not grow.
+const LOADING_SECTIONS = [["CPU", "h-14"], ["Memory", "h-8"], ["Disk", "h-8"], ["Network", "h-10"], ["Top processes", "h-16"], ["Uptime", "h-10"]] as const;
+
 function LoadingPopover() {
-  const rows = (count: number) => Array.from({ length: count }, (_, i) => <Skeleton key={i} className="h-4 w-full" />);
-  return (
-    <>
-      <Section label="CPU" value={<Sampling />}><Skeleton className="h-6 w-full rounded-none" /><Skeleton className="h-6 w-full" /></Section>
-      <Section label="Memory" value={<Sampling />}><Skeleton className="h-2 w-full" />{rows(1)}</Section>
-      <Section label="Disk" value={<Sampling />}><Skeleton className="h-2 w-full" />{rows(1)}</Section>
-      <Section label="Network">{rows(2)}</Section>
-      <Section label="Top processes">{rows(3)}</Section>
-      <Section label="Uptime">{rows(2)}</Section>
-    </>
-  );
+  return LOADING_SECTIONS.map(([label, height]) => (
+    <Section key={label} label={label}><Skeleton className={`${height} w-full`} /></Section>
+  ));
 }
 
 function StatusDisclosure(_props: ExperimentalSidebarFooterDisclosureProps) {
