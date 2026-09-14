@@ -446,10 +446,11 @@ export default definePluginApp((app) => {
   });
   app.slots.threadPanelAction({
     id: "live",
-    title: "Browser",
+    title: "Open browser",
     icon: "Globe",
     layout: "flush",
     component: LiveBrowser,
+    run: ({ openPanel }) => { openPanel({ title: "Browser", params: {} }); },
   });
   app.slots.experimental_threadHeaderAction({
     id: "auto-show",
