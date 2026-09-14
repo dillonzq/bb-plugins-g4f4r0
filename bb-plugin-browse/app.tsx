@@ -552,7 +552,7 @@ function LiveBrowser({
           <div role="group" aria-label="Address" className="flex min-w-0 flex-1 items-center gap-1">
           <Input
             aria-label="Website address"
-            className="h-7 min-w-0 flex-1 text-xs"
+            className="h-7 min-w-0 flex-1 text-xs focus-visible:ring-0"
             disabled={opening}
             placeholder="Enter URL"
             value={address}
