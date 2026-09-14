@@ -172,6 +172,7 @@ it("opens a live thread panel when a managed session starts", async () => {
     {},
     {
       context: { threadId: "thread_one" },
+      openThreadPanel: () => true,
       rpc: {
         list: () => [
           {
@@ -200,13 +201,14 @@ it("opens a live thread panel when a managed session starts", async () => {
     slot.lifecycle.unmount();
   }
 });
-it("reopens the live panel when the agent keeps working", async () => {
+it("routine refresh preserves focus; explicit reveal reopens the selected panel", async () => {
   const app = await loadPluginApp(() => import("../app"));
   const slot = renderSlot(
     app.appOverlays[0]!,
     {},
     {
       context: { threadId: "thread_one" },
+      openThreadPanel: () => true,
       rpc: {
         list: () => [
           {
@@ -219,13 +221,15 @@ it("reopens the live panel when the agent keeps working", async () => {
     },
   );
   try {
-    await waitFor(() =>
-      expect(slot.inspection.navigateCalls).toHaveLength(1),
-    );
+    await waitFor(() => expect(slot.inspection.navigateCalls).toHaveLength(1));
     await slot.emitRealtime("browser-changed", {});
-    await waitFor(() =>
-      expect(slot.inspection.navigateCalls).toHaveLength(2),
-    );
+    await new Promise((r) => setTimeout(r, 30));
+    expect(slot.inspection.navigateCalls).toHaveLength(1);
+    await slot.emitRealtime("browser-reveal", {
+      threadId: "thread_one",
+      id: "ab-live-1",
+    });
+    await waitFor(() => expect(slot.inspection.navigateCalls).toHaveLength(2));
     expect(slot.inspection.navigateCalls[1]).toEqual(
       expect.objectContaining({
         method: "openThreadPanel",
@@ -250,6 +254,53 @@ it("renders the live iframe for a session id", async () => {
     expect(frame.getAttribute("src")).toContain(
       "/api/v1/plugins/browse/http/viewer?id=ab-live-1",
     );
+  } finally {
+    slot.lifecycle.unmount();
+  }
+});
+
+it("opens separate tabs for sessions on different hosts and keeps the newest selected", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  const slot = renderSlot(
+    app.appOverlays[0]!,
+    {},
+    {
+      context: { threadId: "thread_one" },
+      openThreadPanel: () => true,
+      rpc: {
+        list: () => [
+          {
+            id: "ab-new",
+            status: "ready",
+            url: "https://example.com",
+            hostLabel: "pro",
+            mode: "native",
+          },
+          {
+            id: "ab-old",
+            status: "ready",
+            url: "https://example.com",
+            hostLabel: "server",
+            mode: "managed",
+          },
+        ],
+      },
+    },
+  );
+  try {
+    await waitFor(() => expect(slot.inspection.navigateCalls).toHaveLength(2));
+    expect(slot.inspection.navigateCalls.map((c: any) => c.options)).toEqual([
+      {
+        actionId: "live",
+        params: { id: "ab-old" },
+        title: "example.com · server",
+      },
+      {
+        actionId: "live",
+        params: { id: "ab-new" },
+        title: "example.com · pro",
+      },
+    ]);
   } finally {
     slot.lifecycle.unmount();
   }

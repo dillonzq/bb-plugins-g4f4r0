@@ -108,3 +108,53 @@ it("cancels a nested stroke, releases the pointer before disconnect, and release
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("streams native frames and accepts viewer input without extending the desktop lease", async () => {
+  const root = await mkdtemp(join(tmpdir(), "browse-native-view-"));
+  const h = experimental_createHostEntryHarness(entry, {
+    experimental_paths: { dataDir: root, tempDir: root },
+  });
+  const expiresAt = Date.now() + 60000;
+  mock.evaluate.mockResolvedValue("https://example.com");
+  mock.send.mockResolvedValue({});
+  try {
+    let j = await h.experimental_call("connect", {
+      id: "ab-native-view",
+      mode: "native",
+      endpoint: "ws://private",
+      expiresAt,
+    });
+    while (j.status === "running") {
+      await new Promise((r) => setTimeout(r, 5));
+      j = await h.experimental_call("job", { id: j.id });
+    }
+    expect(j.status).toBe("succeeded");
+    expect(
+      await h.experimental_call("frame", { id: "ab-native-view" }),
+    ).toMatchObject({ data: "jpeg", width: 1280 });
+    expect(
+      await h.experimental_call("inspect", { id: "ab-native-view" }),
+    ).toMatchObject({ expiresAt });
+    const input = await h.experimental_call("input", {
+      id: "ab-native-view",
+      input: { kind: "text", text: "hello" },
+    });
+    expect(input.status).toBe("succeeded");
+    expect(mock.send).toHaveBeenCalledWith("Input.insertText", {
+      text: "hello",
+    });
+    await expect(
+      h.experimental_call("credentialPrepare", {
+        id: "ab-native-view",
+        purpose: "Test expiring lease",
+        fields: [
+          { selector: "#password", label: "Password", kind: "password" },
+        ],
+        submitSelector: "button",
+      }),
+    ).rejects.toThrow("Reconnect an expiring native session");
+  } finally {
+    await h.experimental_dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});

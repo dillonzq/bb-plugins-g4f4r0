@@ -5,6 +5,8 @@ import { once } from "node:events";
 import { strict as assert } from "node:assert";
 import { experimental_createHostEntryHarness } from "@get-bb/plugin-sdk/testing/host";
 import entry from "../host";
+import { launchManaged, type ManagedBrowser } from "../src/managed";
+import { Cdp } from "../src/cdp";
 
 const fixture = createServer(async (req, res) => {
   res.setHeader("Content-Type", "text/html");
@@ -74,13 +76,31 @@ async function run(args: string[]) {
     }),
   );
 }
+const native = process.env.BROWSE_TEST_MODE === "native";
+let desktopFixture: ManagedBrowser | undefined;
 try {
+  if (native) {
+    // Real Chrome behind the native host/Bridge path. This does not simulate
+    // BB Desktop's CDP allowlist or a physical desktop reconnect.
+    desktopFixture = await launchManaged(
+      process.env.BROWSE_TEST_HOST_DATA ??
+        join(homedir(), ".bb/plugins/browse/host-data"),
+      `${id}-desktop`,
+      new AbortController().signal,
+    );
+    const setup = await Cdp.connect(desktopFixture.endpoint, true);
+    await setup.send("Page.navigate", {
+      url: `http://127.0.0.1:${port}/login`,
+    });
+    setup.close();
+  }
   await wait(
     await h.experimental_call("connect", {
       id,
-      mode: "managed",
+      mode: native ? "native" : "managed",
+      endpoint: desktopFixture?.endpoint ?? "",
       url: `http://127.0.0.1:${port}/login`,
-      expiresAt: Date.now() + 120000,
+      expiresAt: Date.now() + 1800000,
     }),
   );
   let prepared = await h.experimental_call("credentialPrepare", request);
@@ -137,6 +157,7 @@ try {
   );
 } finally {
   await h.experimental_dispose();
+  await desktopFixture?.close();
   fixture.closeAllConnections();
   fixture.close();
 }

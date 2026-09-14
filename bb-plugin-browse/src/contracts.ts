@@ -3,6 +3,7 @@ import { z } from "zod";
 import { credentialRequest, credentialValues } from "./credentials";
 export const VERSION = "0.37.1";
 export const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+export const NATIVE_LEASE_TTL_MS = 30 * 60 * 1000;
 export const CREDENTIAL_TIMEOUT_MS = 300000;
 export const id = z.string().min(1).max(200);
 export const point = z.object({
@@ -101,6 +102,7 @@ export const hostSession = z.object({
   targetId: z.string().optional(),
   busy: z.string().optional(),
   url: z.string().optional(),
+  expiresAt: z.number().optional(),
 });
 export const scope = z.object({
   hostId: id,
@@ -143,8 +145,8 @@ export const health = z.object({
 export const viewerInput = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("click"),
-    x: z.number().min(0).max(1279),
-    y: z.number().min(0).max(799),
+    x: z.number().min(0).max(50000),
+    y: z.number().min(0).max(50000),
   }),
   z.object({
     kind: z.literal("scroll"),
@@ -263,6 +265,7 @@ export const rpcContract = defineRpcContract({
       z.object({
         hostId: id,
         label: z.string(),
+        connected: z.boolean(),
         instances: z.array(
           z.object({ instanceId: id, generation: id, label: z.string() }),
         ),
@@ -311,7 +314,18 @@ export const rpcContract = defineRpcContract({
   },
   reveal: {
     input: z.object({ id }),
-    output: z.object({ ok: z.boolean(), url: z.string().optional() }),
+    output: z.object({
+      ok: z.boolean(),
+      url: z.string(),
+      sessionId: id,
+      hostId: id,
+      hostLabel: z.string(),
+      mode: z.enum(["managed", "native"]),
+      handoff: z.enum(["requested", "unavailable"]),
+      visibleClients: z.number(),
+      currentClientVisibility: z.literal("unverified"),
+      message: z.string(),
+    }),
   },
   close: { input: z.object({ id }), output: z.object({ ok: z.boolean() }) },
   artifacts: { input: z.object({ id }), output: z.array(artifact) },

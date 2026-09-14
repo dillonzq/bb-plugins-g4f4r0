@@ -7,7 +7,7 @@ import {
   useRealtime,
   experimental_Icon as Icon,
 } from "@get-bb/plugin-sdk/app";
-import type { rpcContract, health, Job } from "./src/contracts";
+import type { rpcContract, health, Job, Session } from "./src/contracts";
 import type { z } from "zod";
 import { CredentialForm } from "./components/credential-form";
 import { Button } from "./components/ui/button";
@@ -443,10 +443,15 @@ export default definePluginApp((app) => {
 
 function LiveBrowser({
   params,
+  threadId,
 }: {
   threadId: string;
   params: unknown;
 }) {
+  const rpc = useRpc<typeof rpcContract>();
+  const nav = useBbNavigate();
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [error, setError] = useState("");
   const id =
     params &&
     typeof params === "object" &&
@@ -454,45 +459,146 @@ function LiveBrowser({
     "id" in params
       ? String((params as { id: unknown }).id)
       : "";
+  const sync = useCallback(async () => {
+    try {
+      setSessions(await rpc.call("list", { threadId }));
+      setError("");
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [rpc, threadId]);
+  useEffect(() => {
+    void sync();
+  }, [sync]);
+  useRealtime("browser-changed", () => {
+    void sync();
+  });
+  const current = sessions.find((s) => s.id === id);
   if (!id)
     return (
-      <p className="p-4 text-sm text-subtle-foreground">
-        No live browser session.
-      </p>
+      <div className="p-4 space-y-3">
+        <p>
+          Browsers for this thread. Each session stays on its selected machine.
+        </p>
+        {error && <p role="alert">{error}</p>}
+        {!sessions.length && (
+          <p>No browser sessions yet. Ask the agent to open a page.</p>
+        )}
+        {sessions.map((s) => (
+          <Button
+            key={s.id}
+            variant="outline"
+            onClick={() =>
+              nav.openThreadPanel({
+                actionId: "live",
+                params: { id: s.id },
+                title: browserTitle(s),
+              })
+            }
+          >
+            {s.hostLabel} · {s.mode} · {s.url} · {s.status}
+          </Button>
+        ))}
+      </div>
     );
   return (
-    <iframe
-      title="Live browser"
-      className="h-full w-full border-0 bg-black"
-      src={`/api/v1/plugins/browse/http/viewer?id=${encodeURIComponent(id)}`}
-    />
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-center gap-2 border-b p-2 text-sm">
+        <span>
+          {current ? `${current.hostLabel} · ${current.mode} · ${id}` : id}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            nav.openThreadPanel({ actionId: "live", title: "Browsers" })
+          }
+        >
+          All sessions
+        </Button>
+        {current && ["error", "released"].includes(current.status) && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                const r = await rpc.call("reconnect", { id });
+                nav.openThreadPanel({
+                  actionId: "live",
+                  params: { id: r.session.id },
+                  title: browserTitle(r.session),
+                });
+              } catch (e) {
+                setError(String(e));
+              }
+            }}
+          >
+            Reconnect
+          </Button>
+        )}
+        {error && <span role="alert">{error}</span>}
+      </div>
+      <iframe
+        title="Live browser"
+        className="min-h-0 w-full flex-1 border-0 bg-black"
+        src={`/api/v1/plugins/browse/http/viewer?id=${encodeURIComponent(id)}`}
+      />
+    </div>
   );
 }
 
+function browserTitle(s: Pick<Session, "url" | "hostLabel">) {
+  let title = "Browser";
+  try {
+    title = new URL(s.url).hostname || title;
+  } catch {}
+  return s.hostLabel ? `${title} · ${s.hostLabel}` : title;
+}
 function AutoShowBrowsers() {
   const { threadId } = useBbContext();
   const nav = useBbNavigate();
   const rpc = useRpc<typeof rpcContract>();
-  const sync = useCallback(async () => {
-    if (!threadId) return;
-    try {
-      const sessions = await rpc.call("list", { threadId });
-      for (const s of sessions) {
-        if (!["ready", "connecting"].includes(s.status)) continue;
-        let title = "Browser";
-        try {
-          title = new URL(s.url).hostname || title;
-        } catch {}
-        nav.openThreadPanel({
-          actionId: "live",
-          params: { id: s.id },
-          title,
-        });
+  const opened = useRef(new Set<string>());
+  const activeThread = useRef(threadId);
+  activeThread.current = threadId;
+  const sync = useCallback(
+    async (revealId?: string) => {
+      if (!threadId) return;
+      try {
+        const sessions = await rpc.call("list", { threadId });
+        if (activeThread.current !== threadId) return;
+        // Oldest first leaves the newly opened page selected. Routine refreshes
+        // never steal focus from another session or reopen a user-closed tab.
+        for (const s of [...sessions].reverse()) {
+          if (
+            revealId
+              ? s.id !== revealId
+              : !["ready", "connecting"].includes(s.status) ||
+                opened.current.has(s.id)
+          )
+            continue;
+          if (
+            nav.openThreadPanel({
+              actionId: "live",
+              params: { id: s.id },
+              title: browserTitle(s),
+            })
+          )
+            opened.current.add(s.id);
+        }
+      } catch {
+        /* Keep manual Browser launcher available after an RPC failure. */
       }
-    } catch {}
-  }, [nav, rpc, threadId]);
+    },
+    [nav, rpc, threadId],
+  );
   useRealtime("browser-changed", () => {
     void sync();
+  });
+  useRealtime("browser-reveal", (payload) => {
+    if (!payload || typeof payload !== "object") return;
+    const event = payload as { threadId?: string; id?: string };
+    if (event.threadId === threadId && event.id) void sync(event.id);
   });
   useEffect(() => {
     void sync();

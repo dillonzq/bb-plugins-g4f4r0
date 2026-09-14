@@ -84,7 +84,7 @@ function scheduleExpiry(s: LocalSession) {
   s.timer.unref();
 }
 function touchSession(s: LocalSession) {
-  if (s.status === "released" || s.closing) return;
+  if (s.mode !== "managed" || s.status === "released" || s.closing) return;
   s.expiresAt = Date.now() + SESSION_TTL_MS;
   scheduleExpiry(s);
 }
@@ -97,6 +97,7 @@ function publicSession(s: LocalSession) {
     artifactRoot: s.artifactRoot,
     targetId: s.targetId,
     busy: s.busy,
+    expiresAt: s.expiresAt,
   };
 }
 function session(id: string) {
@@ -618,14 +619,16 @@ export default experimental_defineHostEntry({
       const s = session(input.id);
       if (
         s.status !== "ready" ||
-        !s.managed ||
+        !s.cdp ||
+        (s.mode === "native" &&
+          s.expiresAt < Date.now() + CREDENTIAL_TIMEOUT_MS + 30000) ||
         s.busy ||
         s.framing ||
         s.recording ||
         s.credential
       )
         throw new Error(
-          "Use an idle managed browser with recording stopped for credentials.",
+          "Use an idle connected browser with recording stopped and at least six minutes of control remaining. Reconnect an expiring native session first.",
         );
       const pending: NonNullable<LocalSession["credential"]> = {
         token: randomUUID(),
@@ -746,7 +749,7 @@ export default experimental_defineHostEntry({
       ),
     frame: async ({ id, after = 0 }) => {
       const s = session(id);
-      if (s.status !== "ready" || !s.managed || !s.cdp)
+      if (s.status !== "ready" || !s.cdp || s.expiresAt <= Date.now())
         throw new Error("Browser is not ready");
       touchSession(s);
       await s.cdp.startLiveCast();
@@ -756,7 +759,7 @@ export default experimental_defineHostEntry({
     },
     input: async ({ id, input }, ctx) => {
       const s = session(id);
-      if (s.status !== "ready" || !s.managed)
+      if (s.status !== "ready" || !s.cdp || s.expiresAt <= Date.now())
         throw new Error("Browser is not ready");
       const j = startJob(
         "viewer",

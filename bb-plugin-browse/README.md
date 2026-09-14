@@ -1,6 +1,6 @@
 # Browse for BB
 
-A browser automation plugin built around **Vercel Agent Browser 0.37.1**. By default, Browse launches Chromium on **the machine where your BB thread executes**. It works independently of the client device. Explicit native mode can also control BB desktop tabs.
+A browser automation plugin built around **Vercel Agent Browser 0.37.1**. By default, Browse launches Chromium on **the machine where your BB thread executes**. An explicit `hostId` can select any other connected machine. Existing sessions stay on that host when the thread moves. It works independently of the client device. Explicit native mode can also control BB desktop tabs.
 
 **Browse** is the plugin name, ID (`browse`), CLI (`bb browse`), and agent tools (`browse_session`, `browse_action`, `browse_job`, `browse_discover`, `browse_credentials`). Vercel Agent Browser is the Chromium driver.
 
@@ -12,7 +12,7 @@ Browse runs through agent tools and the `bb browse` CLI. It adds a dependency pa
 
 Start with `bb browse start '{"url":"https://example.com"}'` from a BB thread. Browse resolves that thread’s environment host and opens headed Chrome. The live page appears in the thread panel. Run `probe` to check readiness and `setup` to install dependencies, including Xvfb, xkbcomp, and XKB keymap data on Linux hosts without a display. Settings lists all enrolled machines with independent checks and installation actions; offline machines are shown separately.
 
-The viewer is a custom authenticated web view. It streams JPEG screencast frames from headed Chrome over a plugin WebSocket, with clicking, typing/pasting, navigation keys and scrolling. It opens automatically when a managed session starts. It is not BB’s native Electron browser surface. Relative viewer URLs resolve against the current BB web origin.
+The viewer is a custom authenticated web view. It streams JPEG screencast frames from headed Chrome over a plugin WebSocket, with clicking, typing/pasting, navigation keys and scrolling. Each session opens as its own BB side-panel tab, with its host in the title. Native sessions can use the same viewer when their desktop supports streaming. The Browser launcher lists this thread’s sessions across hosts. Routine refreshes preserve your selected tab. It is not BB’s native Electron browser surface. Relative viewer URLs resolve against the current BB web origin.
 
 `mode:"native"` retains the existing desktop backend and requires fresh hostId, instanceId and generation. The legacy preferredHost applies only to native discovery; it never changes managed placement.
 
@@ -32,7 +32,7 @@ Tools and the bundled skill become available when BB refreshes the agent session
 
 Browse can request username, password, or verification-code fields through BB's private input UI, using the same SDK mechanism as the built-in Secrets plugin. Device password managers such as 1Password can fill this form. No vault connection or service account is required. Environment-variable requests still use Secrets.
 
-The request starts a credentials job immediately (agents poll it; the CLI waits). It locks automation for up to five minutes, keeps the live view visible, binds to the original document and fields, then fills and clicks once. Values are excluded from its result and job history, and are not written to dotenv files. Existing input nodes are cleared after delivery. Cancellation before filling preserves the page.
+The request starts a credentials job immediately (agents poll it; the CLI waits). It works on the selected managed or native session, locks automation for up to five minutes, keeps the live view available, binds to the original document and fields, then fills and clicks once. Values are excluded from its result and job history, and are not written to dotenv files. Existing input nodes are cleared after delivery. Cancellation before filling preserves the page.
 
 Fields may be in the top document, an open shadow root, or an iframe that uniquely matches. Continue may be a button, `input type=submit|button`, or `role=button`. HTTPS or loopback HTTP fixtures and same-origin POST forms are required when a form is present. Stop recording before requesting. Unsupported forms, ambiguous matches, and page changes fail closed. A delivery result is not proof of successful login; inspect the following page. Browser/host access remains trusted: destination scripts can retain submitted values, and this feature does not isolate secrets from arbitrary browser scripting or shell access.
 
@@ -136,3 +136,11 @@ See [managed implementation validation](MANAGED-VALIDATION.md) for live Settings
 Managed starts at the same current URL reuse a session belonging to the current thread and host, including concurrent starts. `newTab:true` requests a separate isolated browser. Navigate an existing session with an `open` action to avoid opening additional browsers for unrelated URLs. Reuse preserves the current page state and reports any active job.
 
 Release is idempotent and stops the owned Chromium process and its scoped automation daemon. Cancelled non-gesture actions invalidate and release their session; reconnect reopens its saved profile. Finished job results are evicted oldest-first above 200 entries or an 8 MiB serialized-payload budget, retaining the most recent result and running jobs. This is a history bound, not a total process-memory limit; profiles and saved artifacts remain on disk.
+
+### Handoff and native recovery
+
+`reveal` reports whether a panel handoff was requested, recent visible-frame acknowledgments, the session/host identity, and a viewer URL. An agent call cannot identify your current client; `ok` does not prove that you saw the page. Open the returned URL against your current BB address when the panel is unavailable.
+
+Native leases use BB’s 30-minute maximum. Fresh discovery replaces stale generations before acquisition; a generation change during an active session requires explicit reconnect and never replays an action. Failed starts close newly created tabs where possible and report the tab identity and cleanup result. Existing tabs are preserved. Private login needs six minutes remaining on a native lease.
+
+Linux hosts need no desktop shell: managed Chrome uses a virtual display. Browse panels are streamed pages inside BB, not Electron-native tabs. Browse does not attach arbitrary existing Chrome windows or automatically expose website-created popup windows. Different managed sessions have isolated login cookies. Native capture can require the desktop tab to remain visible. CAPTCHA, passkeys and device-specific login may require manual interaction; website anti-bot restrictions are not removed by remote viewing.

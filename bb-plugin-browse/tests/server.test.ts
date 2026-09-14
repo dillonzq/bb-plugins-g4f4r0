@@ -19,11 +19,17 @@ async function fixture(
     executionHost?: string;
     busyOnce?: boolean;
     credentialFailure?: boolean;
+    acquireFails?: boolean;
+    closeFails?: boolean;
+    generation?: string;
   } = {},
 ) {
   const paneAction = vi.fn(async () => ({ delivered: 1 })),
     release = vi.fn(async () => ({ ok: true })),
-    close = vi.fn(async () => ({ ok: true })),
+    close = vi.fn(async () => {
+      if (options.closeFails) throw Error("Desktop disconnected");
+      return { ok: true };
+    }),
     create = vi.fn(async () => ({ tab: { tabId: "tab_new" } }));
   const calls: any[] = [];
   let inspected = 0;
@@ -43,7 +49,13 @@ async function fixture(
       },
       experimental_desktopBrowsers: {
         listInstances: async () => ({
-          instances: [{ ...base, label: "Desktop" }],
+          instances: [
+            {
+              ...base,
+              generation: options.generation ?? base.generation,
+              label: "Desktop",
+            },
+          ],
         }),
         listTabs: async () => ({
           tabs: [
@@ -67,13 +79,18 @@ async function fixture(
           ],
         }),
         createTab: create,
-        acquireControl: async () => ({
-          ...base,
-          leaseId: "private-lease",
-          tabIds: ["tab_new"],
-          controllerLabel: "Agent Browser",
-          expiresAt: Date.now() + 1800000,
-        }),
+        acquireControl: async (input) => {
+          expect(input.ttlMs).toBeLessThanOrEqual(1800000);
+          expect(input.generation).toBe(options.generation ?? base.generation);
+          if (options.acquireFails) throw Error("Acquisition rejected");
+          return {
+            ...base,
+            leaseId: "private-lease",
+            tabIds: ["tab_new"],
+            controllerLabel: "Agent Browser",
+            expiresAt: Date.now() + 1800000,
+          };
+        },
         openConnection: async () => ({
           hostId: base.hostId,
           wsEndpoint: "ws://127.0.0.1:1234/private-secret",
@@ -159,7 +176,7 @@ describe("BB browser lifecycle", () => {
     expect(f.release).toHaveBeenCalledOnce();
     expect(f.close).not.toHaveBeenCalled();
   });
-  it("releases the lease after a failed host connection and preserves the tab", async () => {
+  it("releases control and removes the new tab after a failed host connection", async () => {
     const f = await fixture({ connectFails: true });
     await expect(
       f.harness.behavior.callRpc("start", {
@@ -168,7 +185,7 @@ describe("BB browser lifecycle", () => {
       }),
     ).rejects.toThrow("Connection failed");
     expect(f.release).toHaveBeenCalledOnce();
-    expect(f.close).not.toHaveBeenCalled();
+    expect(f.close).toHaveBeenCalledOnce();
     await f.harness.lifecycle.dispose();
   });
   it("does not steal another controller’s tab", async () => {
@@ -234,7 +251,9 @@ describe("Thread-host routing", () => {
       "host_thread",
     );
     expect(r.session.mode).toBe("managed");
-    expect(r.session.expiresAt).toBeGreaterThan(Date.now() + 7 * 60 * 60 * 1000);
+    expect(r.session.expiresAt).toBeGreaterThan(
+      Date.now() + 7 * 60 * 60 * 1000,
+    );
     expect(r.session.viewerUrl).toContain("/http/viewer?id=");
     expect(f.create).not.toHaveBeenCalled();
     expect(JSON.stringify(r)).not.toContain("ws://");
@@ -262,15 +281,23 @@ describe("Thread-host routing", () => {
     await f.harness.lifecycle.dispose();
     expect(f.release).not.toHaveBeenCalled();
   });
-  it("rejects a client host override rather than silently changing placement", async () => {
+  it("honors an explicit managed host and reconnects on that same host", async () => {
     const f = await fixture();
-    await expect(
-      f.harness.behavior.callRpc("start", {
-        threadId: "thread_one",
-        hostId: "host_pro",
-      }),
-    ).rejects.toThrow("execution host");
-    expect(f.calls).toHaveLength(0);
+    const r: any = await f.harness.behavior.callRpc("start", {
+      threadId: "thread_one",
+      hostId: "host_pro",
+    });
+    expect(r.session.hostId).toBe("host_pro");
+    const next: any = await f.harness.behavior.callRpc("reconnect", {
+      id: r.session.id,
+    });
+    expect(next.session.hostId).toBe("host_pro");
+    expect(next.session.profileId).toBe(r.session.profileId);
+    expect(
+      f.calls
+        .filter((c) => c.method === "connect")
+        .every((c) => c.hostId === "host_pro"),
+    ).toBe(true);
     await f.harness.lifecycle.dispose();
   });
   it("cleans up a failed managed connection without falling back to desktop", async () => {
@@ -298,23 +325,23 @@ describe("Thread-host routing", () => {
   });
 });
 
-it("stops old managed placement after the thread moves instead of submitting there", async () => {
+it("keeps existing sessions on their host after a thread move and defaults new sessions to the new host", async () => {
   const options = { executionHost: "host_thread" };
   const f = await fixture(options);
   const r: any = await f.harness.behavior.callRpc("start", {
     threadId: "thread_one",
   });
   options.executionHost = "host_new";
-  await expect(
-    f.harness.behavior.callRpc("run", {
-      id: r.session.id,
-      operation: { kind: "command", args: ["get", "title"] },
-    }),
-  ).rejects.toThrow("moved to another host");
-  expect(f.calls.some((c) => c.method === "submit")).toBe(false);
-  expect(
-    f.calls.some((c) => c.method === "release" && c.hostId === "host_thread"),
-  ).toBe(true);
+  await f.harness.behavior.callRpc("run", {
+    id: r.session.id,
+    operation: { kind: "command", args: ["get", "title"] },
+  });
+  expect(f.calls.find((c) => c.method === "submit").hostId).toBe("host_thread");
+  expect(f.calls.some((c) => c.method === "release")).toBe(false);
+  const next: any = await f.harness.behavior.callRpc("start", {
+    threadId: "thread_one",
+  });
+  expect(next.session.hostId).toBe("host_new");
   await f.harness.lifecycle.dispose();
 });
 
@@ -375,14 +402,18 @@ describe("private browser credential requests", () => {
     fields: [{ selector: "#password", label: "Password", kind: "password" }],
     submitSelector: "button",
   });
-  it.each(["submit", "cancel", "error"])(
-    "handles %s without putting values in the result",
-    async (outcome) => {
+  it.each(
+    ["managed", "native"].flatMap((mode) =>
+      ["submit", "cancel", "error"].map((outcome) => ({ mode, outcome })),
+    ),
+  )(
+    "handles $mode $outcome without putting values in the result",
+    async ({ mode, outcome }) => {
       const f = await fixture({ credentialFailure: outcome === "error" });
       try {
         const started: any = await f.harness.behavior.callRpc("start", {
-          threadId: base.threadId,
-          mode: "managed",
+          ...(mode === "native" ? base : { threadId: base.threadId }),
+          mode,
           url: "https://accounts.shopify.com",
         });
         const result = f.harness.behavior.runCli(
@@ -395,6 +426,7 @@ describe("private browser credential requests", () => {
         const interaction = f.harness.inspection.pendingInteractions[0];
         expect(interaction.payload).toEqual({
           origin: "https://accounts.shopify.com",
+          sessionLabel: expect.stringContaining(started.session.id),
           purpose: "Sign in for the requested task",
           fields: [{ label: "Password", kind: "password" }],
         });
@@ -471,4 +503,120 @@ describe("private browser credential requests", () => {
       await f.harness.lifecycle.dispose();
     }
   });
+});
+
+it.each([false, true])(
+  "reports created tab and cleanup when acquisition fails (cleanup fails: %s)",
+  async (closeFails) => {
+    const f = await fixture({ acquireFails: true, closeFails });
+    try {
+      await expect(
+        f.harness.behavior.callRpc("start", { ...base }),
+      ).rejects.toThrow(
+        closeFails ? '"cleanup":"preserved"' : '"cleanup":"closed"',
+      );
+      expect(f.create).toHaveBeenCalledOnce();
+      expect(f.close).toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: "tab_new" }),
+      );
+      expect(f.release).not.toHaveBeenCalled();
+    } finally {
+      await f.harness.lifecycle.dispose();
+    }
+  },
+);
+it("does not close a pre-existing tab after failed acquisition", async () => {
+  const f = await fixture({ acquireFails: true });
+  try {
+    await expect(
+      f.harness.behavior.callRpc("start", { ...base, tabId: "tab_existing" }),
+    ).rejects.toThrow('"tabId":"tab_existing"');
+    expect(f.close).not.toHaveBeenCalled();
+  } finally {
+    await f.harness.lifecycle.dispose();
+  }
+});
+it("refreshes stale discovery before native creation and refuses to replay actions after reconnection", async () => {
+  const options = { generation: "fresh-one" };
+  const f = await fixture(options);
+  try {
+    const r: any = await f.harness.behavior.callRpc("start", {
+      ...base,
+      tabId: "tab_existing",
+    });
+    expect(r.session.generation).toBe("fresh-one");
+    options.generation = "fresh-two";
+    await expect(
+      f.harness.behavior.callRpc("run", {
+        id: r.session.id,
+        operation: { kind: "command", args: ["click", "button"] },
+      }),
+    ).rejects.toThrow("fresh-two");
+    expect(f.calls.some((c) => c.method === "submit")).toBe(false);
+    const next: any = await f.harness.behavior.callRpc("reconnect", {
+      id: r.session.id,
+    });
+    expect(next.session.tabId).toBe("tab_existing");
+    expect(next.session.generation).toBe("fresh-two");
+    expect(f.create).not.toHaveBeenCalled();
+  } finally {
+    await f.harness.lifecycle.dispose();
+  }
+});
+it("reports unavailable handoff and accepts visible-frame evidence without claiming current-client visibility", async () => {
+  const f = await fixture();
+  try {
+    const r: any = await f.harness.behavior.callRpc("start", {
+      threadId: base.threadId,
+    });
+    f.paneAction.mockRejectedValue(new Error("Client unavailable"));
+    expect(
+      await f.harness.behavior.callRpc("reveal", { id: r.session.id }),
+    ).toMatchObject({
+      ok: false,
+      handoff: "unavailable",
+      visibleClients: 0,
+      currentClientVisibility: "unverified",
+    });
+    await f.harness.behavior.fetchHttp("POST", "/presence", {
+      body: JSON.stringify({
+        id: r.session.id,
+        clientId: "remote-client",
+        visible: true,
+      }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(
+      await f.harness.behavior.callRpc("reveal", { id: r.session.id }),
+    ).toMatchObject({
+      ok: true,
+      visibleClients: 1,
+      currentClientVisibility: "unverified",
+    });
+    await f.harness.behavior.fetchHttp("POST", "/presence", {
+      body: JSON.stringify({
+        id: r.session.id,
+        clientId: "remote-client",
+        visible: false,
+      }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(
+      await f.harness.behavior.callRpc("reveal", { id: r.session.id }),
+    ).toMatchObject({ visibleClients: 0 });
+  } finally {
+    await f.harness.lifecycle.dispose();
+  }
+});
+it("provides native viewer frames and identity through the selected host", async () => {
+  const f = await fixture();
+  try {
+    const r: any = await f.harness.behavior.callRpc("start", { ...base });
+    expect(r.session.viewerUrl).toContain(r.session.id);
+    await f.harness.behavior.callRpc("frame", { id: r.session.id });
+    expect(f.calls.find((c) => c.method === "frame").hostId).toBe("host_pro");
+    expect(r.session.expiresAt).toBeLessThanOrEqual(Date.now() + 1800000);
+  } finally {
+    await f.harness.lifecycle.dispose();
+  }
 });
