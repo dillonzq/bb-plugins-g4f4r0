@@ -40,7 +40,7 @@ export default async function plugin(bb: BbPluginApi) {
       s.status = "released";
       delete s.busy;
       s.recording = false;
-      s.error = undefined;
+      delete s.error;
       sessions.set(s.id, s);
     }
   }

@@ -31,7 +31,7 @@ it("shows every machine, probes connected hosts independently, and keeps offline
   expect(app.navPanels).toHaveLength(0);
   expect(app.settingsSections).toHaveLength(1);
   expect(app.threadPanelActions).toHaveLength(1);
-  expect(app.appOverlays).toHaveLength(1);
+  expect(app.threadHeaderActions).toHaveLength(1);
   const slot = renderSlot(
     app.settingsSections[0]!,
     {},
@@ -168,8 +168,8 @@ it("installation targets its own machine and leaves other machine controls avail
 it("opens a live thread panel when a managed session starts", async () => {
   const app = await loadPluginApp(() => import("../app"));
   const slot = renderSlot(
-    app.appOverlays[0]!,
-    {},
+    app.threadHeaderActions[0]!,
+    { threadId: "thread_one", projectId: "project_one", isCompactViewport: false },
     {
       context: { threadId: "thread_one" },
       openThreadPanel: () => true,
@@ -204,8 +204,8 @@ it("opens a live thread panel when a managed session starts", async () => {
 it("routine refresh preserves focus; explicit reveal reopens the selected panel", async () => {
   const app = await loadPluginApp(() => import("../app"));
   const slot = renderSlot(
-    app.appOverlays[0]!,
-    {},
+    app.threadHeaderActions[0]!,
+    { threadId: "thread_one", projectId: "project_one", isCompactViewport: false },
     {
       context: { threadId: "thread_one" },
       openThreadPanel: () => true,
@@ -262,8 +262,8 @@ it("renders the live iframe for a session id", async () => {
 it("opens separate tabs for sessions on different hosts and keeps the newest selected", async () => {
   const app = await loadPluginApp(() => import("../app"));
   const slot = renderSlot(
-    app.appOverlays[0]!,
-    {},
+    app.threadHeaderActions[0]!,
+    { threadId: "thread_one", projectId: "project_one", isCompactViewport: false },
     {
       context: { threadId: "thread_one" },
       openThreadPanel: () => true,
@@ -309,7 +309,7 @@ it("opens separate tabs for sessions on different hosts and keeps the newest sel
 it("routes ordinary external clicks to the thread and reports recoverable launch errors", async () => {
   const app = await loadPluginApp(() => import("../app"));
   let fail = true;
-  const slot = renderSlot(app.appOverlays[0]!, {}, {
+  const slot = renderSlot(app.threadHeaderActions[0]!, { threadId: "thread_one", projectId: "project_one", isCompactViewport: false }, {
     context: { threadId: "thread_one" }, openThreadPanel: () => true,
     rpc: { list: () => [], start: () => {
       if (fail) throw new Error("Host offline");
@@ -332,7 +332,7 @@ it("routes ordinary external clicks to the thread and reports recoverable launch
 
 it("preserves app routes, modified clicks, downloads, and removes interception on unmount", async () => {
   const app = await loadPluginApp(() => import("../app"));
-  const slot = renderSlot(app.appOverlays[0]!, {}, { context: { threadId: "thread_one" }, rpc: { list: () => [] } });
+  const slot = renderSlot(app.threadHeaderActions[0]!, { threadId: "thread_one", projectId: "project_one", isCompactViewport: false }, { context: { threadId: "thread_one" }, rpc: { list: () => [] } });
   const link = document.createElement("a"); document.body.append(link);
   // A bubble listener prevents jsdom navigation, and records whether Browse consumed the event.
   let bubbled = 0;

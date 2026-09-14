@@ -451,8 +451,9 @@ export default definePluginApp((app) => {
     layout: "flush",
     component: LiveBrowser,
   });
-  app.slots.experimental_appOverlay({
+  app.slots.experimental_threadHeaderAction({
     id: "auto-show",
+    title: "Browser sessions",
     component: AutoShowBrowsers,
   });
 });
@@ -596,8 +597,8 @@ function browserTitle(s: Pick<Session, "url" | "hostLabel">) {
   } catch {}
   return s.hostLabel ? `${title} · ${s.hostLabel}` : title;
 }
-function AutoShowBrowsers() {
-  const { threadId } = useBbContext();
+function AutoShowBrowsers({ threadId }: { threadId: string }) {
+  const { threadId: selectedThreadId } = useBbContext();
   const nav = useBbNavigate();
   const rpc = useRpc<typeof rpcContract>();
   const [linkState, setLinkState] = useState<{
@@ -646,7 +647,7 @@ function AutoShowBrowsers() {
   );
   useEffect(() => {
     setLinkState(null);
-    if (!threadId) return;
+    if (!threadId || selectedThreadId !== threadId) return;
     const click = (event: MouseEvent) => {
       const url = browseLink(event, window.location);
       if (!url) return;
@@ -656,7 +657,7 @@ function AutoShowBrowsers() {
     };
     document.addEventListener("click", click, true);
     return () => document.removeEventListener("click", click, true);
-  }, [threadId, openLink]);
+  }, [threadId, selectedThreadId, openLink]);
   const sync = useCallback(
     async (revealId?: string) => {
       if (!threadId) return;
