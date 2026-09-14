@@ -537,13 +537,13 @@ function LiveBrowser({
   if (!id)
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <form aria-label="Browser navigation" className="flex shrink-0 items-center gap-1 border-b px-3 py-2" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
-          <Button type="button" variant="ghost" size="icon" aria-label="Back" disabled><BrowseIcon name="ArrowLeft" className="size-4" /></Button>
-          <Button type="button" variant="ghost" size="icon" aria-label="Forward" disabled><BrowseIcon name="ArrowRight" className="size-4" /></Button>
-          <Button type="button" variant="ghost" size="icon" aria-label="Refresh sessions" onClick={() => void sync()}><BrowseIcon name="RefreshCw" className="size-4" /></Button>
+        <form aria-label="Browser navigation" className="flex shrink-0 items-center gap-1 border-b px-2 py-1" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Back" disabled><BrowseIcon name="ArrowLeft" className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Forward" disabled><BrowseIcon name="ArrowRight" className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Refresh sessions" onClick={() => void sync()}><BrowseIcon name="RefreshCw" className="size-4" /></Button>
           <input
             aria-label="Website address"
-            className="min-w-0 flex-1 rounded-md bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="h-8 min-w-0 flex-1 rounded-md bg-transparent px-2 py-0 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
             placeholder="Enter URL"
             value={address}
             onChange={(event) => setAddress(event.target.value)}
@@ -552,7 +552,7 @@ function LiveBrowser({
             spellCheck={false}
             required
           />
-          <Button type="submit" variant="ghost" size="icon" aria-label={opening ? "Opening" : "Go"} disabled={opening || !address.trim()}><BrowseIcon name="ArrowRight" className="size-4" /></Button>
+          <Button type="submit" variant="ghost" size="icon-sm" aria-label={opening ? "Opening" : "Go"} disabled={opening || !address.trim()}><BrowseIcon name="ArrowRight" className="size-4" /></Button>
         </form>
         <div className="min-h-0 flex-1 overflow-auto flex flex-col">
           <div className="m-auto w-full max-w-3xl px-6 py-12">
