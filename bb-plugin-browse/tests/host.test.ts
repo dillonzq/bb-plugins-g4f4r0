@@ -152,6 +152,12 @@ it("streams native frames and accepts viewer input without extending the desktop
     expect(mock.send).toHaveBeenCalledWith("Input.insertText", {
       text: "hello",
     });
+    const reload = await h.experimental_call("input", { id: "ab-native-view", input: { kind: "maintenance", action: "hard-reload" } });
+    expect(reload.status).toBe("succeeded");
+    expect(mock.send).toHaveBeenCalledWith("Page.reload", { ignoreCache: true });
+    const clear = await h.experimental_call("input", { id: "ab-native-view", input: { kind: "maintenance", action: "clear-cookies" } });
+    expect(clear.status).toBe("failed");
+    expect(mock.send).not.toHaveBeenCalledWith("Network.clearBrowserCookies", {});
     await expect(
       h.experimental_call("credentialPrepare", {
         id: "ab-native-view",

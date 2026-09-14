@@ -780,6 +780,14 @@ export default experimental_defineHostEntry({
             case "key":
               await command(s, ["press", input.key], signal);
               break;
+            case "maintenance":
+              if (input.action === "hard-reload") {
+                await s.cdp!.send("Page.reload", { ignoreCache: true });
+              } else {
+                if (s.mode !== "managed") throw new Error("Clearing browser data is supported only in an isolated Browse profile.");
+                await s.cdp!.send(input.action === "clear-cookies" ? "Network.clearBrowserCookies" : "Network.clearBrowserCache", {});
+              }
+              break;
             case "history":
               await command(s, [input.action], signal);
               break;
