@@ -19,6 +19,22 @@ button[aria-label="New thread in this environment"] {
   display: none;
 }
 
+/* Sidebar command shortcuts share the Search threads right-edge alignment. */
+[data-sidebar="sidebar"] :is(a, button):has(kbd) {
+  padding-inline-end: 0;
+}
+[data-sidebar="sidebar"] :is(a, button):has(kbd) kbd {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+  min-height: 18px;
+  height: 18px;
+  padding-inline: 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 14px;
+}
+
 /* Sidebar state artwork. BB retains its labels, state priority and hover controls.
    Collapsed section headers copy the same glyphs; keep their native absolute slot. */
 :is([data-sidebar="sidebar"] [data-sidebar-thread-trailing-indicator], [data-testid="command-palette"] [role="option"] > span.inline-flex, [data-root-compose-mobile-recents] a > span.size-6):has(:is([aria-label="Thread working"],[aria-label="Thread working with unsubmitted draft"],[aria-label="Workflow running"],[aria-label="Background agent running"],[aria-label="Background command running"],[aria-label="Plan mode active"],[aria-label="Goal active"])),
