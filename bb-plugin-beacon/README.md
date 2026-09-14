@@ -194,7 +194,6 @@ Loaded code and database handles still have a baseline memory cost. Stopping tim
 | [lib/alert-receiver.ts](lib/alert-receiver.ts) | Notice validation, per-metric cursors, and reconnect deduplication. |
 | [lib/alert-copy.ts](lib/alert-copy.ts) | Production and test notification wording. |
 | [components/pressure-notifications.tsx](components/pressure-notifications.tsx) | Global realtime listener, native toasts, and Status navigation. |
-| [skills/beacon/SKILL.md](skills/beacon/SKILL.md) | Instructions and command reference exposed to agents. |
 
 ## Extend Beacon
 
@@ -244,7 +243,7 @@ New log fields must fit the 1 KiB payload limit. Keep CLI exports below `PLUGIN_
 
 Declare settings through `bb.settings.define`, provide defaults, and validate freeform values. Handle changes in the existing `onChange` callback so users do not need a reload. Background work must stop on disable and disposal.
 
-For a CLI command, update its parser, usage text, registered command list, tests, and `skills/beacon/SKILL.md`. Reject invalid arguments before collecting data or sending a notification. Keep command output bounded.
+For a CLI command, update its parser, usage text, registered command list, and tests. Reject invalid arguments before collecting data or sending a notification. Keep command output bounded.
 
 ## Develop and verify
 

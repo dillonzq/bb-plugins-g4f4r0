@@ -14,7 +14,7 @@ CPU, memory, and disk usage raise a warning at 85% and become critical at 95%. F
 
 ## Terminal and agent friendly
 
-Use `bb beacon snapshot` for a concise readout or add `--json` for the full structured snapshot and recent history. `bb beacon health` returns only the health assessment. A bundled skill teaches agents when and how to use both commands.
+Use `bb beacon snapshot` for a concise readout or add `--json` for the full structured snapshot and recent history. `bb beacon health` returns only the health assessment.
 
 ## Private and read-only
 
