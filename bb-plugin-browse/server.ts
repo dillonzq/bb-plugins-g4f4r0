@@ -897,6 +897,14 @@ export default async function plugin(bb: BbPluginApi) {
           (nativeError ? ` Desktop reveal failed: ${nativeError}` : ""),
       };
     },
+    forget: async ({ id }) => {
+      const s = get(id);
+      if (s.status !== "released") throw new Error("Close the session before removing it from history.");
+      await bb.storage.kv.delete(`session:${id}`);
+      sessions.delete(id);
+      changed();
+      return { ok: true };
+    },
     close: async ({ id }) => {
       const s = get(id);
       await release(s);
@@ -932,6 +940,7 @@ export default async function plugin(bb: BbPluginApi) {
       const s = get(id.parse(c.req.query("id")));
       return c.json({
         id: s.id,
+        url: s.url,
         mode: s.mode,
         hostId: s.hostId,
         hostLabel: s.hostLabel,

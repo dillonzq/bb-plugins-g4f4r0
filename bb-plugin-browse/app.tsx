@@ -576,9 +576,8 @@ function LiveBrowser({
           </div>
         </form>
         <div className="min-h-0 flex-1 overflow-auto flex flex-col">
-          {opening ? <div role="status" aria-label="Loading page" className="m-auto flex flex-col items-center gap-3 p-6 text-muted-foreground">
-            <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            <span className="text-xs">Loading page…</span>
+          {opening ? <div role="status" aria-label="Loading page" className="m-auto w-full max-w-7xl p-3">
+            <div aria-hidden="true" className="aspect-[8/5] w-full rounded-md border bg-muted motion-safe:animate-pulse" />
           </div> : <div className="m-auto w-full max-w-3xl px-6 py-12">
             {error && <p role="alert" className="mb-4 text-sm">{error}</p>}
             {!sessionsLoaded && <BrowserListSkeleton label="Loading browser sessions" />}

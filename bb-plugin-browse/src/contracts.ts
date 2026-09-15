@@ -300,6 +300,7 @@ export const rpcContract = defineRpcContract({
   },
   "open-address": { input: z.object({ threadId: id, url: z.string(), paramsJson: z.string(), sessionId: id.optional() }), output: z.object({ session }) },
   start: { input: startInput, output: z.object({ session, job }) },
+  forget: { input: z.object({ id }), output: z.object({ ok: z.boolean() }) },
   reconnect: { input: z.object({ id }), output: z.object({ session, job }) },
   probe: { input: machineInput, output: health.extend({ hostId: id }) },
   setup: {

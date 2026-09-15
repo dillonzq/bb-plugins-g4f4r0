@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';import {JSDOM} from 'jsdom';import {viewerHtml} from '../src/viewer';
 it('paints the freshest decoded frame and closes every replaced bitmap',async()=>{
- const dom=new JSDOM('<canvas id="screen"></canvas><span id="resolution"></span>',{runScripts:'outside-only',pretendToBeVisual:true});
+ const dom=new JSDOM('<div id="viewport-skeleton"></div><canvas id="screen"></canvas><span id="resolution"></span>',{runScripts:'outside-only',pretendToBeVisual:true});
  const callbacks:Array<()=>void>=[],draw=vi.fn(),bitmaps=[1,2,3].map(n=>({width:1280,height:800,n,close:vi.fn()}));
  const acks=[vi.fn(),vi.fn(),vi.fn()];let finishFirst:(v:unknown)=>void=()=>{};
  const first=new Promise(r=>finishFirst=r);
@@ -17,7 +17,8 @@ it('paints the freshest decoded frame and closes every replaced bitmap',async()=
   expect(acks[1]).toHaveBeenCalledOnce();
   finishFirst(bitmaps[0]);await new Promise(r=>setTimeout(r,0));
   expect(bitmaps[0].close).toHaveBeenCalledOnce();expect(callbacks).toHaveLength(1);
-  callbacks[0]();expect(draw).toHaveBeenCalledWith(bitmaps[2],0,0,1280,800);
+  expect((dom.window.document.querySelector("#viewport-skeleton") as HTMLElement).hidden).toBe(false);
+  callbacks[0]();expect((dom.window.document.querySelector("#viewport-skeleton") as HTMLElement).hidden).toBe(true);expect(draw).toHaveBeenCalledWith(bitmaps[2],0,0,1280,800);
   expect(bitmaps[2].close).toHaveBeenCalledOnce();for(const ack of acks)expect(ack).toHaveBeenCalledOnce();
   expect((dom.window as any).metrics).toMatchObject({displayed:1,dropped:2});
  }finally{dom.window.close();}
