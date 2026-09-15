@@ -24,6 +24,10 @@ if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600)
 const binaryRelay=process.argv.includes("--binary-relay");
 const ackDelay=Number(process.argv.find(a=>a.startsWith("--ack-delay="))?.split("=")[1]||0);
 if(!Number.isFinite(ackDelay)||ackDelay<0||ackDelay>1000)throw Error("Invalid ACK delay");
+const videoKbps = Number(process.argv.find(a => a.startsWith("--video-kbps="))?.split("=")[1] || 0);
+if (!Number.isFinite(videoKbps) || videoKbps < 0 || (videoKbps > 0 && videoKbps < 100)) throw Error("Invalid video bandwidth");
+const bitrateChanges: number[] = [];
+const fixedBitrate = process.argv.includes("--fixed-bitrate");
 const shaped = process.argv.includes("--shaped");
 if (shaped && mode !== "jpeg")
   throw Error("Traffic shaping is implemented only for the JPEG reference");
@@ -74,7 +78,7 @@ wss.on("connection", (ws,req) => {
       let stopped=false,upstream:Awaited<ReturnType<typeof connectVideoRelay>>|undefined;
       ws.on('close',()=>{stopped=true;upstream?.close();void customStream?.stop();});
       ws.on('message',raw=>setTimeout(()=>{if(upstream?.readyState===1)upstream.send(String(raw));},ackDelay));
-      void(async()=>{customStream=await SelkiesStream.start(root,display.env);if(customStream.processId)extraPids.add(customStream.processId);const endpoint=await videoRelay(customStream,async()=>({url:'http://127.0.0.1:'+port+'/source',loading:false}));if(stopped){await customStream.stop();return;}upstream=await connectVideoRelay(endpoint);upstream.on('message',(data,binary)=>{if(ws.readyState===1)ws.send(data,{binary});});upstream.on('close',()=>ws.close());upstream.on('error',()=>ws.close());if(stopped)upstream.close();else upstream.send('start');})().catch(e=>{console.error(e);ws.close();});return;
+      void(async()=>{customStream=await SelkiesStream.start(root,display.env);if(customStream.processId)extraPids.add(customStream.processId);const setBitrate=customStream.setBitrate.bind(customStream);customStream.setBitrate=(kbps)=>{bitrateChanges.push(kbps);if(!fixedBitrate)setBitrate(kbps);};const endpoint=await videoRelay(customStream,async()=>({url:'http://127.0.0.1:'+port+'/source',loading:false}));if(stopped){await customStream.stop();return;}upstream=await connectVideoRelay(endpoint);let delivery=Promise.resolve();upstream.on('message',(data,binary)=>{delivery=delivery.then(async()=>{if(stopped)return;if(binary&&videoKbps)await pause((data as Buffer).byteLength*8/videoKbps);if(ws.readyState===1)ws.send(data,{binary});});});upstream.on('close',()=>ws.close());upstream.on('error',()=>ws.close());if(stopped)upstream.close();else upstream.send('start');})().catch(e=>{console.error(e);ws.close();});return;
     }
     let done=false,outstanding=0;
     ws.on("close",()=>{done=true;void customStream?.stop();});ws.on("message",()=>setTimeout(()=>outstanding--,ackDelay));
@@ -560,6 +564,7 @@ try {
       explicitTeardown: process.argv.includes("--teardown"),
       seconds,
       scroll: process.argv.includes("--scroll"),
+      videoKbps, fixedBitrate, bitrateChanges,
       frameGapsMs: (()=>{const gaps=after.paintGaps.slice(before.paintGaps.length).sort((a:number,b:number)=>a-b);return {samples:gaps.length,p95:gaps[Math.floor(gaps.length*.95)],max:gaps.at(-1),over250:gaps.filter((n:number)=>n>250).length};})(),
       sourceFps: ((sourceAfter - sourceBefore) * 1000) / (after.at - before.at),
       cpuCores:

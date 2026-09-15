@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import WebSocket, { WebSocketServer } from "ws";
 import type { SelkiesStream } from "./selkies";
+import { VideoPressure } from "./video-pressure";
 /** Private host-to-server transport, never exposed directly to browser clients. */
 export async function videoRelay(
   stream: SelkiesStream,
@@ -42,6 +43,7 @@ export async function videoRelay(
   sockets.on("connection", (ws) => {
     let begin: () => void = () => {};
     let begun = false;
+    const pressure = new VideoPressure();
     const pending: number[] = [];
     const sentAt:number[]=[];let ackMs=0;
     let bytes = 0,
@@ -60,7 +62,12 @@ export async function videoRelay(
         ws.close(1008, "Invalid acknowledgement");
         return;
       }
-      bytes -= pending.shift()!;ackMs=Math.max(ackMs,performance.now()-(sentAt.shift()??performance.now()));
+      bytes -= pending.shift()!;
+      const now = performance.now();
+      const roundTripMs = now - (sentAt.shift() ?? now);
+      ackMs = Math.max(ackMs, roundTripMs);
+      const bitrate = pressure.sample(roundTripMs, now);
+      if (bitrate !== undefined) stream.setBitrate(bitrate);
       lastAck = Date.now();
       wake?.();
     });

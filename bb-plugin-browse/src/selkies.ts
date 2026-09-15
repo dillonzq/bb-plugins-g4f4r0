@@ -23,6 +23,11 @@ export class SelkiesStream {
   private packetGapMs=0;
   private queueMs=0;
   timing(){const result={queueMs:this.queueMs,packetGapMs:this.packetGapMs};this.queueMs=0;this.packetGapMs=0;return result;}
+  /** Live bitrate update in the pinned Selkies runtime, in kbps. */
+  setBitrate(kbps: number) {
+    if (!this.closed && Number.isInteger(kbps) && kbps >= 2000 && kbps <= 4000)
+      this.socket?.send(`vb,${kbps}`);
+  }
   private awaitingKeyframe = false;
   private captureFps = 30;
   private overloadAt = 0;

@@ -62,3 +62,11 @@ it('backs off repeated overload with cooldown and a stable minimum',async()=>{
   await vi.advanceTimersByTimeAsync(5000);stream['noteOverload']();stream['noteOverload']();expect(send).toHaveBeenCalledTimes(3);
  }finally{await stream.stop();vi.useRealTimers();}
 });
+it('only sends bounded live bitrate updates while the encoder is open', async () => {
+ const stream = new SelkiesStream(); const send = vi.fn();
+ stream['socket'] = {send, terminate: vi.fn()} as unknown as WebSocket;
+ for(const invalid of [0,1999,4001,NaN,2500.5]) stream.setBitrate(invalid);
+ expect(send).not.toHaveBeenCalled();
+ stream.setBitrate(3000); expect(send).toHaveBeenCalledWith('vb,3000');
+ await stream.stop(); stream.setBitrate(2000); expect(send).toHaveBeenCalledTimes(1);
+});
