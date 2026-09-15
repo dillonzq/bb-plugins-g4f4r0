@@ -19,6 +19,10 @@ export class SelkiesStream {
   private packets: Buffer[] = [];
   private bytes = 0;
   private awaitingKeyframe = false;
+  private captureFps = 30;
+  private overloadAt = 0;
+  private lastRateChange = 0;
+  private overloadCount = 0;
   private keyframeRequestedAt = 0;
   private keyframeRetry?: ReturnType<typeof setTimeout>;
   private error?: Error;
@@ -172,12 +176,24 @@ export class SelkiesStream {
     this.keyframeRetry = setTimeout(() => this.requestKeyframe(), remaining || 300);
     this.keyframeRetry.unref();
   }
+  private noteOverload() {
+    const now = Date.now();
+    this.overloadCount = now - this.overloadAt < 5000 ? this.overloadCount + 1 : 1;
+    this.overloadAt = now;
+    if (this.overloadCount < 2 || now - this.lastRateChange < 5000 || this.captureFps <= 15) return;
+    this.captureFps = this.captureFps === 30 ? 24 : this.captureFps === 24 ? 20 : 15;
+    this.overloadCount = 0;
+    this.lastRateChange = now;
+    // Pinned Selkies live-update opcode; does not recreate Chrome or its encoder.
+    this.socket?.send(`_arg_fps,${this.captureFps}`);
+  }
   private enqueue(packet: Buffer) {
     // The pinned full-frame H.264 protocol has a ten-byte header.
     if (packet.length < 11 || packet[0] !== 4) return;
     // Never replay a second of stale scrolling. Delta frames depend on
     // earlier frames, so recover at a fresh keyframe after dropping backlog.
     if (this.packets.length >= 8 || this.bytes + packet.length > 1024 * 1024) {
+      this.noteOverload();
       for (const stale of this.packets)
         this.socket?.send(`CLIENT_FRAME_ACK ${stale.readUInt16BE(2)} 0`);
       this.packets = [];

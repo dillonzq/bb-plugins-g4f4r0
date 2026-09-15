@@ -441,7 +441,13 @@ try {
       `window.snapshot=()=>({...window.browseMetrics||window.bench,heap:performance.memory?.usedJSHeapSize,at:performance.now()});window.pixel=()=>{const c=[...document.querySelectorAll('video')].find(v=>v.videoWidth>=960)||[...document.querySelectorAll('canvas')].filter(c=>c.width>=960&&c.height>=600).at(-1);if(!c)return[];const copy=window.pixelCanvas||(window.pixelCanvas=document.createElement('canvas'));if(copy.width!==1||copy.height!==1){copy.width=1;copy.height=1;}const ctx=copy.getContext('2d',{willReadFrequently:true});ctx.drawImage(c,8*(c.videoWidth||c.width)/1280,8*(c.videoHeight||c.height)/800,1,1,0,0,1,1);return [...ctx.getImageData(0,0,1,1).data]};`,
     );
   }
+  await viewer.evaluate(`window.paintGaps=[];window.lastPaintAt=0;const originalDraw=CanvasRenderingContext2D.prototype.drawImage;CanvasRenderingContext2D.prototype.drawImage=function(...args){const value=originalDraw.apply(this,args);if(this.canvas.width>=960&&this.canvas.height>=600){const now=performance.now();if(window.lastPaintAt&&window.paintGaps.length<20000)window.paintGaps.push(now-window.lastPaintAt);window.lastPaintAt=now;}return value;};const oldSnapshot=window.snapshot;window.snapshot=()=>({...oldSnapshot(),paintGaps:[...window.paintGaps]});`);
   await pause(1500);
+  if (process.argv.includes("--scroll")) {
+    if (mode !== "custom") throw Error("Scroll workload requires custom viewer");
+    await source.evaluate(`document.querySelector('canvas').width=20;document.querySelector('canvas').height=20;document.querySelector('canvas').style.cssText='position:fixed;top:0;left:0;width:20px;height:20px;z-index:2';document.body.insertAdjacentHTML('beforeend',Array.from({length:150},(_,i)=>'<section style="height:100px;padding:20px;background:'+(i%2?'#eee':'#fff')+'">Scrolling row '+i+' — text, links, and page content</section>').join(''));`);
+    await viewer.evaluate(`window.scrollTick=0;window.scrollTimer=setInterval(()=>direct({kind:'wheel',x:400,y:400,deltaX:0,deltaY:Math.floor(window.scrollTick++/60)%2?-20:20,modifiers:0}),33);`);
+  }
   const sourceBefore = await source.evaluate("sourceFrames");
   const before = await viewer.evaluate("snapshot()");
   const memBefore = await memory();
@@ -453,6 +459,7 @@ try {
   const after = await viewer.evaluate("snapshot()"),
     sourceAfter = await source.evaluate("sourceFrames"),
     memAfter = await memory();
+  if (process.argv.includes("--scroll")) await viewer.evaluate("clearInterval(window.scrollTimer)");
   await source.evaluate("window.idle=true");
   await pause(3000);
   const idleBefore = await memory();
@@ -552,6 +559,8 @@ try {
       backForwardCacheDisabled: process.argv.includes("--no-bfcache"),
       explicitTeardown: process.argv.includes("--teardown"),
       seconds,
+      scroll: process.argv.includes("--scroll"),
+      frameGapsMs: (()=>{const gaps=after.paintGaps.slice(before.paintGaps.length).sort((a:number,b:number)=>a-b);return {samples:gaps.length,p95:gaps[Math.floor(gaps.length*.95)],max:gaps.at(-1),over250:gaps.filter((n:number)=>n>250).length};})(),
       sourceFps: ((sourceAfter - sourceBefore) * 1000) / (after.at - before.at),
       cpuCores:
         (memAfter.cpuTicks - memBefore.cpuTicks) /

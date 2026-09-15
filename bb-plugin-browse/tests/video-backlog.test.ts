@@ -51,3 +51,14 @@ it('schedules a throttled second recovery even if no more frames arrive',async()
   expect(send.mock.calls.filter(c=>c[0]==='REQUEST_KEYFRAME')).toHaveLength(2);
  }finally{await stream.stop();vi.useRealTimers();}
 });
+it('backs off repeated overload with cooldown and a stable minimum',async()=>{
+ vi.useFakeTimers();const stream=new SelkiesStream();const send=vi.fn();
+ stream['socket']={send,terminate:vi.fn()} as unknown as WebSocket;
+ try {
+  stream['noteOverload']();expect(send).not.toHaveBeenCalled();
+  stream['noteOverload']();expect(send).toHaveBeenLastCalledWith('_arg_fps,24');
+  for(let i=0;i<10;i++)stream['noteOverload']();expect(send).toHaveBeenCalledTimes(1);
+  for(const expected of [20,15]){await vi.advanceTimersByTimeAsync(5000);stream['noteOverload']();stream['noteOverload']();expect(send).toHaveBeenLastCalledWith('_arg_fps,'+expected);}
+  await vi.advanceTimersByTimeAsync(5000);stream['noteOverload']();stream['noteOverload']();expect(send).toHaveBeenCalledTimes(3);
+ }finally{await stream.stop();vi.useRealTimers();}
+});
