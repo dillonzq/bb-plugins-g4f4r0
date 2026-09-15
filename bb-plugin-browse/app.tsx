@@ -518,6 +518,7 @@ function LiveBrowser({
   });
   const [address, setAddress] = useState("");
   const [opening, setOpening] = useState(false);
+  useEffect(() => { setOpening(false); }, [id]);
   const launching = useRef(false);
   async function openAddress(raw = address) {
     if (launching.current) return;
@@ -529,10 +530,10 @@ function LiveBrowser({
       const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`);
       if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
         throw new Error("Enter an http or https address without login details.");
+      setAddress(url.href);
       await rpc.call("open-address", { threadId, url: url.href, paramsJson: JSON.stringify(params ?? {}) });
-      await sync();
-    } catch (e) { setError(String(e)); }
-    finally { launching.current = false; setOpening(false); }
+    } catch (e) { setError(String(e)); setOpening(false); }
+    finally { launching.current = false; }
   }
   const [local, setLocal] = useState<{ servers: Array<{ port: number; name: string; url: string }>; error: string | null }>({ servers: [], error: null });
   useEffect(() => {
@@ -575,7 +576,10 @@ function LiveBrowser({
           </div>
         </form>
         <div className="min-h-0 flex-1 overflow-auto flex flex-col">
-          <div className="m-auto w-full max-w-3xl px-6 py-12">
+          {opening ? <div role="status" aria-label="Loading page" className="m-auto flex flex-col items-center gap-3 p-6 text-muted-foreground">
+            <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <span className="text-xs">Loading page…</span>
+          </div> : <div className="m-auto w-full max-w-3xl px-6 py-12">
             {error && <p role="alert" className="mb-4 text-sm">{error}</p>}
             {!sessionsLoaded && <BrowserListSkeleton label="Loading browser sessions" />}
             {[{ title: "Recently visited", items: recent }, { title: "Open sessions", items: active }].filter(group => group.items.length > 0).map(group => (
@@ -588,12 +592,12 @@ function LiveBrowser({
                     if (launching.current) return;
                     launching.current = true;
                     setOpening(true);
+                    setAddress(s.url);
                     setError("");
                     try {
                       await rpc.call("open-address", { threadId, url: s.url, sessionId: s.id, paramsJson: JSON.stringify(params ?? {}) });
-                      await sync();
-                    } catch (e) { setError(String(e)); }
-                    finally { launching.current = false; setOpening(false); }
+                    } catch (e) { setError(String(e)); setOpening(false); }
+                    finally { launching.current = false; }
                   }}>
                     <BrowseIcon name="Globe" className="size-4 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{browserTitle(s)}</span><span className="block truncate text-xs text-muted-foreground">{s.url}</span></span>
@@ -613,8 +617,7 @@ function LiveBrowser({
                 </button>
               </li>)}</ul>
             </section>}
-            {local.error && <p role="status" className="text-xs text-muted-foreground">{local.error}</p>}
-          </div>
+          </div>}
         </div>
       </div>
     );

@@ -414,3 +414,20 @@ it("separates this thread's active sessions and recent pages from local web serv
     expect(within(slot.getByRole("region", { name: "Local servers" })).getByText("localhost:5173")).toBeTruthy();
   } finally { slot.lifecycle.unmount(); }
 });
+
+it("shows page loading immediately while navigation is still pending", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  let finish!: (value: any) => void;
+  const slot = renderSlot(app.threadPanelActions[0]!, { threadId: "thread_one", params: {} }, {
+    rpc: { list: () => [], "local-servers": () => ({ servers: [], error: "Local server discovery is unavailable." }), "open-address": () => new Promise(resolve => { finish = resolve; }) },
+  });
+  try {
+    const input = slot.getByRole("textbox", { name: "Website address" });
+    fireEvent.change(input, { target: { value: "example.com" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(slot.getByRole("status", { name: "Loading page" })).toBeTruthy();
+    expect(slot.queryByText("Local server discovery is unavailable.")).toBeNull();
+    await waitFor(() => expect(finish).toBeTruthy());
+    finish({ session: { id: "loading" } });
+  } finally { slot.lifecycle.unmount(); }
+});
