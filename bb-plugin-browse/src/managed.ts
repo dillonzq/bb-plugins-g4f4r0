@@ -388,8 +388,8 @@ export async function launchManaged(
   video = false,
 ): Promise<ManagedBrowser> {
   signal.throwIfAborted();
-  if (video && process.platform !== "linux")
-    throw Error("The video prototype currently requires a Linux session host.");
+  // Unavailable video hosts keep the ordinary browser and JPEG viewer.
+  video = video && process.platform === "linux" && existsSync(join(root, "selkies-runtime/opt/selkies/lib/python3.13/site-packages/selkies"));
   if (install)
     throw new Error(
       "Browser installation is in progress. Wait for its setup job.",

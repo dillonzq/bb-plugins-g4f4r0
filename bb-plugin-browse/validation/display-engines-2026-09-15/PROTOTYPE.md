@@ -1,5 +1,7 @@
 # Selkies integration experiment — 2026-09-15
 
+**Rollout update:** The user subsequently requested full installation. Video is now the preferred transport for new managed sessions and reconnects, with automatic JPEG fallback. The findings below describe the earlier experiment and remain unresolved limitations; the rollout does not imply improved measurements.
+
 ## Outcome
 
 The opt-in prototype works with Browse's existing toolbar and CDP input. It does **not** meet the smoothness/memory acceptance criteria. Keep adaptive JPEG as the default. The integration was tested locally, not through the user's authenticated remote BB client. Production was not reloaded: another thread has an active browser session, and the prototype results do not justify interrupting it.

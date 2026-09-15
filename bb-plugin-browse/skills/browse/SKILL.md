@@ -119,3 +119,5 @@ Streaming, secure credentials, exact gestures, canvas/link export and printing r
 Browsers belonging to an actively working agent thread, active jobs, recordings, and pending secure login prompts are protected from idle shutdown. Profiles and artifacts survive expiry; unsaved page state does not.
 
 Closing a persisted Browse session tab stops its managed Chrome within a few seconds. Switching tabs or reloading BB does not remove the persisted tab and does not close the session. The blank launcher is not a session.
+
+Managed starts and reconnects prefer Selkies H.264 video on Linux hosts with the private encoder runtime. The browser uses a dedicated display; the encoder starts only while viewed and stops on disconnect. Other hosts and failed video connections use JPEG automatically. Video currently supports one viewer per session, fixed 1280 × 800, and no audio. This is H.264 over BB’s WebSocket relay, not WebRTC, and does not guarantee 60 FPS.

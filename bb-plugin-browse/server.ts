@@ -162,7 +162,7 @@ export default async function plugin(bb: BbPluginApi) {
     url: string,
     profileId: string | undefined,
     hostId: string,
-    video = false,
+    video = true,
   ) {
     const sid = `ab-${randomUUID().slice(0, 12)}`;
     const machines = await bb.sdk.hosts.list();
@@ -253,7 +253,7 @@ export default async function plugin(bb: BbPluginApi) {
     profileId?: string,
     reuse = false,
     selectedHostId?: string,
-    video = false,
+    video = true,
   ) {
     if (disposing) throw new Error("Browse is shutting down.");
     const previous = startLocks.get(threadId) ?? Promise.resolve();
@@ -799,7 +799,7 @@ export default async function plugin(bb: BbPluginApi) {
           s.profileId ?? s.id,
           false,
           s.hostId,
-          s.video,
+          true,
         );
       }
       const { instances } =

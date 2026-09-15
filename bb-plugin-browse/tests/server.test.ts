@@ -791,8 +791,18 @@ it('keeps video opt-in and binds its display and stream to the selected host',as
 });
 it('rejects video streaming from an ordinary shared-display session',async()=>{
  const f=await fixture();try{
-  const result:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+  const result:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com',video:false});
   await expect(f.harness.behavior.experimental_openWebSocket(`/video?id=${result.session.id}`)).rejects.toThrow('video prototype');
   expect(f.calls.some(c=>c.method==='videoStart')).toBe(false);
  }finally{await f.harness.lifecycle.dispose();}
 });
+
+ it('defaults ordinary starts and reconnects to video',async()=>{
+ const f=await fixture();try{
+ const opened:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+ expect(opened.session.video).toBe(true);
+ const legacy:any=await f.harness.behavior.callRpc('start',{threadId:'thread_two',url:'https://example.com',video:false});
+ const resumed:any=await f.harness.behavior.callRpc('reconnect',{id:legacy.session.id});
+ expect(resumed.session.video).toBe(true);
+ }finally{await f.harness.lifecycle.dispose();}
+ });

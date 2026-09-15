@@ -115,3 +115,7 @@ The disposable installed test session was released and removed from Browse histo
 ### Opt-in video integration trial (2026-09-15)
 
 [Prototype results and limitations](validation/display-engines-2026-09-15/PROTOTYPE.md): private Selkies encoder, isolated per-session displays, existing Browse UI/input, bounded authenticated relay, and explicit teardown. Real Stagehand/display-isolation tests passed. The custom receiver delivered roughly 31–35 FPS and retained about 766–773 MiB after disconnect on this server; it did not meet the acceptance criteria. No production switch or remote-client performance claim. The default remains adaptive JPEG.
+
+### Video default rollout (2026-09-15)
+
+At the user’s explicit request, new managed sessions (including the sidebar launcher) and reconnects now prefer Selkies video. Hosts without the private Linux runtime retain ordinary Chrome/JPEG; decoder or stream failures also fall back automatically. This changes rollout policy, not the benchmark findings above. Native sessions are unchanged.
