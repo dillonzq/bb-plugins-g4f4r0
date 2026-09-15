@@ -69,15 +69,16 @@ const http = createServer((req, res) => {
   if(mode==="custom") {
     const url=new URL(req.url!,"http://127.0.0.1");
     if(remoteTest && url.pathname==="/"){res.writeHead(302,{location:"/viewer?id=bench&video=1"});res.end();return;}
+    if(url.pathname==="/rtc-diagnostics"){let body="";req.on("data",b=>{body+=b;if(body.length>4096)req.destroy();});req.on("end",()=>{try{const data=JSON.parse(body);if(remoteTest)console.error(JSON.stringify({rtc:data}));}catch{}res.end("{}");});return;}
     if(remoteTest && url.pathname==="/input"){
       let body="";req.on("data",b=>{body+=b;if(body.length>65536)req.destroy();});req.on("end",()=>void(async()=>{try{const {input}=JSON.parse(body);if(input?.kind!=="navigate")throw Error("Unsupported test action");const target=new URL(input.url);if(!["http:","https:"].includes(target.protocol))throw Error("Invalid URL");remoteUrl=target.href;await source.send("Page.navigate",{url:remoteUrl});res.setHeader("content-type","application/json");res.end("{}");}catch{res.writeHead(400);res.end("{}");}})());return;
     }
-    if(url.pathname==="/viewer"){res.end(webrtc?viewerHtml.replace(videoClient,webrtcReceiver(port)):viewerHtml);return;}
+    if(url.pathname==="/viewer"){res.end(webrtc?viewerHtml.replace(videoClient,webrtcReceiver(remoteTest)):viewerHtml);return;}
     if(url.pathname!=="/source"){res.setHeader("content-type","application/json");res.end(JSON.stringify(url.pathname==="/viewer-info"?{hostLabel:remoteTest?"server · WebRTC test":"Fixture",url:remoteTest?remoteUrl:"http://127.0.0.1:"+port+"/source"}:{}));return;}
   }
   res.end(req.url === "/source" ? fixture : receiver);
 });
-await new Promise<void>((r) => http.listen(0, "127.0.0.1", r));
+await new Promise<void>((r) => http.listen(remoteTest?Number(process.env.BROWSE_TEST_PORT||0):0, "127.0.0.1", r));
 const port = (http.address() as any).port;
 const wss = new WebSocketServer({ server: http });
 let source: Cdp, viewer: Cdp;
@@ -334,6 +335,7 @@ async function startEngine() {
       "cbr",
     ];
     if(webrtc)args.push("--mode","webrtc");
+    if(remoteTest)args.push("--webrtc-udp-mux-port","59010","--webrtc-tcp-mux-port","59010","--webrtc-ice-lite","true");
     env.PYTHONPATH = join(root,"selkies-runtime/opt/selkies/lib/python3.13/site-packages");
   } else {
     // Replace this test's private Xvfb only; no installed Browse displays are touched.

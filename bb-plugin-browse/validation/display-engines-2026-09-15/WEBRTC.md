@@ -41,12 +41,31 @@ another remote Browse viewer. This avoids streaming a stream.
 The test uses WebRTC video, existing direct WebSocket input, no audio, no file
 transfer, and no saved user profile. It exits and cleans up after 30 minutes
 or SIGINT/SIGTERM. The updated harness also removes its Connect share on exit.
-The first manually started instance predates that automatic unexpose change;
-its share must be removed with `bb connect unexpose 46115` after testing.
+Use `BROWSE_TEST_PORT=46115` to retain the same test URL when restarting.
 
-Signaling is proxied through the shared HTTP server. Video uses direct ICE/UDP;
-there is no TURN fallback in this prototype. A restrictive client network can
-therefore fail even when the viewer URL loads. Do not expose this unauthenticated
+Signaling is proxied through the shared HTTP server. Video prefers direct ICE/UDP, with passive ICE-TCP fallback on port 59010.
+The remote receiver uses Google STUN for NAT discovery; the public server
+uses ICE-lite. There is no TURN relay in this prototype. Networks that block
+both UDP and direct TCP to that port can still fail even when the viewer loads. Do not expose this unauthenticated
 loopback fixture through a public tunnel without access control. Full plugin
 integration still needs authenticated per-session signaling, reconnect handling,
 measured remote results, and a fallback for networks that block direct UDP.
+
+## Remote connection repair
+
+The first remote attempt reached signaling but never established ICE. Its
+client supplied only mDNS host candidates, which the server could not resolve;
+that does not alone prove the cause, because client-initiated checks to a public
+server can still work. There was no client STUN configuration or TCP fallback.
+
+Added client STUN, server ICE-lite, fixed UDP/TCP mux ports, bounded diagnostic
+reports (connection state, decoded frames, bytes, RTT, protocol; no SDP), and a
+25-second visible failure with Retry. The same URL was restarted. The isolated
+live smoke check verified actual frames and the visible failure state. Remote
+client success is still awaiting a retry; no claim that its network is fixed.
+
+`npx tsx tests/webrtc-live.mts HOST_DATA http://127.0.0.1:46115/viewer?id=bench`
+
+Run this only before handing the single-controller prototype to the user: a
+second receiver replaces the current controller. Production sessions are not
+affected.
