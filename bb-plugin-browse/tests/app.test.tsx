@@ -408,8 +408,8 @@ it("separates this thread's active sessions and recent pages from local web serv
   });
   try {
     await slot.findByText("active.example");
-    expect(within(slot.getByRole("region", { name: "Sessions" })).queryByText("recent.example")).toBeNull();
-    expect(within(slot.getByRole("region", { name: "Recent" })).getAllByRole("button")).toHaveLength(1);
+    expect(within(slot.getByRole("region", { name: "Open sessions" })).queryByText("recent.example")).toBeNull();
+    expect(within(slot.getByRole("region", { name: "Recently visited" })).getAllByRole("button")).toHaveLength(1);
     expect(slot.queryByText("other.example")).toBeNull();
     expect(within(slot.getByRole("region", { name: "Local servers" })).getByText("localhost:5173")).toBeTruthy();
   } finally { slot.lifecycle.unmount(); }

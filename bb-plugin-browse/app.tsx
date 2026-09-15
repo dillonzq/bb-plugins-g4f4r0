@@ -470,6 +470,16 @@ function BrowseIcon({ name, className }: { name: BrowserIconName; className?: st
   return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" data-icon-library="hugeicons" className={className}>{browserIcons[name].map(([tag, props]) => createElement(tag, props))}</svg>;
 }
 
+function BrowserListSkeleton({ label }: { label: string }) {
+  return <div role="status" aria-label={label} className="mb-6 space-y-1 motion-safe:animate-pulse">
+    <div className="mb-2 h-4 w-28 rounded bg-muted" />
+    {[0, 1].map(row => <div key={row} className="flex items-center gap-2 rounded-md border px-3 py-2" aria-hidden="true">
+      <div className="size-4 rounded bg-muted" />
+      <div className="flex-1 space-y-1"><div className="h-5 w-1/3 rounded bg-muted" /><div className="h-4 w-2/3 rounded bg-muted" /></div>
+    </div>)}
+  </div>;
+}
+
 function LiveBrowser({
   params,
   threadId,
@@ -480,6 +490,8 @@ function LiveBrowser({
   const rpc = useRpc<typeof rpcContract>();
   const nav = useBbNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [localLoaded, setLocalLoaded] = useState(false);
   const [error, setError] = useState("");
   const id =
     params &&
@@ -494,7 +506,7 @@ function LiveBrowser({
       setError("");
     } catch (e) {
       setError(String(e));
-    }
+    } finally { setSessionsLoaded(true); }
   }, [rpc, threadId]);
   useEffect(() => {
     void sync();
@@ -526,7 +538,7 @@ function LiveBrowser({
   useEffect(() => {
     if (id) return;
     let live = true;
-    const refresh = () => { void rpc.call("local-servers", { threadId }).then(value => { if (live) setLocal(value); }).catch(() => { if (live) setLocal({ servers: [], error: "Local server discovery is unavailable." }); }); };
+    const refresh = () => { void rpc.call("local-servers", { threadId }).then(value => { if (live) setLocal(value); }).catch(() => { if (live) setLocal({ servers: [], error: "Local server discovery is unavailable." }); }).finally(() => { if (live) setLocalLoaded(true); }); };
     refresh();
     const timer = setInterval(refresh, 15000);
     return () => { live = false; clearInterval(timer); };
@@ -565,14 +577,14 @@ function LiveBrowser({
         <div className="min-h-0 flex-1 overflow-auto flex flex-col">
           <div className="m-auto w-full max-w-3xl px-6 py-12">
             {error && <p role="alert" className="mb-4 text-sm">{error}</p>}
-            {[{ title: "Recent", items: recent }, { title: "Sessions", items: active }].map(group => (
-              <section key={group.title} className="mb-8" aria-label={group.title}>
-                <h2 className="mb-4 text-sm font-medium text-muted-foreground">{group.title}</h2>
-                {!group.items.length && <p className="text-sm text-muted-foreground">{group.title === "Recent" ? "No recent pages." : "No active sessions in this thread."}</p>}
-            <ul className="space-y-2">
+            {!sessionsLoaded && <BrowserListSkeleton label="Loading browser sessions" />}
+            {[{ title: "Recently visited", items: recent }, { title: "Open sessions", items: active }].filter(group => group.items.length > 0).map(group => (
+              <section key={group.title} className="mb-6" aria-label={group.title}>
+                <h2 className="mb-2 text-sm font-medium text-muted-foreground">{group.title}</h2>
+            <ul className="space-y-1">
               {group.items.map((s) => (
                 <li key={s.id}>
-                  <button type="button" disabled={opening} className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" onClick={async () => {
+                  <button type="button" disabled={opening} className="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" onClick={async () => {
                     if (launching.current) return;
                     launching.current = true;
                     setOpening(true);
@@ -583,26 +595,26 @@ function LiveBrowser({
                     } catch (e) { setError(String(e)); }
                     finally { launching.current = false; setOpening(false); }
                   }}>
-                    <BrowseIcon name="Globe" className="size-5 shrink-0 text-muted-foreground" />
+                    <BrowseIcon name="Globe" className="size-4 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{browserTitle(s)}</span><span className="block truncate text-xs text-muted-foreground">{s.url}</span></span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{group.title === "Sessions" ? s.status : ""}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{group.title === "Open sessions" ? s.status : ""}</span>
                   </button>
                 </li>
               ))}
             </ul>
               </section>
             ))}
-            <section aria-label="Local servers">
-              <h2 className="mb-4 text-sm font-medium text-muted-foreground">Local servers</h2>
-              {local.error && <p className="text-sm text-muted-foreground">{local.error}</p>}
-              {!local.error && !local.servers.length && <p className="text-sm text-muted-foreground">No web servers detected on this thread’s machine.</p>}
-              <ul className="space-y-2">{local.servers.map(server => <li key={server.port}>
-                <button type="button" disabled={opening} className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left hover:bg-accent" onClick={() => void openAddress(server.url)}>
-                  <BrowseIcon name="Terminal" className="size-5 text-muted-foreground" />
+            {!localLoaded && <BrowserListSkeleton label="Loading local servers" />}
+            {localLoaded && local.servers.length > 0 && <section aria-label="Local servers">
+              <h2 className="mb-2 text-sm font-medium text-muted-foreground">Local servers</h2>
+              <ul className="space-y-1">{local.servers.map(server => <li key={server.port}>
+                <button type="button" disabled={opening} className="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left hover:bg-accent" onClick={() => void openAddress(server.url)}>
+                  <BrowseIcon name="Terminal" className="size-4 shrink-0 text-muted-foreground" />
                   <span><span className="block text-sm font-medium">{server.name}</span><span className="block text-xs text-muted-foreground">localhost:{server.port}</span></span>
                 </button>
               </li>)}</ul>
-            </section>
+            </section>}
+            {local.error && <p role="status" className="text-xs text-muted-foreground">{local.error}</p>}
           </div>
         </div>
       </div>
