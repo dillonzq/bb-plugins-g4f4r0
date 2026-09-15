@@ -1,3 +1,4 @@
+import { StreamDemands } from "./src/adaptive-stream";
 import { DirectInput } from "./src/direct-input";
 import { localServers } from "./src/local-servers";
 import {
@@ -53,6 +54,7 @@ type LocalSession = {
   managed?: ManagedBrowser;
   mode?: "managed" | "native";
   framing?: boolean;
+  streamDemands?: StreamDemands;
   direct?: DirectInput;
   frameInfo?: {url:string;loading:boolean;at:number};
   castTimer?: ReturnType<typeof setTimeout>;
@@ -427,14 +429,17 @@ async function perform(
       if (op.action === "start") {
         if (s.recording) throw new Error("Recording is already active.");
         s.recordingPath = join(s.artifactRoot, `${Date.now()}-recording.webm`);
-        s.recorder = await Recorder.start(
-          s.cdp!,
-          s.recordingPath,
-          op.fps,
-          managedEnv(s.root),
-        );
-        j.output = "Recording started.";
         s.recording = true;
+        try {
+          await s.cdp!.configureLiveCast(0);
+          s.recorder = await Recorder.start(
+            s.cdp!, s.recordingPath, op.fps, managedEnv(s.root),
+          );
+        } catch (error) {
+          s.recording = false;
+          throw error;
+        }
+        j.output = "Recording started.";
       } else {
         if (!s.recording) throw new Error("No recording is active.");
         await s.recorder?.stop();
@@ -751,10 +756,13 @@ export default experimental_defineHostEntry({
       if(events.some(e=>e.kind!=='reset'&&(e.kind!=='pointer'||e.type!=='move'||e.buttons)))touchSession(s);
       return result;
     },
-    frame: async ({ id, after = 0 }) => {
+    frame: async ({ id, after = 0, stream }) => {
       const s = session(id);
       if (s.status !== "ready" || !s.cdp || s.expiresAt <= Date.now())
         throw new Error("Browser is not ready");
+      s.streamDemands ??= new StreamDemands();
+      const tier = s.streamDemands.update(stream);
+      await s.cdp.configureLiveCast(s.recording ? 0 : tier);
       await s.cdp.startLiveCast();
       const live = await s.cdp.nextLiveFrame(after);
       clearTimeout(s.castTimer);
@@ -763,7 +771,7 @@ export default experimental_defineHostEntry({
         const [url,loading]=await Promise.all([s.cdp.evaluate('location.href'),s.cdp.evaluate('document.readyState !== "complete"')]);
         s.frameInfo={url,loading:loading===true,at:Date.now()};
       }
-      return { ...live, url:s.frameInfo.url, loading:s.frameInfo.loading };
+      return { ...live, url:s.frameInfo.url, loading:s.frameInfo.loading, streamTier:s.recording ? 0 : tier };
     },
     input: async ({ id, input }, ctx) => {
       const s = session(id);

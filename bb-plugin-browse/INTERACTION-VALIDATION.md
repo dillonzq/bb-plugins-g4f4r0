@@ -7,7 +7,7 @@ Validated on the Linux server on 2026-09-15 (Berlin). This work targets interact
 - Stagehand remains the agent automation engine. Human input uses a separate authenticated, session-bound WebSocket and direct CDP input; it creates no agent jobs.
 - Pointer capture, dragging, text selection, keyboard down/up events, editing shortcuts, Unicode paste and composition commits reach the selected browser. Pointer motion and compatible wheel events coalesce.
 - Input is ordered, bounded, and never replayed after reconnect. Disconnect, blur and a lost heartbeat release held buttons/keys. Long holds maintain a heartbeat. Agent work and private credential entry exclude competing viewer input.
-- JPEG quality 80, capture up to 1920 × 1080, binary viewer delivery. At most three frames / 4 MiB await acknowledgement; one additional bounded frame may be held while waiting for byte credit. The viewer retains only the latest pending encoded and decoded frames. Decoded bitmaps close after replacement or drawing.
+- JPEG quality 80, capture up to 1920 × 1080, binary viewer delivery. At most eight frames / 4 MiB await acknowledgement; one additional bounded frame may be held while waiting for byte credit. The viewer retains only the latest pending encoded and decoded frames. Decoded bitmaps close after replacement or drawing.
 - Capture acknowledgements allow a 50 ms read-ahead window for active consumers, then withhold credit when demand stops. Every frame is acknowledged individually, including frames carrying the same CDP session ID. Hidden documents and CSS-hidden BB panels stop their connections. Capture stops after 12 seconds without frame requests; the page remains available for later automation until normal session expiry. Closing the session tab releases Chrome. Profiles survive release; unsaved DOM does not survive a later reconnect.
 - Host identity stays in the lower-right corner. The existing BB-style toolbar, Hugeicons, tooltips, transparent copy action and status dot remain.
 - Console history and request history now cap the size of individual retained entries as well as their count.
@@ -74,3 +74,30 @@ Raw fixture metrics are retained in [validation/interaction-2026-09-15](validati
 ## Completion state
 
 All disposable test browsers were released, the fixture HTTP server was stopped, and the final cleanup check found zero active Browse sessions and zero owned test Chrome processes. Temporary standalone browser profiles were removed. The plugin remains installed from the permanent checkout. The report automation is scheduled for 2026-09-16 at 09:00 Europe/Berlin in this thread.
+
+
+## Adaptive streaming and transport comparison — September 15 afternoon
+
+The viewer now reports capture tier and frame acknowledgement delay alongside displayed FPS, JPEG bandwidth, dropped frames and input acknowledgement latency. These are bounded, short-lived diagnostics without page content. Input acknowledgement latency is not the same as click-to-visible-pixel latency.
+
+Capture starts at JPEG quality 80 (maximum 1920 × 1080). Sustained delivery delay above 180 ms or client decode/display delay above 35 ms lowers quality to 65 (1280 × 800), then 50 (960 × 600). Five healthy sampling windows restore one tier. Static pages do not need to produce 60 frames each second. The logical page viewport and input coordinates remain unchanged. Lower capture tiers trade text sharpness for responsiveness. The weakest active viewer controls the shared capture tier; its demand expires after 12 seconds. Recording forces full quality. Capture reconfiguration is serialized with concurrent requests.
+
+### Reproducible transport experiment
+
+Run `npx tsx tests/transport-benchmark.mts jpeg 20 [--adaptive] [--shaped]` or `... rtc 20` from the Browse package. The harness uses disposable Chrome profiles, an animated text-heavy canvas at 1280 × 800, and a separate local Chrome receiver. It removes its profiles and closes its browsers. The WebRTC prototype captures the actual source tab with test-only permission flags and uses local ICE candidates. It is not enabled in Browse or exposed to remote clients.
+
+The shaped JPEG cases simulate an 8 Mbps link with 40 ms delay in each direction. This is application-level shaping, not a real WAN or an equivalent WebRTC network-shaping test. WebRTC uses its default codec and an 8 Mbps bitrate ceiling. All runs lasted 20 seconds after warmup, on the shared Linux host. They do not establish statistical significance or represent the earlier, lighter fixture's frame rate.
+
+| Transport | Link | Displayed FPS | Mbps | Visual delay median / p95 | Chrome CPU cores | Combined Chrome PSS at end |
+|---|---|---:|---:|---:|---:|---:|
+| Fixed JPEG | Local | 8.2 | 19.04 | 345 / 704 ms | 3.23 | 605 MiB |
+| Adaptive JPEG | Local | 16.1 | 12.04 | 282 / 597 ms | 3.53 | 602 MiB |
+| WebRTC prototype | Local | 19.5 | 0.73 | 323 / 529 ms | 4.52 | 644 MiB |
+| Fixed JPEG | Shaped | 2.1 | 5.45 | 678 / 1445 ms | 2.74 | 619 MiB |
+| Adaptive JPEG | Shaped | 9.4 | 6.34 | 365 / 524 ms | 3.01 | 603 MiB |
+
+Visual delay measures 12 source-pixel changes reaching the receiver, polled through local CDP. It excludes the incoming user-input network trip. CPU is average aggregate Chrome process-tree CPU time in cores; PSS includes source and receiver and excludes Node/BB/Xvfb. These short runs do not prove absence of memory leaks. The animated source itself rendered only about 32–38 FPS in these runs, limiting every transport.
+
+Decision: enable adaptive JPEG, retain WebRTC as an experiment. Adaptive JPEG improved the shaped test from 2.1 to 9.4 FPS and reduced median visual delay from 678 to 365 ms. The local WebRTC prototype used dramatically less bandwidth and delivered more frames than fixed JPEG, but consumed more CPU and retained substantial visual delay. A production switch requires authenticated signaling, capture permission/lifecycle integration, remote ICE/TURN connectivity, reconnect handling and measurements from the user's actual client. No universal 60 FPS claim is supported.
+
+References: [Chrome tab capture](https://developer.chrome.com/docs/extensions/reference/api/tabCapture), [WebRTC getStats](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/getStats), [inbound video statistics](https://developer.mozilla.org/en-US/docs/Web/API/RTCInboundRtpStreamStats). Raw results: [transport comparison](validation/transport-2026-09-15).

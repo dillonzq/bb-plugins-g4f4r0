@@ -53,3 +53,13 @@ it('refreshes a static image when resuming after capture backpressure',async()=>
  expect(calls.filter(m=>m==='Page.startScreencast')).toHaveLength(1);
  expect(calls.filter(m=>m==='Page.stopScreencast')).toHaveLength(1);
 });
+
+it('serializes quality changes with concurrent frame requests without changing viewport',async()=>{
+ const {Cdp}=await import('../src/cdp');const c:any=Object.create(Cdp.prototype);const calls:any[]=[];
+ c.casting=true;c.streamTier=0;c.liveAcks=[];c.waiters=new Set();c.seq=0;c.lastFrameDemand=Date.now();
+ c.send=async(method:string,params:any)=>{calls.push([method,params]);await new Promise(r=>setTimeout(r,1));if(method==='Page.startScreencast')setTimeout(()=>c.onScreencast({sessionId:1,data:'fresh',metadata:{deviceWidth:1280,deviceHeight:800}}),0);return{};};
+ const results=await Promise.all([c.configureLiveCast(1),c.configureLiveCast(2),c.configureLiveCast(2),c.nextLiveFrame()]);
+ expect(calls.filter(([m])=>m==='Page.startScreencast').map(([,p])=>p.quality)).toEqual([65,50]);
+ expect(calls.some(([m])=>m==='Emulation.setDeviceMetricsOverride')).toBe(false);
+ expect(results[3]).toMatchObject({width:1280,height:800});
+});

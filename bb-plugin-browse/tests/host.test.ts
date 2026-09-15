@@ -43,7 +43,7 @@ vi.mock("../src/cdp", () => ({
       targetId: "tab",
       send: mock.send,
       evaluate: mock.evaluate,
-      startLiveCast: async () => {},
+      configureLiveCast: async () => {}, startLiveCast: async () => {},
       stopLiveCast: async () => {},
       nextLiveFrame: async () => ({
         data: "jpeg",

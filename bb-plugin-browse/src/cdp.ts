@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { streamProfiles } from "./adaptive-stream";
 
 export type LiveFrame = {
   data: string;
@@ -41,6 +42,8 @@ export class Cdp {
   private frameListener?: (params: any) => void;
   private frameFailure?: () => void;
   private casting = false;
+  private streamTier = 0;
+  private configuring?: Promise<void>;
   private seq = 0;
   private latest?: LiveFrame;
   private liveAcks: number[] = [];
@@ -213,15 +216,25 @@ export class Cdp {
     }
     this.frameListener?.(params);
   }
+  async configureLiveCast(tier: number) {
+    while (this.configuring) await this.configuring;
+    if (this.streamTier === tier) return;
+    this.configuring = (async () => {
+      if (this.restartingCast) await this.restartingCast;
+      await this.stopLiveCast();
+      this.streamTier = tier;
+      this.latest = undefined;
+      await this.startLiveCast();
+    })();
+    try { await this.configuring; } finally { this.configuring = undefined; }
+  }
   async startLiveCast() {
     if (this.casting) return;
     this.casting = true;
     try {
       await this.send("Page.startScreencast", {
         format: "jpeg",
-        quality: 80,
-        maxWidth: 1920,
-        maxHeight: 1080,
+        ...streamProfiles[this.streamTier ?? 0],
         everyNthFrame: 1,
       });
     } catch (e) {
@@ -236,6 +249,7 @@ export class Cdp {
     await this.send("Page.stopScreencast").catch(() => {});
   }
   async nextLiveFrame(after = 0, timeoutMs = 8000): Promise<LiveFrame> {
+    while (this.configuring) await this.configuring;
     const now = Date.now();
     const resume = this.casting && this.liveAcks.length > 0 && now - this.lastFrameDemand > 250;
     this.lastFrameDemand = now;

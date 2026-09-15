@@ -207,12 +207,14 @@ export const hostContract = defineRpcContract({
   frame: {
     input: z.object({
       id,
+      stream: z.object({ id, tier: z.number().int().min(0).max(2) }).optional(),
       after: z.number().int().min(0).max(1_000_000_000).default(0),
     }),
     output: z.object({
       data: z.string(),
       url: z.string(),
       loading: z.boolean().optional(),
+      streamTier: z.number().int().min(0).max(2).optional(),
       width: z.number(),
       height: z.number(),
       seq: z.number(),

@@ -8,7 +8,7 @@ const mock = vi.hoisted(() => ({
   close: vi.fn(async () => {}),
   send: vi.fn(async (_method: string, _params: any) => ({})),
   evaluate: vi.fn(async () => "https://example.com"),
-  startLiveCast: vi.fn(async () => {}),
+  configureLiveCast: async () => {}, startLiveCast: vi.fn(async () => {}),
   stopLiveCast: vi.fn(async () => {}),
   nextLiveFrame: vi.fn(async () => ({
     data: "jpeg",
@@ -57,7 +57,7 @@ vi.mock("../src/cdp", () => ({
       targetId: "managed",
       send: mock.send,
       evaluate: mock.evaluate,
-      startLiveCast: mock.startLiveCast,
+      configureLiveCast: async () => {}, startLiveCast: mock.startLiveCast,
       stopLiveCast: mock.stopLiveCast,
       nextLiveFrame: mock.nextLiveFrame,
       close: () => mock.events.push("cdp-close"),

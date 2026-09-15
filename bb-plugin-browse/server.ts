@@ -1,3 +1,4 @@
+import { AdaptiveStream } from "./src/adaptive-stream";
 import { directBatch } from "./src/direct-input";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -220,7 +221,7 @@ export default async function plugin(bb: BbPluginApi) {
   }
   const viewerErrors = new Map<string, string>();
   const presence = new Map<string, Map<string, number>>();
-  const viewerTelemetry = new Map<string, Map<string, {at:number;host:string;fps:number;mbps:number;inputLatencyMs:number;displayed:number;dropped:number}>>();
+  const viewerTelemetry = new Map<string, Map<string, {at:number;host:string;fps:number;mbps:number;inputLatencyMs:number;displayed:number;dropped:number;streamTier?:number;frameAckMs?:number}>>();
   function pruneViewerTelemetry(){for(const [sid,clients] of viewerTelemetry){for(const [cid,value] of clients)if(Date.now()-value.at>15000)clients.delete(cid);if(!clients.size)viewerTelemetry.delete(sid);}}
   function visibleClients(id: string) {
     const clients = presence.get(id);
@@ -561,7 +562,7 @@ export default async function plugin(bb: BbPluginApi) {
         hostId,
       };
     },
-    frame: async ({ id, after = 0 }) => {
+    frame: async ({ id, after = 0, stream }) => {
       const s = get(id);
       await ensurePlacement(s);
       // Startup completes on the host. Streaming must not wait for a UI list
@@ -579,7 +580,7 @@ export default async function plugin(bb: BbPluginApi) {
       try {
         const frame = await host.call(
           "frame",
-          { id, after },
+          { id, after, ...(stream ? { stream } : {}) },
           { hostId: s.hostId, timeoutMs: 20000 },
         );
         viewerErrors.delete(id);
@@ -965,7 +966,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.http.route("POST", "/presence", async (c) => {
     try {
       const report = z
-        .object({ id, clientId: id, visible: z.boolean(), metrics:z.object({host:z.string().max(200),fps:z.number().min(0).max(1000),mbps:z.number().min(0).max(10000),inputLatencyMs:z.number().min(0).max(60000),displayed:z.number().min(0),dropped:z.number().min(0)}).optional() })
+        .object({ id, clientId: id, visible: z.boolean(), metrics:z.object({host:z.string().max(200),fps:z.number().min(0).max(1000),mbps:z.number().min(0).max(10000),inputLatencyMs:z.number().min(0).max(60000),displayed:z.number().min(0),dropped:z.number().min(0),streamTier:z.number().int().min(0).max(2).optional(),frameAckMs:z.number().min(0).max(10000).optional()}).optional() })
         .parse(await c.req.json());
       get(report.id);
       const clients = presence.get(report.id) ?? new Map<string, number>();
@@ -1021,11 +1022,12 @@ export default async function plugin(bb: BbPluginApi) {
   bb.http.experimental_websocket("/cast", ctx => {
     const sid=id.parse(ctx.url.searchParams.get('id'));get(sid);
     const binary=ctx.url.searchParams.get('binary')==='1';
-    let closed=false;const outstanding=new Map<number,number>();let wake:(()=>void)|undefined;
-    const bytesOutstanding=()=>[...outstanding.values()].reduce((a,b)=>a+b,0);
+    const adaptive=new AdaptiveStream(),streamId=randomUUID();
+    let closed=false;const outstanding=new Map<number,{bytes:number;at:number}>();let wake:(()=>void)|undefined;
+    const bytesOutstanding=()=>[...outstanding.values()].reduce((a,b)=>a+b.bytes,0);
     const waitCredit=()=>new Promise<void>(resolve=>{const timer=setTimeout(resolve,1000);wake=()=>{clearTimeout(timer);resolve();};});
     return {
-      onMessage(_socket,raw){if(!binary||typeof raw!=='string'||raw.length>100)return;try{const message=JSON.parse(raw);if(Number.isSafeInteger(message.ack)&&outstanding.delete(message.ack)){wake?.();wake=undefined;}}catch{}},
+      onMessage(_socket,raw){if(!binary||typeof raw!=='string'||raw.length>200)return;try{const message=JSON.parse(raw),sent=outstanding.get(message.ack);if(Number.isSafeInteger(message.ack)&&sent){outstanding.delete(message.ack);adaptive.sample(Date.now()-sent.at,Number.isFinite(message.clientMs)?Math.max(0,Math.min(10000,message.clientMs)):0);wake?.();wake=undefined;}}catch{}},
       onOpen: socket => {void(async()=>{
         let after=0;
         while(!closed){
@@ -1034,9 +1036,9 @@ export default async function plugin(bb: BbPluginApi) {
             if(binary&&(outstanding.size>=8||bytesOutstanding()>=4*1024*1024)){
               await waitCredit();continue;
             }
-            const frame=await handlers.frame({id:sid,after});if(closed)return;
+            const frame=await handlers.frame({id:sid,after,stream:{id:streamId,tier:adaptive.tier}});if(closed)return;
             if(frame.seq>after){
-              if(binary){const bytes=Buffer.from(frame.data,'base64');if(bytes.length>4*1024*1024)throw Error('Browser frame exceeds the streaming budget. Reduce the viewport size.');while(!closed&&bytesOutstanding()+bytes.length>4*1024*1024)await waitCredit();if(closed)return;outstanding.set(frame.seq,bytes.length);const {data,...meta}=frame;socket.send(JSON.stringify({kind:'frame',...meta}));socket.send(bytes);}
+              if(binary){const bytes=Buffer.from(frame.data,'base64');if(bytes.length>4*1024*1024)throw Error('Browser frame exceeds the streaming budget. Reduce the viewport size.');while(!closed&&bytesOutstanding()+bytes.length>4*1024*1024)await waitCredit();if(closed)return;outstanding.set(frame.seq,{bytes:bytes.length,at:Date.now()});const {data,...meta}=frame;socket.send(JSON.stringify({kind:'frame',...meta,streamTier:frame.streamTier??adaptive.tier,ackMs:Math.round(adaptive.ackMs)}));socket.send(bytes);}
               else socket.send(JSON.stringify(frame));
               after=frame.seq;
             }else await sleep(16);

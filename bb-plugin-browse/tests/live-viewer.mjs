@@ -20,7 +20,7 @@ async function connect(profile,kind){
 const source=await connect(sourceProfile,'fixture'),viewer=await connect(viewerProfile,'viewer');
 const out=(test,result)=>console.log(JSON.stringify({at:new Date().toISOString(),test,...result}));
 const evaluate=viewer.evaluate;
-const settle=()=>evaluate(`(async()=>{const start=Date.now();while(inflight||directQueue.length||sendScheduled){if(Date.now()-start>12000)throw Error('Input did not settle');await new Promise(r=>setTimeout(r,20));}return true;})()`);
+const settle=()=>evaluate(`(async()=>{const start=Date.now();while(inflight.size||directQueue.length||sendScheduled){if(Date.now()-start>12000)throw Error('Input did not settle');await new Promise(r=>setTimeout(r,20));}return true;})()`);
 async function pointer(type,x,y,buttons=0){await evaluate(`(()=>{const r=screen.getBoundingClientRect();screen.dispatchEvent(new PointerEvent(${JSON.stringify(type)},{bubbles:true,cancelable:true,isPrimary:true,pointerId:1,pointerType:'mouse',button:0,buttons:${buttons},clientX:r.left+${x}*r.width/vw,clientY:r.top+${y}*r.height/vh}));})()`);}
 async function click(selector){const p=await source.evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`);await pointer('pointerdown',p.x,p.y,1);await pointer('pointerup',p.x,p.y);await settle();}
 async function key(key,code,modifiers={}){await evaluate(`(()=>{for(const type of ['keydown','keyup'])keyboard.dispatchEvent(new KeyboardEvent(type,{key:${JSON.stringify(key)},code:${JSON.stringify(code)},bubbles:true,cancelable:true,...${JSON.stringify(modifiers)}}));})()`);await settle();}
