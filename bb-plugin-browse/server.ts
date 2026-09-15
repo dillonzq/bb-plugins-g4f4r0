@@ -580,11 +580,17 @@ export default async function plugin(bb: BbPluginApi) {
         throw new Error("Browser is not ready. Reconnect the session.");
       return host.call("input", input, { hostId: s.hostId });
     },
-    "open-address": async ({ threadId, url, paramsJson }) => {
+    "open-address": async ({ threadId, url, paramsJson, sessionId }) => {
       const before = await bb.sdk.threads.tabs.get({ threadId });
       const original = before.tabs.find(t => t.kind === "plugin-panel" && t.pluginId === "browse" && t.actionId === "live" && (t.paramsJson ?? "{}") === paramsJson);
       if (!original) throw new Error("This browser tab is no longer open.");
-      const result = await startManaged(threadId, url);
+      const selected = sessionId ? get(sessionId) : undefined;
+      if (selected && selected.threadId !== threadId) throw new Error("Session belongs to another thread.");
+      const reconnect = selected && ["released", "error"].includes(selected.status);
+      const result = selected
+        ? reconnect ? await handlers.reconnect({ id: selected.id }) : { session: selected }
+        : await startManaged(threadId, url);
+      const created = !selected || result.session.id !== selected.id;
       try {
         for (let attempt = 0; attempt < 4; attempt++) {
           const state = await bb.sdk.threads.tabs.get({ threadId });
@@ -601,7 +607,7 @@ export default async function plugin(bb: BbPluginApi) {
         }
         throw new Error("Browser tabs changed too quickly. Try again.");
       } catch (error) {
-        await release(result.session);
+        if (created) await release(get(result.session.id));
         throw error;
       }
     },

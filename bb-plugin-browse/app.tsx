@@ -572,11 +572,16 @@ function LiveBrowser({
             <ul className="space-y-2">
               {group.items.map((s) => (
                 <li key={s.id}>
-                  <button type="button" className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" onClick={async () => {
+                  <button type="button" disabled={opening} className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" onClick={async () => {
+                    if (launching.current) return;
+                    launching.current = true;
+                    setOpening(true);
+                    setError("");
                     try {
-                      const target = ["released", "error"].includes(s.status) ? (await rpc.call("reconnect", { id: s.id })).session : s;
-                      nav.openThreadPanel({ actionId: "live", params: { id: target.id }, title: browserTitle(target) });
+                      await rpc.call("open-address", { threadId, url: s.url, sessionId: s.id, paramsJson: JSON.stringify(params ?? {}) });
+                      await sync();
                     } catch (e) { setError(String(e)); }
+                    finally { launching.current = false; setOpening(false); }
                   }}>
                     <BrowseIcon name="Globe" className="size-5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{browserTitle(s)}</span><span className="block truncate text-xs text-muted-foreground">{s.url}</span></span>

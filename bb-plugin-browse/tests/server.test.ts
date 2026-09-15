@@ -741,3 +741,17 @@ it("opens an address in the existing blank panel and preserves other tabs", asyn
     expect(options.panelTabs[1]).toEqual({ id: "other", kind: "thread-info" });
   } finally { await f.harness.lifecycle.dispose(); }
 });
+
+it("opens an existing session in the current panel without starting another browser", async () => {
+  const options = { panelTabs: [{ id: "blank", kind: "plugin-panel", pluginId: "browse", actionId: "live", paramsJson: "{}", title: "Browser" }] as any[] };
+  const f = await fixture(options);
+  try {
+    const existing: any = await f.harness.behavior.callRpc("start", { threadId: "thread_one", url: "https://example.com" });
+    const connects = f.calls.filter(c => c.method === "connect").length;
+    const result: any = await f.harness.behavior.callRpc("open-address", { threadId: "thread_one", url: existing.session.url, sessionId: existing.session.id, paramsJson: "{}" });
+    expect(result.session.id).toBe(existing.session.id);
+    expect(f.calls.filter(c => c.method === "connect")).toHaveLength(connects);
+    expect(options.panelTabs).toHaveLength(1);
+    expect(options.panelTabs[0]).toMatchObject({ id: "blank", paramsJson: JSON.stringify({ id: existing.session.id }) });
+  } finally { await f.harness.lifecycle.dispose(); }
+});

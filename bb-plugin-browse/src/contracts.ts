@@ -298,7 +298,7 @@ export const rpcContract = defineRpcContract({
     input: z.object({ threadId: id.optional() }),
     output: z.array(session),
   },
-  "open-address": { input: z.object({ threadId: id, url: z.string(), paramsJson: z.string() }), output: z.object({ session, job }) },
+  "open-address": { input: z.object({ threadId: id, url: z.string(), paramsJson: z.string(), sessionId: id.optional() }), output: z.object({ session }) },
   start: { input: startInput, output: z.object({ session, job }) },
   reconnect: { input: z.object({ id }), output: z.object({ session, job }) },
   probe: { input: machineInput, output: health.extend({ hostId: id }) },
