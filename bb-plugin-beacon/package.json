@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-beacon",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "See CPU, memory, disk, and process pressure on the BB server from the sidebar, without leaving the workspace.",
   "repository": {
@@ -24,9 +24,7 @@
     },
     "server": "./server.ts",
     "app": "./app.tsx",
-    "skills": [
-      "skills"
-    ]
+    "skills": []
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.1.3",
