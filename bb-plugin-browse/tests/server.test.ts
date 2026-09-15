@@ -687,10 +687,10 @@ it('sends binary frames with bounded credit and rejects arbitrary direct protoco
   await vi.waitFor(()=>expect(stream.sent.length).toBeGreaterThanOrEqual(2));
   expect(JSON.parse(String(stream.sent[0]))).toMatchObject({kind:'frame',seq:1});
   expect(stream.sent[1]).toBeInstanceOf(Uint8Array);
-  await vi.waitFor(()=>expect(stream.sent).toHaveLength(6));
-  await new Promise(resolve=>setTimeout(resolve,40));expect(stream.sent).toHaveLength(6);
+  await vi.waitFor(()=>expect(stream.sent).toHaveLength(16));
+  await new Promise(resolve=>setTimeout(resolve,40));expect(stream.sent).toHaveLength(16);
   await stream.receive(JSON.stringify({ack:1}));
-  await vi.waitFor(()=>expect(stream.sent).toHaveLength(8));await stream.close();
+  await vi.waitFor(()=>expect(stream.sent).toHaveLength(18));await stream.close();
   const control=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}`);
   await control.receive(JSON.stringify({seq:1,events:[{kind:'cdp',method:'Browser.close'}]}));
   expect(control.closeCalls[0]).toMatchObject({code:1008});

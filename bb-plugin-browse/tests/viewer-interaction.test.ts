@@ -10,7 +10,7 @@ function viewer(){
  class Socket {static OPEN=1;readyState=1;sent=[];constructor(){queueMicrotask(()=>this.onopen?.());}send(v){this.sent.push(JSON.parse(v));}close(){this.readyState=3;this.onclose?.();}}
  window.WebSocket=Socket;
  ${viewerInteraction}
- window.test={keyboard,screen,directQueue,flushDirect,get control(){return control},ack(){control.onmessage({data:JSON.stringify({seq:inflight.seq})})}};
+ window.test={keyboard,screen,directQueue,flushDirect,get control(){return control},ack(){control.onmessage({data:JSON.stringify({seq:inflight.keys().next().value})})}};
  `);
  return {dom,test:(dom.window as any).test};
 }
@@ -40,5 +40,17 @@ it('commits IME text once when compositionend is followed by beforeinput',()=>{
   test.keyboard.dispatchEvent(new dom.window.CompositionEvent('compositionend',{data:'語'}));
   test.keyboard.dispatchEvent(new dom.window.InputEvent('beforeinput',{inputType:'insertText',data:'語',cancelable:true}));
   test.flushDirect();expect(test.control.sent[0].events).toEqual([{kind:'text',text:'語'}]);
+ }finally{dom.window.close();}
+});
+
+it('pipelines bounded input batches instead of waiting for every round trip',()=>{
+ const {dom,test}=viewer();
+ try{
+  for(let i=0;i<5;i++){test.directQueue.push({kind:'wheel',x:0,y:0,deltaX:0,deltaY:i,modifiers:0});test.flushDirect();}
+  expect(test.control.sent).toHaveLength(3);
+  expect(test.directQueue).toHaveLength(2);
+  test.ack();expect(test.control.sent).toHaveLength(4);
+  expect(test.control.sent.flatMap((m:any)=>m.events).map((e:any)=>e.deltaY)).toEqual([0,1,2,3,4]);
+  test.control.close();expect(test.directQueue).toHaveLength(0);
  }finally{dom.window.close();}
 });

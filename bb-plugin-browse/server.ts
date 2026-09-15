@@ -1030,8 +1030,8 @@ export default async function plugin(bb: BbPluginApi) {
         let after=0;
         while(!closed){
           try{
-            // At most three frames / 4 MiB await display; never queue an unbounded video backlog.
-            if(binary&&(outstanding.size>=3||bytesOutstanding()>=4*1024*1024)){
+            // Allow remote round trips without stalling capture; retain the 4 MiB byte ceiling.
+            if(binary&&(outstanding.size>=8||bytesOutstanding()>=4*1024*1024)){
               await waitCredit();continue;
             }
             const frame=await handlers.frame({id:sid,after});if(closed)return;
