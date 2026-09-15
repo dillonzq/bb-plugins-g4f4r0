@@ -1,3 +1,4 @@
+import {controlRelay} from "../src/control-relay";
 import {videoRelay} from "../src/video-relay";
 import type {SelkiesStream} from "../src/selkies";
 import { describe, it, expect, vi } from "vitest";
@@ -16,6 +17,7 @@ const base = {
 async function fixture(
   options: {
     relay?: {port:number;token:string};
+    controlEndpoint?: {port:number;token:string};
     progressiveFrames?: boolean;
     frameData?: string;
     threadActive?: boolean;
@@ -163,6 +165,7 @@ async function fixture(
       if(call.method === "videoStart")return {ok:true,...(options.relay?{relay:options.relay}:{})};
       if(call.method === "videoStop")return {ok:true};
       if(call.method === "videoRead")return {packets:[Buffer.from([4,1,0,0,0,0,5,0,3,32,1]).toString('base64')],url:'https://example.com/',loading:false};
+      if(call.method === "controlStart"){if(!options.controlEndpoint)throw Error("Unavailable on this host");return options.controlEndpoint;}
       if (call.method === "direct") return {selection:"selected"};
       if (call.method === "release") return { released: true };
       if (call.method === "credentialPrepare")
@@ -824,4 +827,22 @@ it('forwards binary frames without polling videoRead or exposing its private tok
  await ws.receive('ack');await vi.waitFor(()=>expect(ws.sent.length).toBe(8));
  await ws.close();await vi.waitFor(()=>expect(encoder.isClosed).toBe(true));
  }finally{await encoder.stop();await f.harness.lifecycle.dispose();}
+});
+
+it('uses one private controller handshake without per-batch host RPCs',async()=>{
+ const input=vi.fn(async()=>({cursor:'pointer'}));const reset=vi.fn(async()=>{});
+ const relay=await controlRelay(input,reset,()=>{});
+ const f=await fixture({controlEndpoint:{port:relay.port,token:relay.token}});
+ try{
+  const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+  const control=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}`);
+  await control.receive(JSON.stringify({seq:1,events:[{kind:'heartbeat'}]}));
+  await control.receive(JSON.stringify({seq:2,events:[{kind:'heartbeat'}]}));
+  await vi.waitFor(()=>expect(control.sent).toHaveLength(2));
+  expect(input).toHaveBeenCalledTimes(2);
+  expect(f.calls.filter(c=>c.method==='controlStart')).toHaveLength(1);
+  expect(f.calls.filter(c=>c.method==='direct')).toHaveLength(0);
+  expect(control.sent.join('')).not.toContain(relay.token);
+  await control.close();await vi.waitFor(()=>expect(reset).toHaveBeenCalledTimes(1));
+ }finally{relay.stop();await f.harness.lifecycle.dispose();}
 });

@@ -1,3 +1,6 @@
+import { controlRelay } from "./src/control-relay";
+import type {z} from "zod";
+import {directBatch} from "./src/direct-input";
 import { videoRelay } from "./src/video-relay";
 import { SelkiesStream } from "./src/selkies";
 import { StreamDemands } from "./src/adaptive-stream";
@@ -59,6 +62,7 @@ type LocalSession = {
   framing?: boolean;
   streamDemands?: StreamDemands;
   direct?: DirectInput;
+  controlRelays?: Set<()=>void>;
   frameInfo?: {url:string;loading:boolean;at:number};
   castTimer?: ReturnType<typeof setTimeout>;
   status: "connecting" | "ready" | "error" | "released";
@@ -101,6 +105,16 @@ function touchSession(s: LocalSession) {
   if (s.mode !== "managed" || s.status === "released" || s.closing) return;
   s.expiresAt = Date.now() + SESSION_TTL_MS;
   scheduleExpiry(s);
+}
+async function runDirect({id,clientId,events}:z.infer<typeof directBatch>){
+      const s=session(id);
+      if(s.status!=='ready'||!s.cdp||s.closing||s.expiresAt<=Date.now())throw Error('Browser is not ready.');
+      if(s.credential)throw Error('Browser is waiting for private credential input.');
+      if(s.busy)throw Error('Browser is busy with an agent action.');
+      s.direct??=new DirectInput(s.cdp);
+      const result=await s.direct.run(clientId,events);
+      if(events.some(e=>e.kind!=='reset'&&(e.kind!=='pointer'||e.type!=='move'||e.buttons)))touchSession(s);
+      return result;
 }
 function publicSession(s: LocalSession) {
   return {
@@ -586,6 +600,8 @@ async function closeSession(s: LocalSession) {
   clearTimeout(s.castTimer);
   if(s.video)await s.video.stream.then(stream=>stream.stop()).catch(()=>{});
   s.video=undefined;
+  for(const stop of s.controlRelays??[])stop();
+  s.controlRelays?.clear();
   await s.direct?.reset();
   if (s.credential) await finishCredential(s, s.credential);
   if (s.busy) {
@@ -764,16 +780,18 @@ export default experimental_defineHostEntry({
         undefined,
         600000,
       ),
-    direct: async ({id,clientId,events}) => {
-      const s=session(id);
-      if(s.status!=='ready'||!s.cdp)throw Error('Browser is not ready.');
-      if(s.credential)throw Error('Browser is waiting for private credential input.');
-      if(s.busy)throw Error('Browser is busy with an agent action.');
-      s.direct??=new DirectInput(s.cdp);
-      const result=await s.direct.run(clientId,events);
-      if(events.some(e=>e.kind!=='reset'&&(e.kind!=='pointer'||e.type!=='move'||e.buttons)))touchSession(s);
-      return result;
+    controlStart: async ({id,clientId})=>{
+      const s=session(id);s.controlRelays??=new Set();
+      if(s.controlRelays.size>=16)throw Error('Too many browser controllers');
+      let relay:Awaited<ReturnType<typeof controlRelay>>|undefined;
+      const stop=()=>relay?.stop();s.controlRelays.add(stop);
+      try{
+        relay=await controlRelay(events=>runDirect({id,clientId,events}),async()=>{await s.direct?.reset(clientId);},()=>s.controlRelays?.delete(stop));
+        if(s.closing||s.status==='released'){relay.stop();throw Error('Browser session closed');}
+        return {port:relay.port,token:relay.token};
+      }catch(e){s.controlRelays.delete(stop);throw e;}
     },
+    direct: runDirect,
     frame: async ({ id, after = 0, stream }) => {
       const s = session(id);
       if (s.status !== "ready" || !s.cdp || s.expiresAt <= Date.now())

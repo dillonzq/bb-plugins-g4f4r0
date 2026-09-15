@@ -1,3 +1,4 @@
+import {connectControlRelay} from "./src/control-relay";
 import { connectVideoRelay } from "./src/video-relay";
 import { AdaptiveStream } from "./src/adaptive-stream";
 import { directBatch } from "./src/direct-input";
@@ -1014,7 +1015,10 @@ export default async function plugin(bb: BbPluginApi) {
   bb.http.experimental_websocket("/control", ctx => {
     const sid=id.parse(ctx.url.searchParams.get('id')),clientId=randomUUID();
     const s=get(sid);let closed=false,pending=0,chain=Promise.resolve();
+    let relay:Awaited<ReturnType<typeof connectControlRelay>>|undefined,setup:Promise<void>|undefined;
+    const ensureRelay=()=>setup??=(async()=>{try{const endpoint=await host.call('controlStart',{id:sid,clientId},{hostId:s.hostId,timeoutMs:3000});relay=await connectControlRelay(endpoint);if(closed)relay.close();}catch{/* Remote hosts retain RPC input. */}})();
     return {
+      onOpen(){void ensureRelay();},
       onMessage(socket,raw){
         if(closed)return;
         if(typeof raw!=='string'||raw.length>65536||pending>=4){socket.close(1008,'Input queue exceeded');return;}
@@ -1022,11 +1026,14 @@ export default async function plugin(bb: BbPluginApi) {
         try{message=JSON.parse(raw);if(!Number.isSafeInteger(message.seq))throw Error('Invalid sequence');directBatch.parse({id:sid,clientId,events:message.events});}catch{socket.close(1008,'Invalid input');return;}
         pending++;
         chain=chain.then(async()=>{if(closed)return;try{
-          const result=await host.call('direct',directBatch.parse({id:sid,clientId,events:message.events}),{hostId:s.hostId,timeoutMs:10000});
-          if(!closed)socket.send(JSON.stringify({seq:message.seq,...result}));
+          const batch=directBatch.parse({id:sid,clientId,events:message.events});
+          await ensureRelay();
+          if(closed){relay?.close();return;}
+          const result=relay?await relay.send({seq:message.seq,events:batch.events}):await host.call('direct',batch,{hostId:s.hostId,timeoutMs:10000});
+          if(!closed)socket.send(JSON.stringify({seq:message.seq,...result,transport:relay?"direct":"rpc"}));
         }catch(e){if(!closed)socket.send(JSON.stringify({seq:message.seq,error:redact(String(e))}));}finally{pending--;}});
       },
-      onClose(){closed=true;void chain.finally(()=>host.call('direct',{id:sid,clientId,events:[{kind:'reset'}]},{hostId:s.hostId,timeoutMs:5000}).catch(()=>{}));},
+      onClose(){closed=true;relay?.close();void chain.finally(()=>host.call('direct',{id:sid,clientId,events:[{kind:'reset'}]},{hostId:s.hostId,timeoutMs:5000}).catch(()=>{}));},
     };
   });
   bb.http.experimental_websocket("/video", ctx => {
