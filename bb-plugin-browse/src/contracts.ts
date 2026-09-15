@@ -307,6 +307,7 @@ export const rpcContract = defineRpcContract({
     input: z.object({ threadId: id.optional(), onlyUnshown: z.boolean().optional() }),
     output: z.array(session),
   },
+  "open-link": { input: z.object({ threadId: id, url: z.string(), viewerId: id.optional(), currentId: id.optional() }), output: z.object({ session, reused: z.boolean().optional() }) },
   "open-address": { input: z.object({ threadId: id, url: z.string(), paramsJson: z.string(), sessionId: id.optional() }), output: z.object({ session }) },
   start: { input: startInput, output: z.object({ session, job }) },
   forget: { input: z.object({ id }), output: z.object({ ok: z.boolean() }) },

@@ -11,6 +11,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import type { rpcContract, health, Job, Session } from "./src/contracts";
 import type { z } from "zod";
+import { openClientExternal } from "./src/client-external";
 import { browseLink } from "./src/link-routing";
 import { CredentialForm } from "./components/credential-form";
 import { Input } from "./components/ui/input";
@@ -488,7 +489,7 @@ function LoadingBrowserFrame({ url }: { url: string }) {
         <span className="min-w-0 flex-1 truncate px-3 py-1 text-xs">{url}</span>
         <span className="mr-0.5 grid size-7 shrink-0 place-items-center"><BrowseIcon name="Loading" className="size-4 animate-spin" /></span>
       </div>
-      <span className="grid size-7 shrink-0 place-items-center text-muted-foreground"><BrowseIcon name="More" className="size-4" /></span>
+      <div className="flex shrink-0 items-center gap-1"><span className="grid size-7 place-items-center text-muted-foreground"><BrowseIcon name="External" className="size-4" /></span><span className="grid size-7 shrink-0 place-items-center text-muted-foreground"><BrowseIcon name="More" className="size-4" /></span></div>
     </div>
     <div className="flex min-h-0 flex-1 items-center justify-center" style={{ containerType: "size" }}>
       <div aria-hidden="true" className="rounded-md border bg-muted motion-safe:animate-pulse" style={{ width: "min(1280px, calc(100cqw - 24px), calc((100cqh - 24px) * 1.6))", aspectRatio: "8 / 5" }} />
@@ -667,7 +668,7 @@ function LiveBrowser({
       </div>
     );
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-background">
+    <div data-browse-session={id} className="relative flex h-full min-h-0 flex-col bg-background">
       {loadedViewerId !== id && <div className="absolute inset-0 z-10"><LoadingBrowserFrame url={current?.url || address} /></div>}
       {error && <p role="alert" className="shrink-0 px-4 py-2 text-xs text-muted-foreground">{error}</p>}
       <iframe
@@ -708,14 +709,13 @@ function AutoShowBrowsers({ threadId }: { threadId: string }) {
       pendingLinks.current.add(key);
       setLinkState({ url });
       try {
-        const result = await rpc.call("start", {
-          threadId,
-          mode: "managed",
-          url,
-        });
+        const target = new URL(url, window.location.href);
+        const viewerId = target.origin === window.location.origin && target.pathname === "/api/v1/plugins/browse/http/viewer" ? target.searchParams.get("id") ?? undefined : undefined;
+        const visible = [...document.querySelectorAll<HTMLElement>("[data-browse-session]")].find(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0);
+        const result = await rpc.call("open-link", { threadId, url, ...(viewerId ? { viewerId } : {}), ...(visible?.dataset.browseSession ? { currentId: visible.dataset.browseSession } : {}) });
         if (activeThread.current !== threadId) return;
         if (
-          !nav.openThreadPanel({
+          !result.reused && !nav.openThreadPanel({
             actionId: "live",
             params: { id: result.session.id },
             title: browserTitle(result.session),
@@ -757,11 +757,15 @@ function AutoShowBrowsers({ threadId }: { threadId: string }) {
         routeLauncher(event);
         return;
       }
-      const url = browseLink(event, window.location);
+      const modified = event.metaKey || event.ctrlKey;
+      const url = browseLink(event, window.location, modified);
       if (!url) return;
       event.preventDefault();
       event.stopPropagation();
-      void openLink(url);
+      if (modified) {
+        try { void Promise.resolve(openClientExternal(url)).catch(error => setLinkState({url, error: String(error)})); }
+        catch(error) { setLinkState({url, error: String(error)}); }
+      } else void openLink(url);
     };
     document.addEventListener("click", click, true);
     document.addEventListener("keydown", keydown, true);

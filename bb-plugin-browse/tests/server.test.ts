@@ -152,7 +152,7 @@ async function fixture(
           height: 800,
           seq: options.progressiveFrames ? ++frameSequence : input.after ? input.after : 1,
         };
-      if (call.method === "submit")
+      if (call.method === "submit" || call.method === "input")
         return {
           id: "job_run",
           sessionId: input.id,
@@ -855,4 +855,19 @@ it('collects bounded numeric trace reports only during an explicitly started tra
   for(let i=0;i<48;i++)await send();
   const data:any=await(await f.harness.behavior.fetchHttp('GET',`/trace?id=${sid}`)).json();expect(data.records).toHaveLength(45);expect(JSON.stringify(data)).not.toContain('pageContent');expect(data.records[0].trace.inputRtt.p95).toBe(5);
  }finally{await f.harness.lifecycle.dispose();}
+});
+it('reuses the current managed session for chat URLs and resolves viewer links without nesting', async () => {
+ const options = {panelTabs: [] as any[]}; const f = await fixture(options);
+ try {
+  const existing: any = await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com',mode:'managed'});
+  options.panelTabs=[{id:'current',kind:'plugin-panel',pluginId:'browse',actionId:'live',paramsJson:JSON.stringify({id:existing.session.id}),title:'Browser'}];
+  const connects=f.calls.filter(c=>c.method==='connect').length;
+  const result:any=await f.harness.behavior.callRpc('open-link',{threadId:'thread_one',url:'https://jackfir.com/',currentId:existing.session.id});
+  expect(result.session.id).toBe(existing.session.id);
+  expect(f.calls.filter(c=>c.method==='connect')).toHaveLength(connects);
+  expect(f.calls.some(c=>c.method==='input' && c.input.input.kind==='navigate' && c.input.input.url==='https://jackfir.com/')).toBe(true);
+  const viewer:any=await f.harness.behavior.callRpc('open-link',{threadId:'thread_one',url:'https://bb.test/api/v1/plugins/browse/http/viewer?id='+existing.session.id,viewerId:existing.session.id});
+  expect(viewer.session.id).toBe(existing.session.id);
+  await expect(f.harness.behavior.callRpc('open-link',{threadId:'another_thread',url:'https://bb.test',viewerId:existing.session.id})).rejects.toThrow('another thread');
+ } finally {await f.harness.lifecycle.dispose();}
 });

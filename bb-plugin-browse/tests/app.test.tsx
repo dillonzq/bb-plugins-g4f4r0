@@ -311,7 +311,7 @@ it("routes ordinary external clicks to the thread and reports recoverable launch
   let fail = true;
   const slot = renderSlot(app.threadHeaderActions[0]!, { threadId: "thread_one", projectId: "project_one", isCompactViewport: false }, {
     context: { threadId: "thread_one" }, openThreadPanel: () => true,
-    rpc: { list: () => [], start: () => {
+    rpc: { list: () => [], "open-link": () => {
       if (fail) throw new Error("Host offline");
       return { session: { id: "clicked", url: "https://example.com/", hostLabel: "server" } };
     } },
@@ -323,7 +323,7 @@ it("routes ordinary external clicks to the thread and reports recoverable launch
     expect(fireEvent.click(link)).toBe(false);
     await slot.findByRole("alert");
     expect(slot.getByRole("alert").textContent).toContain("Host offline");
-    expect(slot.inspection.rpcCalls.find(c => c.method === "start")?.input).toEqual({ threadId: "thread_one", mode: "managed", url: link.href });
+    expect(slot.inspection.rpcCalls.find(c => c.method === "open-link")?.input).toEqual({ threadId: "thread_one", url: link.href });
     fail = false;
     fireEvent.click(slot.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(slot.inspection.navigateCalls).toContainEqual(expect.objectContaining({ options: expect.objectContaining({ params: { id: "clicked" } }) })));
@@ -340,13 +340,13 @@ it("preserves app routes, modified clicks, downloads, and removes interception o
   try {
     link.href = "/projects/project"; fireEvent.click(link);
     link.href = window.location.origin + "/settings"; fireEvent.click(link);
-    link.href = "https://example.com/"; fireEvent.click(link, { ctrlKey: true });
-    fireEvent.click(link, { metaKey: true });
+    link.href = "https://example.com/"; fireEvent.click(link, { shiftKey: true });
+    fireEvent.click(link, { altKey: true });
     link.download = "file"; fireEvent.click(link); link.removeAttribute("download");
     link.target = "_parent"; fireEvent.click(link); link.target = "";
     link.dataset.browseLinkRouting = "off"; fireEvent.click(link); delete link.dataset.browseLinkRouting;
     expect(bubbled).toBe(7);
-    expect(slot.inspection.rpcCalls.filter(c => c.method === "start")).toHaveLength(0);
+    expect(slot.inspection.rpcCalls.filter(c => c.method === "open-link")).toHaveLength(0);
     slot.lifecycle.unmount(); fireEvent.click(link); expect(bubbled).toBe(8);
   } finally { link.remove(); }
 });
@@ -447,4 +447,17 @@ it("reopens a closed browser in place and shows the loading frame immediately", 
     expect(slot.inspection.rpcCalls.find(c => c.method === "open-address")?.input).toEqual({ threadId: "thread_one", url: "https://example.com/", sessionId: "closed", paramsJson: '{"id":"closed"}' });
     finish({ session: { id: "reopened" } });
   } finally { slot.lifecycle.unmount(); }
+});
+it('sends Command-click to the client desktop and routes same-origin viewer links to their session', async () => {
+ const external: string[]=[];
+ (window as any).bbDesktop={openExternalUrl:(url:string)=>external.push(url)};
+ const app=await loadPluginApp(()=>import('../app'));
+ const slot=renderSlot(app.threadHeaderActions[0]!,{threadId:'thread_one',projectId:'project_one',isCompactViewport:false},{context:{threadId:'thread_one'},openThreadPanel:()=>true,rpc:{list:()=>[], 'open-link':()=>({session:{id:'existing',url:'https://jackfir.com/'}})}});
+ const link=document.createElement('a');document.body.append(link);
+ try {
+  link.href='https://jackfir.com/';fireEvent.click(link,{metaKey:true});expect(external).toEqual(['https://jackfir.com/']);
+  expect(slot.inspection.rpcCalls.filter(c=>c.method==='open-link')).toHaveLength(0);
+  link.href='/api/v1/plugins/browse/http/viewer?id=existing';fireEvent.click(link);
+  await waitFor(()=>expect(slot.inspection.rpcCalls.some(c=>c.method==='open-link'&&(c.input as any).viewerId==='existing')).toBe(true));
+ } finally {slot.lifecycle.unmount();link.remove();delete (window as any).bbDesktop;}
 });

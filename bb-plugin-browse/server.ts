@@ -608,6 +608,27 @@ export default async function plugin(bb: BbPluginApi) {
         throw new Error("Browser is not ready. Reconnect the session.");
       return host.call("input", input, { hostId: s.hostId });
     },
+    "open-link": async ({ threadId, url, viewerId, currentId }) => {
+      if (viewerId) {
+        const s = get(viewerId);
+        if (s.threadId !== threadId) throw Error("This viewer belongs to another thread.");
+        return { session: s, reused: currentId === s.id };
+      }
+      const normalized = safeUrl(url);
+      const state = await bb.sdk.threads.tabs.get({ threadId });
+      const panels = state.tabs.filter((t): t is Extract<typeof t, { kind: "plugin-panel" }> => t.kind === "plugin-panel" && t.pluginId === "browse" && t.actionId === "live");
+      const sessionFor = (tab: typeof panels[number]) => {
+        try { return sessions.get(JSON.parse(tab.paramsJson ?? "{}").id); } catch { return undefined; }
+      };
+      const panel = panels.find(t => sessionFor(t)?.id === currentId) ?? panels.at(-1);
+      const current = panel && sessionFor(panel);
+      if (current?.threadId === threadId && current.mode === "managed" && current.status === "ready") {
+        await handlers.input({ id: current.id, input: { kind: "navigate", url: normalized } });
+        return { session: { ...current, url: normalized }, reused: true };
+      }
+      if (panel) return { ...await handlers["open-address"]({ threadId, url: normalized, paramsJson: panel.paramsJson ?? "{}" }), reused: true };
+      return startManaged(threadId, normalized);
+    },
     "open-address": async ({ threadId, url, paramsJson, sessionId }) => {
       panelNavigation.set(threadId, (panelNavigation.get(threadId) ?? 0) + 1);
       try {

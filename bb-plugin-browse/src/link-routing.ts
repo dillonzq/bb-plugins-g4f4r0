@@ -2,13 +2,13 @@
 export function browseLink(
   event: MouseEvent,
   location: Location,
+  modified = false,
 ): string | null {
   if (
     event.defaultPrevented ||
     event.button !== 0 ||
     event.altKey ||
-    event.ctrlKey ||
-    event.metaKey ||
+    (!modified && (event.ctrlKey || event.metaKey)) ||
     event.shiftKey
   )
     return null;
@@ -31,10 +31,11 @@ export function browseLink(
   )
     return null;
   const href = anchor.getAttribute("href");
-  if (!href || !/^https?:\/\//i.test(href)) return null;
+  if (!href || (!/^https?:\/\//i.test(href) && !href.startsWith("/api/v1/plugins/browse/http/viewer?"))) return null;
   let url: URL;
-  try { url = new URL(href); } catch { return null; }
-  if (url.origin === location.origin || url.username || url.password)
+  try { url = new URL(href, location.href); } catch { return null; }
+  const viewer = url.origin === location.origin && url.pathname === "/api/v1/plugins/browse/http/viewer" && !!url.searchParams.get("id");
+  if ((!viewer && url.origin === location.origin) || url.username || url.password)
     return null;
   return url.href;
 }
