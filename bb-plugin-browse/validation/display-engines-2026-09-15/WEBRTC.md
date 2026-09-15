@@ -69,3 +69,20 @@ client success is still awaiting a retry; no claim that its network is fixed.
 Run this only before handing the single-controller prototype to the user: a
 second receiver replaces the current controller. Production sessions are not
 affected.
+
+## Second remote failure: reachability
+
+The remote receiver gathered STUN server-reflexive candidates, but remained in
+ICE checking. Its signaling socket closed before the 25-second UI timeout.
+Added a two-second application keepalive, filtered out by the signaling proxy,
+and close-code logging on both sides. The exact source of that socket closure
+has not yet been established.
+
+A probe run on the enrolled `pro` machine timed out connecting to TCP 59010 on
+both the public server address and its Tailscale address. The server had active
+listeners on both addresses. `/etc/ufw/ufw.conf` has `ENABLED=yes`; inspecting
+rules or changing them requires sudo authentication, unavailable to this agent.
+This establishes an unreachable TCP fallback, not proof of the exact firewall
+rule or of UDP failure. Further remote testing requires fixing direct media
+reachability or adding a reachable TURN relay. BB Connect's HTTP share alone
+does not forward this port. Do not claim another retry will solve it.

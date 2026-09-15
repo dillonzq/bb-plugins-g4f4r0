@@ -87,10 +87,10 @@ wss.on("connection", (ws,req) => {
     if(webrtc && req.url!.startsWith("/api/webrtc/signaling")) {
       const upstream=new WebSocket("ws://127.0.0.1:"+enginePort+"/api/webrtc/signaling");
       const pending: string[]=[];
-      ws.on("message",raw=>{if(upstream.readyState===1)upstream.send(String(raw));else if(pending.length<16)pending.push(String(raw));else ws.close();});
+      ws.on("message",raw=>{if(String(raw)==="BROWSE_PING"){ws.send("BROWSE_PONG");return;}if(upstream.readyState===1)upstream.send(String(raw));else if(pending.length<16)pending.push(String(raw));else ws.close();});
       upstream.on("open",()=>{if(ws.readyState!==1){upstream.close();return;}for(const m of pending)upstream.send(m);pending.length=0;});
       upstream.on("message",raw=>{if(ws.readyState===1)ws.send(String(raw));});
-      upstream.on("error",()=>ws.close());upstream.on("close",()=>ws.close());ws.on("close",()=>upstream.close());return;
+      upstream.on("error",e=>{console.error("RTC upstream error",e.message);ws.close();});upstream.on("close",(code)=>{console.error("RTC upstream close",code);ws.close();});ws.on("close",code=>{console.error("RTC client close",code);upstream.close();});return;
     }
     if(req.url!.startsWith("/control")){const direct=new DirectInput(source);let chain=Promise.resolve();ws.on("message",raw=>{chain=chain.then(async()=>{try{const m=JSON.parse(String(raw));const result=await direct.run("bench",m.events);ws.send(JSON.stringify({seq:m.seq,...result}));}catch{ws.close();}});});ws.on("close",()=>void chain.finally(()=>direct.reset()));return;}
     if(!req.url!.startsWith("/video")){ws.close();return;}
