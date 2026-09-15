@@ -1,3 +1,4 @@
+import {videoRelay,connectVideoRelay} from "../src/video-relay";
 import { SelkiesStream } from "../src/selkies";
 import { viewerHtml } from "../src/viewer";
 import { DirectInput } from "../src/direct-input";
@@ -20,6 +21,9 @@ if (!["jpeg", "selkies", "kasm", "custom"].includes(mode))
   throw Error("Expected jpeg, selkies, or kasm");
 if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600)
   throw Error("Duration must be between 0 and 3600 seconds");
+const binaryRelay=process.argv.includes("--binary-relay");
+const ackDelay=Number(process.argv.find(a=>a.startsWith("--ack-delay="))?.split("=")[1]||0);
+if(!Number.isFinite(ackDelay)||ackDelay<0||ackDelay>1000)throw Error("Invalid ACK delay");
 const shaped = process.argv.includes("--shaped");
 if (shaped && mode !== "jpeg")
   throw Error("Traffic shaping is implemented only for the JPEG reference");
@@ -66,8 +70,14 @@ wss.on("connection", (ws,req) => {
   if(mode==="custom") {
     if(req.url!.startsWith("/control")){const direct=new DirectInput(source);let chain=Promise.resolve();ws.on("message",raw=>{chain=chain.then(async()=>{try{const m=JSON.parse(String(raw));const result=await direct.run("bench",m.events);ws.send(JSON.stringify({seq:m.seq,...result}));}catch{ws.close();}});});ws.on("close",()=>void chain.finally(()=>direct.reset()));return;}
     if(!req.url!.startsWith("/video")){ws.close();return;}
+    if(binaryRelay){
+      let stopped=false,upstream:Awaited<ReturnType<typeof connectVideoRelay>>|undefined;
+      ws.on('close',()=>{stopped=true;upstream?.close();void customStream?.stop();});
+      ws.on('message',raw=>setTimeout(()=>{if(upstream?.readyState===1)upstream.send(String(raw));},ackDelay));
+      void(async()=>{customStream=await SelkiesStream.start(root,display.env);if(customStream.processId)extraPids.add(customStream.processId);const endpoint=await videoRelay(customStream,async()=>({url:'http://127.0.0.1:'+port+'/source',loading:false}));if(stopped){await customStream.stop();return;}upstream=await connectVideoRelay(endpoint);upstream.on('message',(data,binary)=>{if(ws.readyState===1)ws.send(data,{binary});});upstream.on('close',()=>ws.close());upstream.on('error',()=>ws.close());if(stopped)upstream.close();else upstream.send('start');})().catch(e=>{console.error(e);ws.close();});return;
+    }
     let done=false,outstanding=0;
-    ws.on("close",()=>{done=true;void customStream?.stop();});ws.on("message",()=>outstanding--);
+    ws.on("close",()=>{done=true;void customStream?.stop();});ws.on("message",()=>setTimeout(()=>outstanding--,ackDelay));
     void(async()=>{customStream=await SelkiesStream.start(root,display.env);if(customStream.processId)extraPids.add(customStream.processId);try{while(!done){if(outstanding>0){await pause(2);continue;}const packets=await customStream.read();if(done)break;ws.send(JSON.stringify({url:"http://127.0.0.1:"+port+"/source",loading:false}));for(const packet of packets){outstanding++;ws.send(Buffer.from(packet,"base64"));}}}finally{await customStream.stop();}})().catch(e=>{console.error(e);ws.close();});return;
   }
   const credit = new Map<number, { at: number; bytes: number }>(),
@@ -532,6 +542,8 @@ try {
   console.log(
     JSON.stringify({
       mode,
+      binaryRelay,
+      ackDelay,
       disconnected,
       shaped,
       adaptiveEnabled,

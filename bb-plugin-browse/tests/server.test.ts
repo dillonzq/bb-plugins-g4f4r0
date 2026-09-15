@@ -1,3 +1,5 @@
+import {videoRelay} from "../src/video-relay";
+import type {SelkiesStream} from "../src/selkies";
 import { describe, it, expect, vi } from "vitest";
 import {
   createFakePluginHost,
@@ -13,6 +15,7 @@ const base = {
 };
 async function fixture(
   options: {
+    relay?: {port:number;token:string};
     progressiveFrames?: boolean;
     frameData?: string;
     threadActive?: boolean;
@@ -157,7 +160,8 @@ async function fixture(
           durationMs: 1,
           artifacts: [],
         };
-      if(call.method === "videoStart" || call.method === "videoStop")return {ok:true};
+      if(call.method === "videoStart")return {ok:true,...(options.relay?{relay:options.relay}:{})};
+      if(call.method === "videoStop")return {ok:true};
       if(call.method === "videoRead")return {packets:[Buffer.from([4,1,0,0,0,0,5,0,3,32,1]).toString('base64')],url:'https://example.com/',loading:false};
       if (call.method === "direct") return {selection:"selected"};
       if (call.method === "release") return { released: true };
@@ -722,7 +726,7 @@ it('bounds unacknowledged bytes as well as the number of frames',async()=>{
  try{
   const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
   const stream=await f.harness.behavior.experimental_openWebSocket(`/cast?id=${r.session.id}&binary=1`);
-  await vi.waitFor(()=>expect(stream.sent).toHaveLength(2));
+  await vi.waitFor(()=>expect(stream.sent,JSON.stringify(stream.sent)).toHaveLength(2));
   await new Promise(r=>setTimeout(r,40));expect(stream.sent).toHaveLength(2);
   await stream.receive(JSON.stringify({ack:1}));
   await vi.waitFor(()=>expect(stream.sent).toHaveLength(4));
@@ -781,7 +785,7 @@ it('keeps video opt-in and binds its display and stream to the selected host',as
   const response=await f.harness.behavior.fetchHttp('GET',`/viewer?id=${result.session.id}`);
   expect(await response.text()).toContain('data-video="1"');
   const stream=await f.harness.behavior.experimental_openWebSocket(`/video?id=${result.session.id}`);
-  await vi.waitFor(()=>expect(stream.sent).toHaveLength(2));
+  await vi.waitFor(()=>expect(stream.sent,JSON.stringify(stream.sent)).toHaveLength(2));
   await new Promise(r=>setTimeout(r,30));expect(stream.sent).toHaveLength(2);
   await stream.receive('ack');await vi.waitFor(()=>expect(stream.sent).toHaveLength(4));
   await stream.close();
@@ -806,3 +810,18 @@ it('rejects video streaming from an ordinary shared-display session',async()=>{
  expect(resumed.session.video).toBe(true);
  }finally{await f.harness.lifecycle.dispose();}
  });
+
+it('forwards binary frames without polling videoRead or exposing its private token',async()=>{
+ const encoder={isClosed:false,onStop:undefined as (()=>void)|undefined,readPackets:async(n:number)=>Array.from({length:n},()=>Buffer.from([4,1,0,0,0,0,5,0,3,32,1])),stop:async()=>{encoder.isClosed=true;encoder.onStop?.();}};
+ const relay=await videoRelay(encoder as unknown as SelkiesStream,async()=>({url:'https://example.com',loading:false}));
+ const f=await fixture({relay});
+ try {
+ const result:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+ const ws=await f.harness.behavior.experimental_openWebSocket('/video?id='+result.session.id);
+ await vi.waitFor(()=>expect(ws.sent.length).toBe(7));
+ expect(f.calls.some(c=>c.method==='videoRead')).toBe(false);
+ expect(JSON.stringify(ws.sent)).not.toContain(relay.token);
+ await ws.receive('ack');await vi.waitFor(()=>expect(ws.sent.length).toBe(8));
+ await ws.close();await vi.waitFor(()=>expect(encoder.isClosed).toBe(true));
+ }finally{await encoder.stop();await f.harness.lifecycle.dispose();}
+});

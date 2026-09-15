@@ -7,6 +7,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 /** Private, read-only encoder connection. Browser input continues through CDP. */
 export class SelkiesStream {
+  onStop?: () => void;
+  get isClosed(){return this.closed;}
   private child?: ChildProcess;
   get processId() {
     return this.child?.pid;
@@ -167,7 +169,8 @@ export class SelkiesStream {
     this.error = new Error(message);
     void this.stop();
   }
-  async read(): Promise<string[]> {
+  async read(): Promise<string[]> { return (await this.readPackets()).map(packet=>packet.toString("base64")); }
+  async readPackets(limit=8): Promise<Buffer[]> {
     this.lastRead = Date.now();
     if (this.error) throw this.error;
     if (this.closed) throw Error("Video stream closed.");
@@ -181,16 +184,17 @@ export class SelkiesStream {
       });
     this.wake = undefined;
     if (this.error) throw this.error;
-    const packets = this.packets.splice(0, 8);
+    const packets = this.packets.splice(0, Math.max(1, Math.min(8, limit)));
     for (const packet of packets) {
       this.bytes -= packet.length;
       this.socket?.send(`CLIENT_FRAME_ACK ${packet.readUInt16BE(2)} 0`);
     }
-    return packets.map((packet) => packet.toString("base64"));
+    return packets;
   }
   stop(): Promise<void> {
     return (this.stopping ??= (async () => {
       this.closed = true;
+      this.onStop?.();
       clearInterval(this.timer);
       this.wake?.();
       this.packets = [];

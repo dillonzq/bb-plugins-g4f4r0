@@ -119,3 +119,7 @@ The disposable installed test session was released and removed from Browse histo
 ### Video default rollout (2026-09-15)
 
 At the user’s explicit request, new managed sessions (including the sidebar launcher) and reconnects now prefer Selkies video. Hosts without the private Linux runtime retain ordinary Chrome/JPEG; decoder or stream failures also fall back automatically. This changes rollout policy, not the benchmark findings above. Native sessions are unchanged.
+
+### Continuous binary relay trial (2026-09-15)
+
+[Relay validation](validation/display-engines-2026-09-15/BINARY-RELAY.md): removes video RPC/base64 on server-hosted sessions and pipelines six frames. Delayed-ACK fixture improved from 7.9 to 16.5 presented FPS, but multi-second stalls and receiver memory retention remain. This is a trial, not a 60 FPS claim. Other connected hosts retain RPC fallback.

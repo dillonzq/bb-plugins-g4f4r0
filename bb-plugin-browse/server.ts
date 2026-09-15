@@ -1,3 +1,4 @@
+import { connectVideoRelay } from "./src/video-relay";
 import { AdaptiveStream } from "./src/adaptive-stream";
 import { directBatch } from "./src/direct-input";
 import { randomUUID } from "node:crypto";
@@ -224,7 +225,7 @@ export default async function plugin(bb: BbPluginApi) {
   }
   const viewerErrors = new Map<string, string>();
   const presence = new Map<string, Map<string, number>>();
-  const viewerTelemetry = new Map<string, Map<string, {at:number;host:string;fps:number;mbps:number;inputLatencyMs:number;displayed:number;dropped:number;streamTier?:number;frameAckMs?:number}>>();
+  const viewerTelemetry = new Map<string, Map<string, {at:number;host:string;fps:number;mbps:number;inputLatencyMs:number;displayed:number;dropped:number;streamTier?:number;frameAckMs?:number;transport?:string}>>();
   function pruneViewerTelemetry(){for(const [sid,clients] of viewerTelemetry){for(const [cid,value] of clients)if(Date.now()-value.at>15000)clients.delete(cid);if(!clients.size)viewerTelemetry.delete(sid);}}
   function visibleClients(id: string) {
     const clients = presence.get(id);
@@ -975,7 +976,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.http.route("POST", "/presence", async (c) => {
     try {
       const report = z
-        .object({ id, clientId: id, visible: z.boolean(), metrics:z.object({host:z.string().max(200),fps:z.number().min(0).max(1000),mbps:z.number().min(0).max(10000),inputLatencyMs:z.number().min(0).max(60000),displayed:z.number().min(0),dropped:z.number().min(0),streamTier:z.number().int().min(0).max(2).optional(),frameAckMs:z.number().min(0).max(10000).optional()}).optional() })
+        .object({ id, clientId: id, visible: z.boolean(), metrics:z.object({transport:z.enum(["jpeg","h264-rpc","h264-binary"]).optional(),host:z.string().max(200),fps:z.number().min(0).max(1000),mbps:z.number().min(0).max(10000),inputLatencyMs:z.number().min(0).max(60000),displayed:z.number().min(0),dropped:z.number().min(0),streamTier:z.number().int().min(0).max(2).optional(),frameAckMs:z.number().min(0).max(10000).optional()}).optional() })
         .parse(await c.req.json());
       get(report.id);
       const clients = presence.get(report.id) ?? new Map<string, number>();
@@ -1031,12 +1032,15 @@ export default async function plugin(bb: BbPluginApi) {
   bb.http.experimental_websocket("/video", ctx => {
     const sid=id.parse(ctx.url.searchParams.get('id')),s=get(sid),clientId=randomUUID();
     if(!s.video||s.mode!=="managed")throw Error("This session has no video prototype.");
-    let closed=false,outstanding=0,lastAck=Date.now(),wake:(()=>void)|undefined;
+    let closed=false,outstanding=0,lastAck=Date.now(),wake:(()=>void)|undefined,upstream:Awaited<ReturnType<typeof connectVideoRelay>>|undefined;
     const stop=()=>host.call('videoStop',{id:sid,clientId},{hostId:s.hostId,timeoutMs:15000}).catch(()=>{});
     return {
-      onMessage(socket,raw){if(raw!=='ack'||outstanding<=0){socket.close(1008,'Invalid video acknowledgement');return;}outstanding--;lastAck=Date.now();wake?.();},
+      onMessage(socket,raw){if(upstream){if(raw!=='ack'){socket.close(1008,'Invalid video acknowledgement');return;}upstream.send('ack');return;}if(raw!=='ack'||outstanding<=0){socket.close(1008,'Invalid video acknowledgement');return;}outstanding--;lastAck=Date.now();wake?.();},
       onOpen(socket){void(async()=>{try{
-        await host.call('videoStart',{id:sid,clientId},{hostId:s.hostId,timeoutMs:25000});
+        const started=await host.call('videoStart',{id:sid,clientId,binary:true},{hostId:s.hostId,timeoutMs:25000});
+        if(started.relay&&!closed){try{upstream=await connectVideoRelay(started.relay);}catch{ /* Other hosts retain the RPC fallback. */ }
+          if(upstream){if(closed){upstream.close();return;}await new Promise<void>((resolve)=>{upstream!.on('message',(raw,binary)=>{if(!closed)socket.send(binary?Buffer.from(raw as Buffer):String(raw));});upstream!.on('close',()=>{resolve();if(!closed){socket.send(JSON.stringify({error:'Video stream ended'}));socket.close(1011,'Video ended');}});upstream!.on('error',()=>upstream?.close());upstream!.send('start');});return;}}
+
         while(!closed){
           if(outstanding>0){if(Date.now()-lastAck>5000)throw Error("Video acknowledgement timed out.");await new Promise<void>(resolve=>{const timer=setTimeout(resolve,1000);wake=()=>{clearTimeout(timer);resolve();};});continue;}
           const data=await host.call('videoRead',{id:sid,clientId},{hostId:s.hostId,timeoutMs:5000});
@@ -1045,7 +1049,7 @@ export default async function plugin(bb: BbPluginApi) {
           lastAck=Date.now();for(const packet of data.packets){outstanding++;socket.send(Buffer.from(packet,'base64'));}
         }
       }catch(e){if(!closed){socket.send(JSON.stringify({error:redact(String(e))}));socket.close(1011,'Video unavailable');}}finally{await stop();}})();},
-      onClose(){closed=true;wake?.();void stop();},
+      onClose(){closed=true;upstream?.close();wake?.();void stop();},
     };
   });
   bb.http.experimental_websocket("/cast", ctx => {

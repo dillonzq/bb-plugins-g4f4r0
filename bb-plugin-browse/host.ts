@@ -1,3 +1,4 @@
+import { videoRelay } from "./src/video-relay";
 import { SelkiesStream } from "./src/selkies";
 import { StreamDemands } from "./src/adaptive-stream";
 import { DirectInput } from "./src/direct-input";
@@ -688,7 +689,7 @@ export default experimental_defineHostEntry({
       return { cancelled: true };
     },
     "local-servers": async () => localServers(),
-    videoStart: async ({id,clientId})=>{
+    videoStart: async ({id,clientId,binary})=>{
       const s=session(id);
       const deadline=Date.now()+10000;
       while(s.status==="connecting"&&Date.now()<deadline)await sleep(50);
@@ -697,7 +698,7 @@ export default experimental_defineHostEntry({
       const env=s.managed.displayEnv;
       const stream=(async()=>{if(!s.recording)await s.cdp?.stopLiveCast();return SelkiesStream.start(s.root,env);})();
       s.video={clientId,stream};
-      try {await stream;return {ok:true};}catch(e){if(s.video?.clientId===clientId)s.video=undefined;throw e;}
+      try {const encoder=await stream;const relay=binary?await videoRelay(encoder,async()=>s.cdp!.evaluate("({url:location.href,loading:document.readyState==='loading'})")):undefined;return {ok:true,...(relay?{relay}:{})};}catch(e){await stream.then(encoder=>encoder.stop()).catch(()=>{});if(s.video?.clientId===clientId)s.video=undefined;throw e;}
     },
     videoRead: async ({id,clientId})=>{const s=session(id);if(s.video?.clientId!==clientId)throw Error("Video lease is unavailable.");const packets=await (await s.video.stream).read();if(!s.frameInfo||Date.now()-s.frameInfo.at>500){const info=await s.cdp!.evaluate("({url:location.href,loading:document.readyState==='loading'})");s.frameInfo={...info,at:Date.now()};}return {packets,url:s.frameInfo!.url,loading:s.frameInfo!.loading};},
     videoStop: async ({id,clientId})=>{const s=sessions.get(id);if(s?.video?.clientId===clientId){const lease=s.video;await lease.stream.then(stream=>stream.stop()).catch(()=>{});if(s.video===lease)s.video=undefined;}return {ok:true};},

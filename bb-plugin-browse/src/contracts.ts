@@ -175,7 +175,7 @@ export const viewerInput = z.discriminatedUnion("kind", [
 ]);
 const localServerList = z.object({ servers: z.array(z.object({ port: z.number(), name: z.string(), url: z.string() })), error: z.string().nullable() });
 export const hostContract = defineRpcContract({
-  videoStart: {input:z.object({id,clientId:id}),output:z.object({ok:z.boolean()})},
+  videoStart: {input:z.object({id,clientId:id,binary:z.boolean().optional()}),output:z.object({ok:z.boolean(),relay:z.object({port:z.number().int().min(1).max(65535),token:z.string()}).optional()})},
   videoRead: {input:z.object({id,clientId:id}),output:z.object({packets:z.array(z.string()),url:z.string(),loading:z.boolean()})},
   videoStop: {input:z.object({id,clientId:id}),output:z.object({ok:z.boolean()})},
   direct: { input: directBatch, output: z.object({selection:z.string().optional(),cursor:z.string().optional()}) },
