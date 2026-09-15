@@ -866,6 +866,7 @@ export default experimental_defineHostEntry({
                 if (e.code !== "EEXIST") throw e;
               });
 
+            const startupAt = Date.now();
             signal.throwIfAborted();
             if (input.mode === "managed") {
               s.managed = await launchManaged(
@@ -892,6 +893,7 @@ export default experimental_defineHostEntry({
               };
               s.endpoint = s.bridge.endpoint;
             }
+            const chromeReadyAt = Date.now();
             s.cdp = await Cdp.connect(s.endpoint, input.mode === "managed");
             s.targetId = s.cdp.targetId;
             s.cdp.onDisconnect = () => {
@@ -929,13 +931,14 @@ export default experimental_defineHostEntry({
                 );
               throw e;
             }
-            j.output = "Stagehand connected to the selected page.";
+            const driverReadyAt = Date.now();
             if (input.mode === "managed" && input.url !== "about:blank")
               await command(s, ["open", safeUrl(input.url)], signal);
             await command(s, ["get", "title"], signal);
             if (input.mode === "managed")
               await s.cdp.startLiveCast().catch(() => {});
             s.status = "ready";
+            j.output = `Stagehand connected. Chrome: ${chromeReadyAt-startupAt}ms; control: ${driverReadyAt-chromeReadyAt}ms; navigation and first capture setup: ${Date.now()-driverReadyAt}ms.`;
           } catch (e) {
             s.status = "error";
             s.error = redact(

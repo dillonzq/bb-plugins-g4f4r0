@@ -490,6 +490,7 @@ function LiveBrowser({
   const rpc = useRpc<typeof rpcContract>();
   const nav = useBbNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [loadedViewerId, setLoadedViewerId] = useState("");
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [localLoaded, setLocalLoaded] = useState(false);
   const [error, setError] = useState("");
@@ -659,11 +660,17 @@ function LiveBrowser({
       </div>
     );
   return (
-    <div className="relative flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col bg-background">
+      {loadedViewerId !== id && <div role="status" aria-label="Loading browser view" className="absolute inset-0 z-10 flex flex-col bg-background">
+        <div className="flex h-12 shrink-0 items-center border-b px-4 py-2"><div className="h-7 w-full rounded-md border px-3 py-1 text-xs text-muted-foreground">{current?.url || address}</div></div>
+        <div className="flex min-h-0 flex-1 items-center justify-center p-3"><div aria-hidden="true" className="aspect-[8/5] w-full max-w-7xl rounded-md border bg-muted motion-safe:animate-pulse" /></div>
+      </div>}
       {error && <p role="alert" className="shrink-0 px-4 py-2 text-xs text-muted-foreground">{error}</p>}
       <iframe
         title="Live browser"
-        className="min-h-0 w-full flex-1 border-0 bg-black"
+        className="min-h-0 w-full flex-1 border-0 bg-background"
+        style={{ opacity: loadedViewerId === id ? 1 : 0 }}
+        onLoad={() => setLoadedViewerId(id)}
         src={`/api/v1/plugins/browse/http/viewer?id=${encodeURIComponent(id)}`}
       />
     </div>

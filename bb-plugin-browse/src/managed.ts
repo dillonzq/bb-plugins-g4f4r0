@@ -383,19 +383,16 @@ async function launchBrowser(
   profileId: string,
   signal: AbortSignal,
 ): Promise<ManagedBrowser> {
-  const info = await diagnostics(root);
-  if (!info.chromeRunnable || !info.chromePath)
-    throw new Error(
-      "Chrome is not runnable on this thread host. Open Browse Settings and install the browser/dependencies. " +
-        (info.launchError ?? ""),
-    );
+  const chromePath = await chromeExecutable(root);
+  if (!chromePath || !existsSync(chromePath))
+    throw new Error("Chrome is not installed on this thread host. Open Browse Settings and install the browser/dependencies.");
   if (!/^ab-[a-z0-9-]+$/.test(profileId)) throw new Error("Invalid profile ID");
   const profile = join(root, "profiles", profileId);
   await fs.mkdir(profile, { recursive: true, mode: 0o700 });
   await fs.rm(join(profile, "DevToolsActivePort"), { force: true });
   const display = await acquireDisplay(root, managedEnv(root), signal);
   const child = spawn(
-    info.chromePath,
+    chromePath,
     chromeArgs(profile, stagehandExtensionOrigin(root)),
     {
       env: display.env,
