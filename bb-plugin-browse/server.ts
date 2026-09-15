@@ -580,6 +580,31 @@ export default async function plugin(bb: BbPluginApi) {
         throw new Error("Browser is not ready. Reconnect the session.");
       return host.call("input", input, { hostId: s.hostId });
     },
+    "open-address": async ({ threadId, url, paramsJson }) => {
+      const before = await bb.sdk.threads.tabs.get({ threadId });
+      const original = before.tabs.find(t => t.kind === "plugin-panel" && t.pluginId === "browse" && t.actionId === "live" && (t.paramsJson ?? "{}") === paramsJson);
+      if (!original) throw new Error("This browser tab is no longer open.");
+      const result = await startManaged(threadId, url);
+      try {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const state = await bb.sdk.threads.tabs.get({ threadId });
+          if (!state.tabs.some(t => t.id === original.id)) throw new Error("This browser tab was closed while opening the page.");
+          const targetParams = JSON.stringify({ id: result.session.id });
+          const tabs = state.tabs.filter(t => t.id === original.id || !(t.kind === "plugin-panel" && t.pluginId === "browse" && t.actionId === "live" && t.paramsJson === targetParams)).map(t => t.id === original.id ? { ...original, paramsJson: targetParams, title: new URL(result.session.url).hostname } : t);
+          try {
+            await bb.sdk.threads.tabs.update({ threadId, expectedRevision: state.revision, tabs });
+            return result;
+          } catch (error) {
+            const latest = await bb.sdk.threads.tabs.get({ threadId });
+            if (latest.revision === state.revision || attempt === 3) throw error;
+          }
+        }
+        throw new Error("Browser tabs changed too quickly. Try again.");
+      } catch (error) {
+        await release(result.session);
+        throw error;
+      }
+    },
     start: async (input) => {
       if (input.mode === "managed") {
         if (input.instanceId || input.generation || input.tabId)

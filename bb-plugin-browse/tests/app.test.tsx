@@ -355,18 +355,19 @@ it("opens typed addresses on the thread host and rejects credential-bearing URLs
   const app = await loadPluginApp(() => import("../app"));
   const slot = renderSlot(app.threadPanelActions[0]!, { threadId: "thread_one", params: {} }, {
     openThreadPanel: () => true,
-    rpc: { list: () => [], start: () => ({ session: { id: "typed", url: "https://example.com/", hostLabel: "server" } }) },
+    rpc: { list: () => [], "open-address": () => ({ session: { id: "typed", url: "https://example.com/", hostLabel: "server" } }) },
   });
   try {
     const input = slot.getByRole("textbox", { name: "Website address" });
     fireEvent.change(input, { target: { value: "https://user:secret@example.com" } });
     fireEvent.submit(input.closest("form")!);
     await slot.findByRole("alert");
-    expect(slot.inspection.rpcCalls.filter(c => c.method === "start")).toHaveLength(0);
+    expect(slot.inspection.rpcCalls.filter(c => c.method === "open-address")).toHaveLength(0);
     fireEvent.change(input, { target: { value: "example.com" } });
     fireEvent.submit(input.closest("form")!);
-    await waitFor(() => expect(slot.inspection.navigateCalls).toHaveLength(1));
-    expect(slot.inspection.rpcCalls.find(c => c.method === "start")?.input).toEqual({ threadId: "thread_one", mode: "managed", url: "https://example.com/" });
+    await waitFor(() => expect(slot.inspection.rpcCalls.filter(c => c.method === "open-address")).toHaveLength(1));
+    expect(slot.inspection.navigateCalls).toHaveLength(0);
+    expect(slot.inspection.rpcCalls.find(c => c.method === "open-address")?.input).toEqual({ threadId: "thread_one", paramsJson: "{}", url: "https://example.com/" });
   } finally { slot.lifecycle.unmount(); }
 });
 

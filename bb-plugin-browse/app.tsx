@@ -517,10 +517,8 @@ function LiveBrowser({
       const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`);
       if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
         throw new Error("Enter an http or https address without login details.");
-      const result = await rpc.call("start", { threadId, mode: "managed", url: url.href });
+      await rpc.call("open-address", { threadId, url: url.href, paramsJson: JSON.stringify(params ?? {}) });
       await sync();
-      if (!nav.openThreadPanel({ actionId: "live", params: { id: result.session.id }, title: browserTitle(result.session) }))
-        throw new Error("Browser started. Select its session below to open it.");
     } catch (e) { setError(String(e)); }
     finally { launching.current = false; setOpening(false); }
   }

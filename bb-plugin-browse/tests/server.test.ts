@@ -43,7 +43,7 @@ async function fixture(
     pluginId: "browse",
     sdk: {
       threads: {
-        tabs: { get: async () => { if (options.tabReadFails) throw Error("offline"); return { revision: 1, tabs: options.panelTabs ?? [] }; } },
+        tabs: { update: async (input: any) => { options.panelTabs = input.tabs; return { revision: 2, tabs: input.tabs }; }, get: async () => { if (options.tabReadFails) throw Error("offline"); return { revision: 1, tabs: options.panelTabs ?? [] }; } },
         get: async () => ({ environmentId: "env_thread", status: options.threadActive ? "active" : "idle" }) as any,
         paneAction,
       },
@@ -725,4 +725,19 @@ it('bounds unacknowledged bytes as well as the number of frames',async()=>{
   await vi.waitFor(()=>expect(stream.sent).toHaveLength(4));
   await stream.close();
  }finally{await f.harness.lifecycle.dispose();}
+});
+
+
+it("opens an address in the existing blank panel and preserves other tabs", async () => {
+  const options = { panelTabs: [
+    { id: "blank", kind: "plugin-panel", pluginId: "browse", actionId: "live", paramsJson: "{}", title: "Browser" },
+    { id: "other", kind: "thread-info" },
+  ] as any[] };
+  const f = await fixture(options);
+  try {
+    const result: any = await f.harness.behavior.callRpc("open-address", { threadId: "thread_one", url: "https://example.com", paramsJson: "{}" });
+    expect(options.panelTabs).toHaveLength(2);
+    expect(options.panelTabs[0]).toMatchObject({ id: "blank", title: "example.com", paramsJson: JSON.stringify({ id: result.session.id }) });
+    expect(options.panelTabs[1]).toEqual({ id: "other", kind: "thread-info" });
+  } finally { await f.harness.lifecycle.dispose(); }
 });
