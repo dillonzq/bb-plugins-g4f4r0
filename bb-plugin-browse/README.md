@@ -30,6 +30,8 @@ Tools and the bundled skill become available when BB refreshes the agent session
 
 ## Private login forms
 
+Managed Chrome disables password saving, automatic sign-in, password filling, and address/payment autofill before every launch and reconnect. Password filling uses Chromium’s `password_manager.password_manager_blocklist` with `*`; disabling saving alone still permits filling. Preferences are merged atomically without deleting cookies, saved credentials, or other profile settings. This applies to Browse-managed Chrome, not native BB tabs, device password managers, or suggestions implemented by websites. Verified with installed Chrome 153 using `npx tsx tests/profile-preferences-live.mts <host-data-path>`.
+
 Browse can request username, password, or verification-code fields through BB's private input UI, using the same SDK mechanism as the built-in Secrets plugin. Device password managers such as 1Password can fill this form. No vault connection or service account is required. Environment-variable requests still use Secrets.
 
 The request starts a credentials job immediately (agents poll it; the CLI waits). It works on the selected managed or native session, locks automation for up to five minutes, keeps the live view available, binds to the original document and fields, then fills and clicks once. Values are excluded from its result and job history, and are not written to dotenv files. Existing input nodes are cleared after delivery. Cancellation before filling preserves the page.

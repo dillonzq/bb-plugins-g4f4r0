@@ -3,6 +3,7 @@ import { join, delimiter } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { runProcess } from "./process";
+import { configureProfilePreferences } from "./profile-preferences";
 import {
   installed,
   chromeExecutable,
@@ -432,6 +433,7 @@ async function launchBrowser(
   if (!/^ab-[a-z0-9-]+$/.test(profileId)) throw new Error("Invalid profile ID");
   const profile = join(root, "profiles", profileId);
   await fs.mkdir(profile, { recursive: true, mode: 0o700 });
+  await configureProfilePreferences(profile);
   await fs.rm(join(profile, "DevToolsActivePort"), { force: true });
   const display = await acquireDisplay(
     root,
