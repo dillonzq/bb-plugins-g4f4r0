@@ -597,7 +597,6 @@ function LiveBrowser({
                   }}>
                     <BrowseIcon name="Globe" className="size-4 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{browserTitle(s)}</span><span className="block truncate text-xs text-muted-foreground">{s.url}</span></span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{group.title === "Open sessions" ? s.status : ""}</span>
                   </button>
                 </li>
               ))}
