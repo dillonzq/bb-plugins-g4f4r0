@@ -67,7 +67,7 @@ onmessage = async (e) => {
         codedWidth: w,
         codedHeight: h,
         optimizeForLatency: true,
-        hardwareAcceleration: "prefer-software",
+        hardwareAcceleration: "no-preference",
       });
     }
     if (decoder.decodeQueueSize >= 8) throw Error("Video decoding fell behind");

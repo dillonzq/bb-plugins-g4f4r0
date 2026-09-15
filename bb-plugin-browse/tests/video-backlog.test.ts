@@ -1,0 +1,41 @@
+import { it, expect, vi } from "vitest";
+import { SelkiesStream } from "../src/selkies";
+import type WebSocket from "ws";
+it("discards stale delta frames and resumes only at a keyframe", async () => {
+  const stream = new SelkiesStream();
+  const send = vi.fn();
+  stream["socket"] = { send, terminate: vi.fn() } as unknown as WebSocket;
+  const packet = (id: number, key = false) => {
+    const b = Buffer.alloc(11);
+    b[0] = 4;
+    b[1] = key ? 1 : 0;
+    b.writeUInt16BE(id, 2);
+    return b;
+  };
+  for (let i = 0; i < 8; i++) stream["enqueue"](packet(i, i === 0));
+  stream["enqueue"](packet(8));
+  stream["enqueue"](packet(9));
+  expect(
+    send.mock.calls.filter((c) => c[0] === "REQUEST_KEYFRAME"),
+  ).toHaveLength(1);
+  expect(stream["packets"]).toHaveLength(0);
+  stream["enqueue"](packet(10, true));
+  stream["enqueue"](packet(11));
+  expect((await stream.readPackets()).map((b) => b.readUInt16BE(2))).toEqual([
+    10, 11,
+  ]);
+  expect(send).toHaveBeenCalledWith("CLIENT_FRAME_ACK 9 0");
+  await stream.stop();
+});
+it('retries recovery when the encoder is silent and clears the retry on stop',async()=>{
+ vi.useFakeTimers();
+ const stream=new SelkiesStream();const send=vi.fn();
+ stream['socket']={send,terminate:vi.fn()} as unknown as WebSocket;
+ try {
+  for(let i=0;i<9;i++){const b=Buffer.alloc(11);b[0]=4;b.writeUInt16BE(i,2);stream['enqueue'](b);}
+  await vi.advanceTimersByTimeAsync(550);
+  expect(send.mock.calls.filter(c=>c[0]==='REQUEST_KEYFRAME')).toHaveLength(2);
+  await stream.stop();const count=send.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(1100);expect(send).toHaveBeenCalledTimes(count);
+ }finally{await stream.stop();vi.useRealTimers();}
+});

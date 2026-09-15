@@ -8,7 +8,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 /** Private, read-only encoder connection. Browser input continues through CDP. */
 export class SelkiesStream {
   onStop?: () => void;
-  get isClosed(){return this.closed;}
+  get isClosed() {
+    return this.closed;
+  }
   private child?: ChildProcess;
   get processId() {
     return this.child?.pid;
@@ -16,6 +18,9 @@ export class SelkiesStream {
   private socket?: WebSocket;
   private packets: Buffer[] = [];
   private bytes = 0;
+  private awaitingKeyframe = false;
+  private keyframeRequestedAt = 0;
+  private keyframeRetry?: ReturnType<typeof setTimeout>;
   private error?: Error;
   private closed = false;
   private wake?: () => void;
@@ -78,7 +83,7 @@ export class SelkiesStream {
           "--framerate",
           "60",
           "--video-bitrate",
-          "8000",
+          "4000",
           "--rate-control-mode",
           "cbr",
           "--video-streaming-mode",
@@ -123,18 +128,7 @@ export class SelkiesStream {
           const packet = Buffer.isBuffer(data)
             ? data
             : Buffer.from(data as ArrayBuffer);
-          // The pinned full-frame H.264 protocol has a ten-byte header.
-          if (packet.length < 11 || packet[0] !== 4) return;
-          if (
-            stream.packets.length >= 60 ||
-            stream.bytes + packet.length > 4 * 1024 * 1024
-          ) {
-            stream.fail("Video receiver fell behind.");
-            return;
-          }
-          stream.packets.push(packet);
-          stream.bytes += packet.length;
-          stream.wake?.();
+          stream.enqueue(packet);
         });
         socket.send(
           "SETTINGS," +
@@ -145,7 +139,7 @@ export class SelkiesStream {
               manual_height: 800,
               encoder: "h264enc",
               framerate: 60,
-              video_bitrate: 8000,
+              video_bitrate: 4000,
               video_streaming_mode: false,
               video_fullcolor: false,
               useCssScaling: true,
@@ -165,12 +159,54 @@ export class SelkiesStream {
       throw error;
     }
   }
+  private requestKeyframe() {
+    if (Date.now() - this.keyframeRequestedAt < 500) return;
+    this.keyframeRequestedAt = Date.now();
+    this.socket?.send("REQUEST_KEYFRAME");
+    clearTimeout(this.keyframeRetry);
+    this.keyframeRetry = setTimeout(() => { if (!this.closed && this.awaitingKeyframe) this.requestKeyframe(); }, 550);
+    this.keyframeRetry.unref();
+  }
+  private enqueue(packet: Buffer) {
+    // The pinned full-frame H.264 protocol has a ten-byte header.
+    if (packet.length < 11 || packet[0] !== 4) return;
+    // Never replay a second of stale scrolling. Delta frames depend on
+    // earlier frames, so recover at a fresh keyframe after dropping backlog.
+    if (this.packets.length >= 8 || this.bytes + packet.length > 1024 * 1024) {
+      for (const stale of this.packets)
+        this.socket?.send(`CLIENT_FRAME_ACK ${stale.readUInt16BE(2)} 0`);
+      this.packets = [];
+      this.bytes = 0;
+      this.awaitingKeyframe = true;
+      this.requestKeyframe();
+    }
+    if (this.awaitingKeyframe) {
+      if (packet[1] !== 1) {
+        this.socket?.send(`CLIENT_FRAME_ACK ${packet.readUInt16BE(2)} 0`);
+        this.requestKeyframe();
+        return;
+      }
+      this.awaitingKeyframe = false;
+      clearTimeout(this.keyframeRetry);
+    }
+    if (packet.length > 4 * 1024 * 1024) {
+      this.fail("Video frame exceeds budget.");
+      return;
+    }
+    this.packets.push(packet);
+    this.bytes += packet.length;
+    this.wake?.();
+  }
   private fail(message: string) {
     this.error = new Error(message);
     void this.stop();
   }
-  async read(): Promise<string[]> { return (await this.readPackets()).map(packet=>packet.toString("base64")); }
-  async readPackets(limit=8): Promise<Buffer[]> {
+  async read(): Promise<string[]> {
+    return (await this.readPackets()).map((packet) =>
+      packet.toString("base64"),
+    );
+  }
+  async readPackets(limit = 8): Promise<Buffer[]> {
     this.lastRead = Date.now();
     if (this.error) throw this.error;
     if (this.closed) throw Error("Video stream closed.");
@@ -196,6 +232,7 @@ export class SelkiesStream {
       this.closed = true;
       this.onStop?.();
       clearInterval(this.timer);
+      clearTimeout(this.keyframeRetry);
       this.wake?.();
       this.packets = [];
       this.bytes = 0;
