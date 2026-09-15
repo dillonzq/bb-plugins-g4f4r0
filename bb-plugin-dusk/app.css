@@ -381,6 +381,16 @@ div[class~="@container/page"]:has(#root-compose-prompt) > div:has(> [data-prompt
   justify-content: flex-end;
 }
 
+/* Keep the workspace/mention picker above the homepage composer. BB renders
+   it as a top-full child of the prompt, which collides with Dusk's bottom
+   anchored layout and leaves the picker hanging below the editor. */
+div[class~="@container/page"]:has(#root-compose-prompt) [data-promptbox-shell] form:has(#root-compose-prompt) div.absolute.top-full {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
 /* Mirror BB's pinned panel-toggle position and native drag-region cutout. */
 .dusk-background-header-action, .dusk-background-header-cutout {
   position: absolute;
