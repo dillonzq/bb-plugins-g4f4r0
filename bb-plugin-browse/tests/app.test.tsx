@@ -431,3 +431,20 @@ it("shows page loading immediately while navigation is still pending", async () 
     finish({ session: { id: "loading" } });
   } finally { slot.lifecycle.unmount(); }
 });
+
+it("reopens a closed browser in place and shows the loading frame immediately", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  let finish!: (value: any) => void;
+  const slot = renderSlot(app.threadPanelActions[0]!, { threadId: "thread_one", params: { id: "closed" } }, {
+    rpc: { list: () => [{ id: "closed", threadId: "thread_one", status: "released", url: "https://example.com/" }], "open-address": () => new Promise(resolve => { finish = resolve; }) },
+  });
+  try {
+    fireEvent.click(await slot.findByRole("button", { name: "Reopen page" }));
+    expect(slot.getByRole("status", { name: "Loading page" })).toBeTruthy();
+    expect(slot.queryByText("Opening…")).toBeNull();
+    await waitFor(() => expect(finish).toBeTruthy());
+    expect(slot.inspection.navigateCalls).toHaveLength(0);
+    expect(slot.inspection.rpcCalls.find(c => c.method === "open-address")?.input).toEqual({ threadId: "thread_one", url: "https://example.com/", sessionId: "closed", paramsJson: '{"id":"closed"}' });
+    finish({ session: { id: "reopened" } });
+  } finally { slot.lifecycle.unmount(); }
+});

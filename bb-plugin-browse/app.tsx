@@ -568,7 +568,7 @@ function LiveBrowser({
     seen.add(s.url); return true;
   }).slice(0, 8);
   const current = sessions.find((s) => s.id === id);
-  if (!id && opening) return <LoadingBrowserFrame url={address} />;
+  if (opening) return <LoadingBrowserFrame url={current?.url || address} />;
   if (!id)
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
@@ -652,21 +652,16 @@ function LiveBrowser({
               setOpening(true);
               setError("");
               try {
-                const r = await rpc.call("reconnect", { id });
-                if (!nav.openThreadPanel({
-                  actionId: "live",
-                  params: { id: r.session.id },
-                  title: browserTitle(r.session),
-                })) throw new Error("Browser started. Open its session from a new browser tab.");
+                await rpc.call("open-address", { threadId, url: current.url, sessionId: id, paramsJson: JSON.stringify(params ?? {}) });
               } catch (e) {
                 setError(String(e));
+                setOpening(false);
               } finally {
                 launching.current = false;
-                setOpening(false);
               }
             }}
           >
-            {opening ? "Opening…" : "Reopen page"}
+            Reopen page
           </Button>
         {error && <p role="alert" className="mt-3 max-w-sm break-words text-xs text-muted-foreground">{error}</p>}
       </div>
