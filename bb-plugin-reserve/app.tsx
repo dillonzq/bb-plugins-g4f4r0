@@ -13,17 +13,10 @@ import { GaugeIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFleetSnapshot } from "./hooks/use-fleet-snapshot";
-import type { FleetSnapshot, rpcContract } from "./server";
+import type { UsageSnapshot, rpcContract } from "./server";
 import type { LoginTotal } from "./lib/fleet.ts";
 import type { ProviderId, UsageWindow } from "./lib/usage.ts";
-import {
-  bbAgentProviderId,
-  formatCost,
-  formatFetchedAt,
-  formatRemainingPercent,
-  formatResetCredits,
-  formatResetTime,
-} from "./lib/usage.ts";
+import { bbAgentProviderId, canonicalWindowLabel, formatCost, formatFetchedAt, formatRemainingPercent, formatResetCredits, formatResetTime } from "./lib/usage.ts";
 
 const GREEN = "#22c55e";
 const AMBER = "#eab308";
@@ -34,10 +27,6 @@ function colorForUsed(value: number): string {
   if (value >= 95) return RED;
   if (value >= 80) return AMBER;
   return GREEN;
-}
-
-function windowLabel(label: string): string {
-  return label.replace(/\s+limit$/iu, "");
 }
 
 function ProviderGlyph({ id }: { id: ProviderId }) {
@@ -260,7 +249,7 @@ function CodexResetActions({
 }
 
 function WindowBlock({ window, providerName }: { window: UsageWindow; providerName: string }) {
-  const label = windowLabel(window.label);
+  const label = canonicalWindowLabel(window.label);
   return (
     <div className="min-w-0 space-y-1">
       <Row label={label} value={formatRemainingPercent(window.usedPercent)} />
@@ -305,7 +294,7 @@ function LoginCard({ login, onReload }: { login: LoginTotal; onReload: () => voi
   );
 }
 
-function ReservePopover({ snapshot, onReload, reloading }: { snapshot: FleetSnapshot; onReload: () => void; reloading: boolean }) {
+function ReservePopover({ snapshot, onReload, reloading }: { snapshot: UsageSnapshot; onReload: () => void; reloading: boolean }) {
   return (
     <>
       {snapshot.totals.length === 0 ? (
@@ -345,7 +334,7 @@ function ReserveDisclosure(_props: ExperimentalSidebarFooterDisclosureProps) {
   return (
     <div ref={container} data-reserve-shell aria-busy={(active && !snapshot && !error) || reloading} className="w-full min-w-64">
       {error ? <div role="alert" className="relative px-3 py-2 text-xs text-destructive after:pointer-events-none after:absolute after:bottom-0 after:left-0 after:h-px after:w-[200%] after:bg-sidebar-border after:content-['']">Could not refresh: {error}</div> : null}
-      {active && snapshot ? <ReservePopover snapshot={snapshot} onReload={reload} reloading={reloading} /> : <LoadingPopover />}
+      {snapshot ? <ReservePopover snapshot={snapshot} onReload={reload} reloading={reloading} /> : <LoadingPopover />}
     </div>
   );
 }

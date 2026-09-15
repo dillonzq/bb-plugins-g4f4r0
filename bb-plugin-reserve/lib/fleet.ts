@@ -1,7 +1,5 @@
 import {
-  PLAN_USAGE_LABEL,
-} from "./cursor-pools.ts";
-import {
+  canonicalWindowLabel,
   PROVIDER_IDS,
   remainingPercent,
   type ProviderId,
@@ -35,9 +33,11 @@ export interface LoginTotal {
   hosts: HostRef[];
 }
 
-export interface CodexResetState {
-  availableCount: number | null;
+export interface CodexCliState {
   accountEmail: string | null;
+  availableCount: number | null;
+  coreWindows?: readonly UsageWindow[];
+  extraWindows?: readonly UsageWindow[];
 }
 
 export interface FleetView {
@@ -80,6 +80,17 @@ function tightestRemaining(windows: readonly UsageWindow[]): number {
   return remainingPercent(Math.max(...windows.map((window) => window.usedPercent)));
 }
 
+function emailsEqual(left: string | null, right: string | null): boolean {
+  if (left === null || right === null) return false;
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function pickCodexCliOwner(totals: Iterable<LoginTotal>, email: string | null): LoginTotal | undefined {
+  const codex = [...totals].filter((total) => total.providerId === "codex");
+  if (email === null) return undefined;
+  return codex.find((total) => emailsEqual(total.accountEmail, email));
+}
+
 function enabledProvider(provider: ProviderUsage, enabled: ReadonlySet<ProviderId>): boolean {
   return enabled.has(provider.id);
 }
@@ -110,7 +121,7 @@ export function buildFleetView(
   readings: readonly HostUsageReading[],
   enabledIds: readonly ProviderId[],
   fetchedAt: string,
-  codexReset: CodexResetState = { availableCount: null, accountEmail: null },
+  codexCli: CodexCliState = { availableCount: null, accountEmail: null },
 ): FleetView {
   const enabled = new Set(enabledIds);
   const totals = new Map<string, LoginTotal>();
@@ -141,13 +152,24 @@ export function buildFleetView(
 
   coalesceAnonymousLogins(totals);
 
+  const owner = pickCodexCliOwner(totals.values(), codexCli.accountEmail);
+  if (owner !== undefined) {
+    let windows = owner.windows;
+    for (const window of [...(codexCli.coreWindows ?? []), ...(codexCli.extraWindows ?? [])]) {
+      const label = canonicalWindowLabel(window.label);
+      if (windows.some((existing) => canonicalWindowLabel(existing.label) === label)) continue;
+      windows = mergeWindowList(windows, { ...window, label });
+    }
+    totals.set(owner.key, {
+      ...owner,
+      windows,
+      remainingPercent: tightestRemaining(windows),
+    });
+  }
+
   // Every login lists the whole fleet so disconnected machines stay visible.
   const hosts = readings.map((reading) => reading.host);
-  const codexTotals = [...totals.values()].filter((total) => total.providerId === "codex");
-  const resetOwner = (total: LoginTotal): boolean =>
-    total.providerId === "codex" &&
-    codexReset.availableCount !== null &&
-    (codexReset.accountEmail === null ? codexTotals.length === 1 : total.accountEmail === codexReset.accountEmail);
+  const resetCount = owner !== undefined ? codexCli.availableCount : null;
   const orderedTotals = [...totals.values()].sort((left, right) => {
     const providerDelta = providerIndex(left.providerId) - providerIndex(right.providerId);
     if (providerDelta !== 0) return providerDelta;
@@ -156,30 +178,10 @@ export function buildFleetView(
     ...total,
     windows: [...total.windows].sort((left, right) => left.label.localeCompare(right.label)),
     hosts,
-    resetCredits: resetOwner(total) ? { availableCount: codexReset.availableCount! } : null,
+    resetCredits: total.key === owner?.key && resetCount !== null && resetCount > 0
+      ? { availableCount: resetCount }
+      : null,
   }));
 
   return { fetchedAt, totals: orderedTotals };
-}
-
-/** Replace BB's blended Cursor "Plan usage" with the two dashboard pools. */
-export function withCursorPoolWindows(
-  view: FleetView,
-  pools: readonly UsageWindow[],
-): FleetView {
-  if (pools.length === 0) return view;
-  const cursorTotals = view.totals.filter((total) => total.providerId === "cursor");
-  if (cursorTotals.length !== 1) return view;
-  const source = cursorTotals[0]!;
-  const extras = source.windows.filter(
-    (window) => window.label !== PLAN_USAGE_LABEL && !pools.some((pool) => pool.label === window.label),
-  );
-  const windows = [...pools, ...extras].sort((left, right) => left.label.localeCompare(right.label));
-  return {
-    ...view,
-    totals: view.totals.map((total) => {
-      if (total.key !== source.key) return total;
-      return { ...total, windows, remainingPercent: tightestRemaining(windows) };
-    }),
-  };
 }

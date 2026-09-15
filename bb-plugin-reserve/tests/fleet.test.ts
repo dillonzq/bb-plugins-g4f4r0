@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildFleetView, withCursorPoolWindows, type HostUsageReading } from "../lib/fleet.ts";
-import { CURSOR_MODELS_LABEL, OTHER_MODELS_LABEL } from "../lib/cursor-pools.ts";
+import { buildFleetView, type HostUsageReading } from "../lib/fleet.ts";
 import { normalizeUsage, remainingPercent, type RawUsageResponse } from "../lib/usage.ts";
 
 function okWindows(email: string, windows: Array<{ label: string; usedPercent: number; resetsAt: string | null }>): RawUsageResponse {
@@ -160,13 +159,13 @@ test("windows on one login stay nested, not sibling totals", () => {
 
   assert.equal(view.totals.length, 1);
   assert.deepEqual(view.totals[0]?.windows.map((window) => window.label), [
-    "Five-hour limit",
-    "Weekly limit",
+    "5-hour",
+    "Weekly",
   ]);
   assert.equal(view.totals[0]?.remainingPercent, 60);
 });
 
-test("Codex reset credits attach only to the matching login", () => {
+test("Codex CLI windows and resets attach only to the matching BB email", () => {
   const view = buildFleetView(
     [
       reading("host_server", "server", okWindows("a@x", [
@@ -178,63 +177,58 @@ test("Codex reset credits attach only to the matching login", () => {
     ],
     ["codex"],
     "2026-09-14T12:00:00.000Z",
-    { availableCount: 2, accountEmail: "a@x" },
+    {
+      availableCount: 1,
+      accountEmail: "A@x",
+      coreWindows: [{
+        label: "5-hour",
+        usedPercent: 12,
+        barPercent: 12,
+        resetsAt: null,
+        cost: null,
+      }],
+      extraWindows: [{
+        label: "Luna Reserve · Weekly",
+        usedPercent: 5,
+        barPercent: 5,
+        resetsAt: null,
+        cost: null,
+      }],
+    },
   );
+  const owner = view.totals.find((total) => total.accountEmail === "a@x");
+  const other = view.totals.find((total) => total.accountEmail === "b@x");
+  assert.deepEqual(owner?.windows.map((window) => window.label), [
+    "5-hour",
+    "Luna Reserve · Weekly",
+    "Weekly",
+  ]);
+  assert.deepEqual(owner?.resetCredits, { availableCount: 1 });
+  assert.deepEqual(other?.windows.map((window) => window.label), ["Weekly"]);
+  assert.equal(other?.resetCredits, null);
+});
 
-  assert.deepEqual(view.totals[0]?.resetCredits, { availableCount: 2 });
-  assert.equal(view.totals[1]?.resetCredits, null);
-
-  const unknown = buildFleetView(
+test("Codex CLI with no matching BB email leaves BB windows and hides reset", () => {
+  const view = buildFleetView(
     [
-      reading("host_server", "server", okWindows("a@x", [])),
-      reading("host_pro", "pro", okWindows("b@x", [])),
+      reading("host_server", "server", okWindows("a@x", [
+        { label: "Weekly limit", usedPercent: 10, resetsAt: null },
+      ])),
     ],
     ["codex"],
     "2026-09-14T12:00:00.000Z",
-    { availableCount: 2, accountEmail: null },
-  );
-  assert.deepEqual(unknown.totals.map((total) => total.resetCredits), [null, null]);
-});
-
-test("Cursor pools replace the blended plan usage window", () => {
-  const view = withCursorPoolWindows(
-    buildFleetView(
-      [
-        reading("host_pro", "pro", {
-          cursor: {
-            status: "ok",
-            accountEmail: "a@x",
-            planLabel: "Pro+",
-            windows: [{ label: "Plan usage", usedPercent: 80.21, resetsAt: "2026-09-20T10:31:00.000Z" }],
-          },
-        }),
-      ],
-      ["cursor"],
-      "2026-09-14T12:00:00.000Z",
-    ),
-    [
-      {
-        label: CURSOR_MODELS_LABEL,
-        usedPercent: 78.845,
-        barPercent: 78.845,
-        resetsAt: "2026-09-20T10:31:00.000Z",
+    {
+      availableCount: 2,
+      accountEmail: "other@x",
+      coreWindows: [{
+        label: "5-hour",
+        usedPercent: 40,
+        barPercent: 40,
+        resetsAt: null,
         cost: null,
-      },
-      {
-        label: OTHER_MODELS_LABEL,
-        usedPercent: 100,
-        barPercent: 100,
-        resetsAt: "2026-09-20T10:31:00.000Z",
-        cost: null,
-      },
-    ],
+      }],
+    },
   );
-
-  assert.equal(view.totals.length, 1);
-  assert.equal(view.totals[0]?.providerName, "Cursor");
-  assert.deepEqual(view.totals[0]?.windows.map((window) => window.label), [
-    CURSOR_MODELS_LABEL,
-    OTHER_MODELS_LABEL,
-  ]);
-  assert.equal(view.totals[0]?.remainingPercent, 0);
+  assert.deepEqual(view.totals[0]?.windows.map((window) => window.label), ["Weekly"]);
+  assert.equal(view.totals[0]?.resetCredits, null);
 });

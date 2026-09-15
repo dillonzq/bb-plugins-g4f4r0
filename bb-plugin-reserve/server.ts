@@ -1,13 +1,12 @@
-import { hostname } from "node:os";
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import {
   consumeCodexRateLimitResetCredit,
-  readCodexResetCredits,
+  EMPTY_CODEX_CLI,
+  readCodexCliEnrichment,
 } from "./lib/codex-reset-credits.ts";
-import { assembleFleetView, loadFleetReadings, localCodexEmail } from "./lib/load-fleet.ts";
-import { readCursorModelWindows } from "./lib/cursor-pools.ts";
-import { withCursorPoolWindows } from "./lib/fleet.ts";
+import { assembleFleetView, loadFleetReadings } from "./lib/load-fleet.ts";
+import { createCachedLoader } from "./lib/usage-cache.ts";
 import {
   clampRefreshIntervalSeconds,
   enabledProviderIds,
@@ -63,7 +62,7 @@ const loginTotalSchema = z
   })
   .strict();
 
-const fleetSnapshotSchema = z
+const usageSnapshotSchema = z
   .object({
     fetchedAt: z.string(),
     refreshIntervalMs: z.number().int().min(2000).max(300_000),
@@ -98,9 +97,9 @@ const resetConsumptionOutcomeSchema = z.enum([
 ]);
 
 export const rpcContract = defineRpcContract({
-  getFleet: {
-    input: z.null(),
-    output: fleetSnapshotSchema,
+  getUsage: {
+    input: z.object({ force: z.boolean().optional() }).strict(),
+    output: usageSnapshotSchema,
   },
   prepareReset: {
     input: z.null(),
@@ -120,7 +119,7 @@ export const rpcContract = defineRpcContract({
   },
 });
 
-export type FleetSnapshot = z.infer<typeof fleetSnapshotSchema>;
+export type UsageSnapshot = z.infer<typeof usageSnapshotSchema>;
 
 export default function plugin(bb: BbPluginApi) {
   const settings = bb.settings.define({
@@ -165,48 +164,63 @@ export default function plugin(bb: BbPluginApi) {
 
   const resetGate = createResetActionGate(consumeCodexRateLimitResetCredit);
 
-  bb.rpc.register(rpcContract, {
-    async getFleet() {
+  const SNAPSHOT_KEY = "usage:last";
+  const loadUsage = createCachedLoader({
+    async load() {
       const preferences = await settings.get();
-      const fetchedAt = new Date();
-      const readings = await loadFleetReadings(bb.sdk, fetchedAt);
       const enabled = enabledProviderIds(preferences);
-      const localCodexOk = readings.some((reading) =>
-        reading.snapshot?.providers.some(
-          (provider) => provider.id === "codex" && provider.status === "ok",
-        ),
+      const fetchedAt = new Date();
+      const extrasStartedAtMs = Date.now();
+      const cli = enabled.includes("codex")
+        ? readCodexCliEnrichment().catch(() => {
+            bb.log.warn("Codex CLI usage was unavailable; showing BB windows only.");
+            return EMPTY_CODEX_CLI;
+          })
+        : Promise.resolve(EMPTY_CODEX_CLI);
+      const readings = await loadFleetReadings(bb.sdk, fetchedAt);
+      const enrichment = await cli;
+      resetGate.setAvailableCount(
+        enrichment.accountEmail === null ? null : enrichment.availableCount,
+        extrasStartedAtMs,
       );
-      if (enabled.includes("codex") && localCodexOk) {
-        const readStartedAtMs = Date.now();
-        try {
-          resetGate.setAvailableCount(await readCodexResetCredits(), readStartedAtMs);
-        } catch {
-          bb.log.warn("Codex usage reset availability could not be loaded.");
-        }
-      } else {
-        resetGate.setAvailableCount(null);
-      }
-      let view = assembleFleetView(readings, enabled, fetchedAt, {
+      const view = assembleFleetView(readings, enabled, fetchedAt, {
+        accountEmail: enrichment.accountEmail,
         availableCount: resetGate.availableCount,
-        accountEmail: localCodexEmail(readings, hostname()),
+        coreWindows: enrichment.coreWindows,
+        extraWindows: enrichment.extraWindows,
       });
-      if (enabled.includes("cursor")) {
-        try {
-          view = withCursorPoolWindows(view, await readCursorModelWindows());
-        } catch {
-          bb.log.warn("Cursor model pools could not be loaded.");
-        }
-      }
-      return {
+      const snapshot = {
         ...view,
         refreshIntervalMs: clampRefreshIntervalSeconds(preferences.refreshIntervalSeconds) * 1000,
       };
+      void bb.storage.kv.set(SNAPSHOT_KEY, snapshot);
+      return snapshot;
+    },
+    ttlMs: (snapshot) => snapshot.refreshIntervalMs,
+  });
+  const restored = bb.storage.kv.get<unknown>(SNAPSHOT_KEY).then((stored) => {
+    const parsed = usageSnapshotSchema.safeParse(stored);
+    if (!parsed.success) return;
+    const at = Date.parse(parsed.data.fetchedAt);
+    loadUsage.hydrate(parsed.data, Number.isFinite(at) ? at : 0);
+  }).catch(() => {});
+  void restored.then(() => loadUsage.get());
+
+  bb.rpc.register(rpcContract, {
+    async getUsage({ force }) {
+      await restored;
+      return loadUsage.get(force === true);
     },
     prepareReset(): ResetPrepareResult {
       return resetGate.prepare();
     },
     async consumeReset({ confirmationToken }) {
-      return { outcome: await resetGate.consume(confirmationToken) };
+      const outcome = await resetGate.consume(confirmationToken);
+      if (outcome !== "confirmation-invalid" && outcome !== "confirmation-expired") {
+        loadUsage.invalidate();
+        void bb.storage.kv.delete(SNAPSHOT_KEY);
+      }
+      return { outcome };
     },
   });
 }

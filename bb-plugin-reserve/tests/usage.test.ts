@@ -125,6 +125,86 @@ test("loads connected hosts and skips usage on disconnected ones", async () => {
   });
   assert.ok(view.totals.some((total) => total.providerId === "grok"));
   const codex = view.totals.find((total) => total.providerId === "codex");
-  assert.equal(codex?.windows.some((window) => window.label === "Weekly limit"), true);
+  assert.equal(codex?.windows.some((window) => window.label === "Weekly"), true);
   assert.equal(codex?.resetCredits?.availableCount, 1);
+});
+
+test("a hung host times out without blocking the others", async () => {
+  const calls: Array<string | undefined> = [];
+  const sdk: FleetSdk = {
+    hosts: {
+      async list() {
+        return [
+          { id: "host_server", name: "server", status: "connected", type: "persistent" },
+          { id: "host_neo", name: "neo", status: "connected", type: "persistent" },
+        ];
+      },
+    },
+    system: {
+      async usageLimits(args) {
+        calls.push(args?.hostId);
+        if (args?.hostId === "host_neo") {
+          await new Promise((_, reject) => {
+            args?.signal?.addEventListener("abort", () => {
+              reject(Object.assign(new Error("The operation was aborted."), { name: "TimeoutError" }));
+            });
+          });
+        }
+        return healthyResponse();
+      },
+    },
+  };
+
+  const started = Date.now();
+  const readings = await loadFleetReadings(sdk, new Date("2026-09-14T12:00:00.000Z"), 40);
+  assert.ok(Date.now() - started < 1_000);
+  assert.deepEqual([...calls].sort(), ["host_neo", "host_server"]);
+  assert.equal(readings[0]?.snapshot?.host.name, "server");
+  assert.equal(readings[1]?.snapshot, null);
+  assert.match(readings[1]?.error ?? "", /aborted|timed out|Timeout/i);
+});
+
+test("a hung provider on one host does not drop the others", async () => {
+  const calls: string[] = [];
+  const sdk: FleetSdk = {
+    hosts: {
+      async list() {
+        return [{ id: "host_server", name: "server", status: "connected", type: "persistent" }];
+      },
+    },
+    providers: {
+      async list() {
+        return [{ id: "codex" }, { id: "claude-code" }];
+      },
+    },
+    system: {
+      async usageLimits(args) {
+        calls.push(args?.providerId ?? "all");
+        if (args?.providerId === undefined || args.providerId === "claude-code") {
+          await new Promise((_, reject) => {
+            args?.signal?.addEventListener("abort", () => {
+              reject(Object.assign(new Error("The operation was aborted."), { name: "TimeoutError" }));
+            });
+          });
+        }
+        if (args?.providerId === "codex") {
+          return {
+            codex: {
+              status: "ok",
+              accountEmail: "a@x",
+              planLabel: "Plus",
+              windows: [{ label: "Weekly limit", usedPercent: 10, resetsAt: null }],
+            },
+          };
+        }
+        throw new Error(`unexpected provider ${args?.providerId}`);
+      },
+    },
+  };
+
+  const readings = await loadFleetReadings(sdk, new Date("2026-09-14T12:00:00.000Z"), 40);
+  assert.deepEqual([...calls].sort(), ["all", "claude-code", "codex"]);
+  assert.equal(readings[0]?.snapshot?.providers.find((provider) => provider.id === "codex")?.status, "ok");
+  const claude = readings[0]?.snapshot?.providers.find((provider) => provider.id === "claudeCode");
+  assert.ok(claude?.status !== "ok");
 });

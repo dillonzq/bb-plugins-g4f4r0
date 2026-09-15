@@ -10,6 +10,7 @@ export type ProviderId = (typeof PROVIDER_IDS)[number];
 export type RawProviderId =
   | ProviderId
   | "claude-code"
+  | "claude"
   | "acp-cursor"
   | "acp-grok"
   | "acp-opencode";
@@ -102,7 +103,7 @@ const PROVIDERS: readonly ProviderDefinition[] = [
   },
   {
     id: "claudeCode",
-    wireIds: ["claude-code", "claudeCode"],
+    wireIds: ["claude-code", "claudeCode", "claude"],
     name: "Claude Code",
     loginCommand: "claude",
   },
@@ -129,6 +130,14 @@ const PROVIDERS: readonly ProviderDefinition[] = [
 /** BB's agent-provider id, for host ProviderIcon / logo URLs. */
 export function bbAgentProviderId(id: ProviderId): string {
   return PROVIDERS.find((provider) => provider.id === id)?.wireIds[0] ?? id;
+}
+
+/** BB names the 5-hour window "Current session". */
+export function canonicalWindowLabel(label: string): string {
+  const trimmed = label.trim();
+  if (/^(current session|five-hour(?:\s+limit)?|5-hour(?:\s+limit)?)$/iu.test(trimmed)) return "5-hour";
+  if (/^weekly(?:\s+limit)?$/iu.test(trimmed)) return "Weekly";
+  return trimmed.replace(/\s+limit$/iu, "");
 }
 
 export function clampPercent(value: number): number {
@@ -201,7 +210,7 @@ function normalizeProvider(
     planLabel: usage.planLabel,
     message: null,
     windows: usage.windows.map((window) => ({
-      label: window.label,
+      label: canonicalWindowLabel(window.label),
       usedPercent: finiteNumber(window.usedPercent, "usedPercent"),
       barPercent: clampPercent(window.usedPercent),
       resetsAt: window.resetsAt,
@@ -241,9 +250,21 @@ export function normalizeUsage(
   return {
     fetchedAt: fetchedAt.toISOString(),
     host,
-    providers: PROVIDERS.map((provider) =>
-      normalizeProvider(provider, providerUsage(response, provider)),
-    ),
+    providers: PROVIDERS.map((provider) => {
+      try {
+        return normalizeProvider(provider, providerUsage(response, provider));
+      } catch (error) {
+        return {
+          id: provider.id,
+          name: provider.name,
+          status: "error",
+          accountEmail: null,
+          planLabel: null,
+          message: error instanceof Error ? error.message : String(error),
+          windows: [],
+        };
+      }
+    }),
   };
 }
 
