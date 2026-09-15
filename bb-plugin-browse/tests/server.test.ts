@@ -157,6 +157,8 @@ async function fixture(
           durationMs: 1,
           artifacts: [],
         };
+      if(call.method === "videoStart" || call.method === "videoStop")return {ok:true};
+      if(call.method === "videoRead")return {packets:[Buffer.from([4,1,0,0,0,0,5,0,3,32,1]).toString('base64')],url:'https://example.com/',loading:false};
       if (call.method === "direct") return {selection:"selected"};
       if (call.method === "release") return { released: true };
       if (call.method === "credentialPrepare")
@@ -769,4 +771,28 @@ it("streams the first frame after host startup without a session-list refresh", 
     expect(frame.seq).toBe(1);
     expect(f.calls.filter(c => c.method === "inspect")).toHaveLength(2);
   } finally { await f.harness.lifecycle.dispose(); }
+});
+
+it('keeps video opt-in and binds its display and stream to the selected host',async()=>{
+ const f=await fixture();try{
+  const result:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com',hostId:'host_pro',video:true,newTab:true});
+  expect(result.session.video).toBe(true);
+  expect(f.calls.find(c=>c.method==='connect')).toMatchObject({hostId:'host_pro',input:{video:true}});
+  const response=await f.harness.behavior.fetchHttp('GET',`/viewer?id=${result.session.id}`);
+  expect(await response.text()).toContain('data-video="1"');
+  const stream=await f.harness.behavior.experimental_openWebSocket(`/video?id=${result.session.id}`);
+  await vi.waitFor(()=>expect(stream.sent).toHaveLength(2));
+  await new Promise(r=>setTimeout(r,30));expect(stream.sent).toHaveLength(2);
+  await stream.receive('ack');await vi.waitFor(()=>expect(stream.sent).toHaveLength(4));
+  await stream.close();
+  await vi.waitFor(()=>expect(f.calls.some(c=>c.method==='videoStop')).toBe(true));
+  expect(f.calls.filter(c=>c.method.startsWith('video')).every(c=>c.hostId==='host_pro')).toBe(true);
+ }finally{await f.harness.lifecycle.dispose();}
+});
+it('rejects video streaming from an ordinary shared-display session',async()=>{
+ const f=await fixture();try{
+  const result:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+  await expect(f.harness.behavior.experimental_openWebSocket(`/video?id=${result.session.id}`)).rejects.toThrow('video prototype');
+  expect(f.calls.some(c=>c.method==='videoStart')).toBe(false);
+ }finally{await f.harness.lifecycle.dispose();}
 });

@@ -111,3 +111,7 @@ The disposable installed test session was released and removed from Browse histo
 ### Display-engine comparison (2026-09-15)
 
 [Selkies/KasmVNC benchmark report](validation/display-engines-2026-09-15/README.md) compares private extracted display engines with the adaptive JPEG reference, including server/client PSS, CPU, idle traffic, visible response to real clicks, and a three-minute soak. Selkies damage-based H.264 is the leading candidate for a remote-client prototype. This experiment did not replace or reload the production Browse viewer. See the report for resource-retention findings and the limits of local measurements.
+
+### Opt-in video integration trial (2026-09-15)
+
+[Prototype results and limitations](validation/display-engines-2026-09-15/PROTOTYPE.md): private Selkies encoder, isolated per-session displays, existing Browse UI/input, bounded authenticated relay, and explicit teardown. Real Stagehand/display-isolation tests passed. The custom receiver delivered roughly 31–35 FPS and retained about 766–773 MiB after disconnect on this server; it did not meet the acceptance criteria. No production switch or remote-client performance claim. The default remains adaptive JPEG.

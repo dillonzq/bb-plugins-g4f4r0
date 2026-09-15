@@ -155,18 +155,20 @@ export default async function plugin(bb: BbPluginApi) {
     return input.hostId ?? (await threadHost(input.threadId));
   }
   function viewerUrl(id: string) {
-    return `${bb.server.experimental_appUrl ?? ""}/api/v1/plugins/${bb.pluginId}/http/viewer?id=${encodeURIComponent(id)}`;
+    return `${bb.server.experimental_appUrl ?? ""}/api/v1/plugins/${bb.pluginId}/http/viewer?id=${encodeURIComponent(id)}${sessions.get(id)?.video ? "&video=1" : ""}`;
   }
   async function createManaged(
     threadId: string,
     url: string,
     profileId: string | undefined,
     hostId: string,
+    video = false,
   ) {
     const sid = `ab-${randomUUID().slice(0, 12)}`;
     const machines = await bb.sdk.hosts.list();
     const s: Session = {
       id: sid,
+      video,
       mode: "managed",
       hostId,
       threadId,
@@ -181,7 +183,7 @@ export default async function plugin(bb: BbPluginApi) {
       createdAt: Date.now(),
       expiresAt: Date.now() + SESSION_TTL_MS,
       hostLabel: machines.find((h) => h.id === hostId)?.name ?? hostId,
-      viewerUrl: viewerUrl(sid),
+      viewerUrl: viewerUrl(sid)+(video ? "&video=1" : ""),
     };
     sessions.set(sid, s);
     try {
@@ -190,6 +192,7 @@ export default async function plugin(bb: BbPluginApi) {
         {
           id: sid,
           mode: "managed",
+          video,
           profileId: s.profileId,
           url: s.url,
           endpoint: "",
@@ -250,6 +253,7 @@ export default async function plugin(bb: BbPluginApi) {
     profileId?: string,
     reuse = false,
     selectedHostId?: string,
+    video = false,
   ) {
     if (disposing) throw new Error("Browse is shutting down.");
     const previous = startLocks.get(threadId) ?? Promise.resolve();
@@ -268,6 +272,7 @@ export default async function plugin(bb: BbPluginApi) {
           .filter(
             (s) =>
               s.mode === "managed" &&
+              !!s.video === video &&
               s.threadId === threadId &&
               s.hostId === hostId &&
               s.expiresAt > Date.now() &&
@@ -309,7 +314,7 @@ export default async function plugin(bb: BbPluginApi) {
           }
         }
       }
-      return await createManaged(threadId, normalized, profileId, hostId);
+      return await createManaged(threadId, normalized, profileId, hostId, video);
     } finally {
       unlock();
       if (startLocks.get(threadId) === ticket) startLocks.delete(threadId);
@@ -641,6 +646,7 @@ export default async function plugin(bb: BbPluginApi) {
       }
     },
     start: async (input) => {
+      if(input.video && input.mode!=="managed")throw Error("Video requires an isolated managed session.");
       if (input.mode === "managed") {
         if (input.instanceId || input.generation || input.tabId)
           throw new Error("Desktop tab identifiers require mode:native.");
@@ -650,6 +656,7 @@ export default async function plugin(bb: BbPluginApi) {
           undefined,
           !input.newTab,
           input.hostId,
+          input.video,
         );
       }
       if (unsupportedNativeHosts.has(input.hostId ?? ""))
@@ -792,6 +799,7 @@ export default async function plugin(bb: BbPluginApi) {
           s.profileId ?? s.id,
           false,
           s.hostId,
+          s.video,
         );
       }
       const { instances } =
@@ -942,9 +950,10 @@ export default async function plugin(bb: BbPluginApi) {
     c.header("Referrer-Policy", "no-referrer");
     c.header(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; frame-ancestors 'self'",
+      "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; worker-src blob:; frame-ancestors 'self'",
     );
-    return c.html(viewerHtml);
+    const selected=get(id.parse(c.req.query("id")));
+    return c.html(selected.video ? viewerHtml.replace("<body>",'<body data-video="1">') : viewerHtml);
   });
   bb.http.route("GET", "/viewer-info", async (c) => {
     c.header("Cache-Control", "no-store");
@@ -1017,6 +1026,26 @@ export default async function plugin(bb: BbPluginApi) {
         }catch(e){if(!closed)socket.send(JSON.stringify({seq:message.seq,error:redact(String(e))}));}finally{pending--;}});
       },
       onClose(){closed=true;void chain.finally(()=>host.call('direct',{id:sid,clientId,events:[{kind:'reset'}]},{hostId:s.hostId,timeoutMs:5000}).catch(()=>{}));},
+    };
+  });
+  bb.http.experimental_websocket("/video", ctx => {
+    const sid=id.parse(ctx.url.searchParams.get('id')),s=get(sid),clientId=randomUUID();
+    if(!s.video||s.mode!=="managed")throw Error("This session has no video prototype.");
+    let closed=false,outstanding=0,lastAck=Date.now(),wake:(()=>void)|undefined;
+    const stop=()=>host.call('videoStop',{id:sid,clientId},{hostId:s.hostId,timeoutMs:15000}).catch(()=>{});
+    return {
+      onMessage(socket,raw){if(raw!=='ack'||outstanding<=0){socket.close(1008,'Invalid video acknowledgement');return;}outstanding--;lastAck=Date.now();wake?.();},
+      onOpen(socket){void(async()=>{try{
+        await host.call('videoStart',{id:sid,clientId},{hostId:s.hostId,timeoutMs:25000});
+        while(!closed){
+          if(outstanding>0){if(Date.now()-lastAck>5000)throw Error("Video acknowledgement timed out.");await new Promise<void>(resolve=>{const timer=setTimeout(resolve,1000);wake=()=>{clearTimeout(timer);resolve();};});continue;}
+          const data=await host.call('videoRead',{id:sid,clientId},{hostId:s.hostId,timeoutMs:5000});
+          if(closed)break;
+          socket.send(JSON.stringify({url:data.url,loading:data.loading}));
+          lastAck=Date.now();for(const packet of data.packets){outstanding++;socket.send(Buffer.from(packet,'base64'));}
+        }
+      }catch(e){if(!closed){socket.send(JSON.stringify({error:redact(String(e))}));socket.close(1011,'Video unavailable');}}finally{await stop();}})();},
+      onClose(){closed=true;wake?.();void stop();},
     };
   });
   bb.http.experimental_websocket("/cast", ctx => {

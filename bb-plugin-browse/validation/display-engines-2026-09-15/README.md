@@ -66,3 +66,7 @@ Keep production Browse unchanged until that prototype validates the actual BB re
 Before shipping: verify authenticated stream routing, viewer unmount/decoder teardown, last-viewer encoder shutdown, reconnect behavior, idle session limits, and remote latency/quality. Do not keep a video encoder running for every idle automation session. No universal 60 FPS, two-second startup, or memory-leak guarantee follows from this experiment.
 
 Validation: the package typecheck and all 150 existing tests passed. The reference, both display engines, damage mode, a three-minute soak, click delivery, and the lifecycle control runs completed. Production runtime files were not changed.
+
+## Integration follow-up
+
+The [opt-in prototype](PROTOTYPE.md) adds the existing Browse UI and input to the Selkies encoder. It passed local display-isolation and encoder-cleanup checks, but its receiver memory and presentation rate did not meet the acceptance criteria. Reusing the benchmark pixel probe did not eliminate retention. Production remains unchanged; consult that report before treating Selkies as a validated replacement.

@@ -241,21 +241,23 @@ function findOnPath(env: NodeJS.ProcessEnv, name: string) {
     if (existsSync(p)) return p;
   }
 }
+const reservedDisplays = new Set<number>();
 let xvfb: { n: number; child: ChildProcess; users: number } | undefined;
 export async function acquireDisplay(
   root: string,
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
   platform: NodeJS.Platform = process.platform,
+  isolated = false,
 ): Promise<{ env: NodeJS.ProcessEnv; release: () => Promise<void> }> {
   // macOS and Windows use their native desktop session, not X11/Xvfb.
   if (platform !== "linux") return { env, release: async () => {} };
-  if (process.env.DISPLAY)
+  if (!isolated && process.env.DISPLAY)
     return {
       env: { ...env, DISPLAY: process.env.DISPLAY },
       release: async () => {},
     };
-  if (xvfb) {
+  if (!isolated && xvfb) {
     xvfb.users++;
     return {
       env: { ...env, DISPLAY: `:${xvfb.n}` },
@@ -270,7 +272,9 @@ export async function acquireDisplay(
   let n = 90;
   while (
     n < 120 &&
-    (existsSync(`/tmp/.X${n}-lock`) || existsSync(`/tmp/.X11-unix/X${n}`))
+    (reservedDisplays.has(n) ||
+      existsSync(`/tmp/.X${n}-lock`) ||
+      existsSync(`/tmp/.X11-unix/X${n}`))
   )
     n++;
   const files = displayFiles(root, env);
@@ -294,25 +298,57 @@ export async function acquireDisplay(
     throw new Error(
       "Headed Chrome needs unshare (util-linux) to provide xkbcomp without root.",
     );
+  if (n >= 120) throw Error("No private browser displays are available.");
   const launch = xvfbLaunch(binary, n, env, root);
-  const child = spawn(launch.command, launch.args, {
-    env: launch.env,
-    stdio: ["ignore", "ignore", "pipe"],
-  });
+  reservedDisplays.add(n);
+  let child: ChildProcess;
+  try {
+    child = spawn(launch.command, launch.args, {
+      env: launch.env,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+  } catch (error) {
+    reservedDisplays.delete(n);
+    throw error;
+  }
   let stderr = "";
   child.stderr?.on(
     "data",
     (b) => (stderr = (stderr + b.toString()).slice(-4000)),
   );
+  child.once("exit", () => reservedDisplays.delete(n));
+  child.once("error", () => reservedDisplays.delete(n));
   const deadline = Date.now() + 8000;
-  while (!existsSync(`/tmp/.X11-unix/X${n}`)) {
-    signal.throwIfAborted();
-    if (child.exitCode !== null) throw new Error("Xvfb exited: " + stderr);
-    if (Date.now() > deadline) {
-      child.kill("SIGKILL");
-      throw new Error("Xvfb startup timed out: " + stderr);
+  try {
+    while (!existsSync(`/tmp/.X11-unix/X${n}`)) {
+      signal.throwIfAborted();
+      if (child.exitCode !== null) throw new Error("Xvfb exited: " + stderr);
+      if (Date.now() > deadline) {
+        child.kill("SIGKILL");
+        throw new Error("Xvfb startup timed out: " + stderr);
+      }
+      await sleep(50, undefined, { signal });
     }
-    await sleep(50, undefined, { signal });
+  } catch (error) {
+    child.kill("SIGKILL");
+    reservedDisplays.delete(n);
+    throw error;
+  }
+  if (isolated) {
+    let released = false;
+    return {
+      env: { ...env, DISPLAY: `:${n}` },
+      release: async () => {
+        if (released) return;
+        released = true;
+        child.kill("SIGTERM");
+        await Promise.race([
+          new Promise<void>((resolve) => child.once("exit", () => resolve())),
+          sleep(1000),
+        ]);
+        if (child.exitCode === null && !child.signalCode) child.kill("SIGKILL");
+      },
+    };
   }
   xvfb = { n, child, users: 1 };
   child.once("exit", () => {
@@ -341,6 +377,7 @@ export type ManagedBrowser = {
   process: ChildProcess;
   endpoint: string;
   profile: string;
+  displayEnv?: NodeJS.ProcessEnv;
   close: () => Promise<void>;
 };
 const activeProfiles = new Set<string>();
@@ -348,8 +385,11 @@ export async function launchManaged(
   root: string,
   profileId: string,
   signal: AbortSignal,
+  video = false,
 ): Promise<ManagedBrowser> {
   signal.throwIfAborted();
+  if (video && process.platform !== "linux")
+    throw Error("The video prototype currently requires a Linux session host.");
   if (install)
     throw new Error(
       "Browser installation is in progress. Wait for its setup job.",
@@ -360,7 +400,7 @@ export async function launchManaged(
     throw new Error("This browser profile is already running or connecting.");
   activeProfiles.add(key);
   try {
-    const browser = await launchBrowser(root, profileId, signal);
+    const browser = await launchBrowser(root, profileId, signal, video);
     const stop = browser.close;
     let closing: Promise<void> | undefined;
     browser.process.once("exit", () => activeProfiles.delete(key));
@@ -382,18 +422,37 @@ async function launchBrowser(
   root: string,
   profileId: string,
   signal: AbortSignal,
+  video = false,
 ): Promise<ManagedBrowser> {
   const chromePath = await chromeExecutable(root);
   if (!chromePath || !existsSync(chromePath))
-    throw new Error("Chrome is not installed on this thread host. Open Browse Settings and install the browser/dependencies.");
+    throw new Error(
+      "Chrome is not installed on this thread host. Open Browse Settings and install the browser/dependencies.",
+    );
   if (!/^ab-[a-z0-9-]+$/.test(profileId)) throw new Error("Invalid profile ID");
   const profile = join(root, "profiles", profileId);
   await fs.mkdir(profile, { recursive: true, mode: 0o700 });
   await fs.rm(join(profile, "DevToolsActivePort"), { force: true });
-  const display = await acquireDisplay(root, managedEnv(root), signal);
+  const display = await acquireDisplay(
+    root,
+    managedEnv(root),
+    signal,
+    process.platform,
+    video,
+  );
   const child = spawn(
     chromePath,
-    chromeArgs(profile, stagehandExtensionOrigin(root)),
+    video
+      ? [
+          ...chromeArgs(profile, stagehandExtensionOrigin(root)).filter(
+            (a) => a !== "about:blank",
+          ),
+          "--kiosk",
+          "--disable-infobars",
+          "--window-position=0,0",
+          "--app=about:blank",
+        ]
+      : chromeArgs(profile, stagehandExtensionOrigin(root)),
     {
       env: display.env,
       stdio: ["ignore", "ignore", "pipe"],
@@ -449,6 +508,7 @@ async function launchBrowser(
           });
           return {
             process: child,
+            displayEnv: video ? display.env : undefined,
             endpoint: `ws://127.0.0.1:${port}${path}`,
             profile,
             close,

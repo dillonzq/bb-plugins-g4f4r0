@@ -112,6 +112,7 @@ export const scope = z.object({
   threadId: id,
 });
 export const session = hostSession.extend({
+  video: z.boolean().optional(),
   mode: z.enum(["managed", "native"]).default("native"),
   profileId: id.optional(),
   connectJobId: id.optional(),
@@ -174,6 +175,9 @@ export const viewerInput = z.discriminatedUnion("kind", [
 ]);
 const localServerList = z.object({ servers: z.array(z.object({ port: z.number(), name: z.string(), url: z.string() })), error: z.string().nullable() });
 export const hostContract = defineRpcContract({
+  videoStart: {input:z.object({id,clientId:id}),output:z.object({ok:z.boolean()})},
+  videoRead: {input:z.object({id,clientId:id}),output:z.object({packets:z.array(z.string()),url:z.string(),loading:z.boolean()})},
+  videoStop: {input:z.object({id,clientId:id}),output:z.object({ok:z.boolean()})},
   direct: { input: directBatch, output: z.object({selection:z.string().optional(),cursor:z.string().optional()}) },
   "local-servers": { input: z.null(), output: localServerList },
   credentialPrepare: {
@@ -199,6 +203,7 @@ export const hostContract = defineRpcContract({
       endpoint: z.string().default(""),
       expiresAt: z.number(),
       mode: z.enum(["native", "managed"]).default("native"),
+      video: z.boolean().optional(),
       profileId: id.optional(),
       url: z.string().default("about:blank"),
     }),
@@ -244,6 +249,7 @@ export const hostContract = defineRpcContract({
   },
 });
 export const startInput = z.object({
+  video: z.boolean().optional(),
   newTab: z.boolean().default(false),
   threadId: id,
   mode: z.enum(["managed", "native"]).default("managed"),

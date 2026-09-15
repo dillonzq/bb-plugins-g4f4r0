@@ -1,3 +1,6 @@
+import { SelkiesStream } from "../src/selkies";
+import { viewerHtml } from "../src/viewer";
+import { DirectInput } from "../src/direct-input";
 // Opt-in Linux display-engine comparison using private extracted packages.
 // Loopback-only fixture and viewers, disposable profiles; no user browser.
 // See validation/display-engines-2026-09-15/README.md for setup and measurement limits.
@@ -13,7 +16,7 @@ import { chromeExecutable } from "../src/runtime";
 import { AdaptiveStream } from "../src/adaptive-stream";
 const mode = process.argv[2] || "selkies",
   seconds = Number(process.argv[3] || 20);
-if (!["jpeg", "selkies", "kasm"].includes(mode))
+if (!["jpeg", "selkies", "kasm", "custom"].includes(mode))
   throw Error("Expected jpeg, selkies, or kasm");
 if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600)
   throw Error("Duration must be between 0 and 3600 seconds");
@@ -32,6 +35,8 @@ const abort = new AbortController();
 let display = await acquireDisplay(root, managedEnv(root), abort.signal);
 let enginePort = 0;
 let streamClosed = false;
+let customStream:SelkiesStream|undefined;
+const extraPids=new Set<number>();
 const fixture = `<!doctype html><title>Browse Transport Benchmark</title><style>html,body{margin:0;background:#fff}canvas{display:block}</style><canvas width="1280" height="800"></canvas><script>
 const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');let signal=0,frames=0;window.idle=false;window.change=()=>++signal;window.currentSignal=()=>signal;document.addEventListener("click",()=>window.change());
 function paint(t){if(window.idle){requestAnimationFrame(paint);return;}frames++;ctx.fillStyle='#f7f7f7';ctx.fillRect(0,0,1280,800);ctx.fillStyle='#151515';ctx.font='20px sans-serif';ctx.fillText('Browse transport benchmark — readable text, motion and interaction',40,45);for(let i=0;i<24;i++){const y=80+i*30;ctx.fillStyle=i%2?'#f0f0f0':'#fff';ctx.fillRect(20,y-22,1000,28);ctx.fillStyle='#252525';ctx.fillText('Browser row '+i+' • Scrolling, hover states, forms and text selection',40,y);ctx.fillStyle='#4285f4';ctx.fillRect(650+Math.sin(t/700+i/8)*130,y-16,40,16);}ctx.fillStyle=signal%2?'rgb(255,0,0)':'rgb(0,255,0)';ctx.fillRect(0,0,20,20);window.sourceFrames=frames;requestAnimationFrame(paint)}requestAnimationFrame(paint);
@@ -46,13 +51,25 @@ window.pixel=()=>[...paint.getImageData(8,8,1,1).data];
 </script>`;
 const http = createServer((req, res) => {
   res.setHeader("content-type", "text/html; charset=utf-8");
+  if(mode==="custom") {
+    const url=new URL(req.url!,"http://127.0.0.1");
+    if(url.pathname==="/viewer"){res.end(viewerHtml);return;}
+    if(url.pathname!=="/source"){res.setHeader("content-type","application/json");res.end(JSON.stringify(url.pathname==="/viewer-info"?{hostLabel:"Fixture",url:"http://127.0.0.1:"+port+"/source"}:{}));return;}
+  }
   res.end(req.url === "/source" ? fixture : receiver);
 });
 await new Promise<void>((r) => http.listen(0, "127.0.0.1", r));
 const port = (http.address() as any).port;
-const wss = new WebSocketServer({ server: http, path: "/jpeg" });
+const wss = new WebSocketServer({ server: http });
 let source: Cdp, viewer: Cdp;
-wss.on("connection", (ws) => {
+wss.on("connection", (ws,req) => {
+  if(mode==="custom") {
+    if(req.url!.startsWith("/control")){const direct=new DirectInput(source);let chain=Promise.resolve();ws.on("message",raw=>{chain=chain.then(async()=>{try{const m=JSON.parse(String(raw));const result=await direct.run("bench",m.events);ws.send(JSON.stringify({seq:m.seq,...result}));}catch{ws.close();}});});ws.on("close",()=>void chain.finally(()=>direct.reset()));return;}
+    if(!req.url!.startsWith("/video")){ws.close();return;}
+    let done=false,outstanding=0;
+    ws.on("close",()=>{done=true;void customStream?.stop();});ws.on("message",()=>outstanding--);
+    void(async()=>{customStream=await SelkiesStream.start(root,display.env);if(customStream.processId)extraPids.add(customStream.processId);try{while(!done){if(outstanding>0){await pause(2);continue;}const packets=await customStream.read();if(done)break;ws.send(JSON.stringify({url:"http://127.0.0.1:"+port+"/source",loading:false}));for(const packet of packets){outstanding++;ws.send(Buffer.from(packet,"base64"));}}}finally{await customStream.stop();}})().catch(e=>{console.error(e);ws.close();});return;
+  }
   const credit = new Map<number, { at: number; bytes: number }>(),
     policy = new AdaptiveStream();
   let after = 0,
@@ -163,7 +180,7 @@ function descendants() {
     .trim()
     .split("\n")
     .map((r) => r.trim().split(/\s+/).map(Number));
-  const ids = new Set(children.map((c) => c.pid!));
+  const ids = new Set([...children.map((c) => c.pid!),...extraPids]);
   try {
     ids.add(
       Number(
@@ -231,11 +248,11 @@ async function memory() {
 
 let returnFromInspect = false;
 const instrument = `window.bench={displayed:0,bytes:0,dropped:0};window.benchErrors=[];addEventListener('error',e=>benchErrors.push(e.message));let dirty=false;const NativeWS=WebSocket;window.WebSocket=new Proxy(NativeWS,{construct(Target,args){const socket=new Target(...args);socket.addEventListener('message',e=>{bench.bytes+=typeof e.data==='string'?e.data.length:e.data.size||e.data.byteLength||0});return socket}});for(const [klass,methods] of [[CanvasRenderingContext2D,['drawImage','putImageData']],[WebGLRenderingContext,['drawArrays','drawElements']],[WebGL2RenderingContext,['drawArrays','drawElements']],[ImageBitmapRenderingContext,['transferFromImageBitmap']]]){for(const method of methods){const original=klass.prototype[method];klass.prototype[method]=function(...args){if(this.canvas.width>=960)dirty=true;return original.apply(this,args)}}}function tick(){if(dirty){if(!bench.video)bench.displayed++;dirty=false;}requestAnimationFrame(tick)}requestAnimationFrame(tick);`;
-const workerProbe = `let probeBytes=0,probeFrames=0;const ProbeWS=WebSocket;self.WebSocket=new Proxy(ProbeWS,{construct(T,args){const ws=new T(...args);ws.addEventListener('message',e=>{probeBytes+=typeof e.data==='string'?e.data.length:e.data.size||e.data.byteLength||0});return ws}});if(typeof OffscreenCanvasRenderingContext2D!=='undefined'){const draw=OffscreenCanvasRenderingContext2D.prototype.drawImage;OffscreenCanvasRenderingContext2D.prototype.drawImage=function(...args){const result=draw.apply(this,args);if(this.canvas.width>=960)probeFrames++;return result;};}setInterval(()=>{if(probeBytes||probeFrames)self.postMessage({type:'browseBench',bytes:probeBytes,frames:probeFrames});probeBytes=probeFrames=0},500);`;
+const workerProbe = (process.argv.includes("--canvas-sink") ? "self.VideoTrackGenerator=undefined;" : "") + `let probeBytes=0,probeFrames=0;const ProbeWS=WebSocket;self.WebSocket=new Proxy(ProbeWS,{construct(T,args){const ws=new T(...args);ws.addEventListener('message',e=>{probeBytes+=typeof e.data==='string'?e.data.length:e.data.size||e.data.byteLength||0});return ws}});if(typeof OffscreenCanvasRenderingContext2D!=='undefined'){const draw=OffscreenCanvasRenderingContext2D.prototype.drawImage;OffscreenCanvasRenderingContext2D.prototype.drawImage=function(...args){const result=draw.apply(this,args);if(this.canvas.width>=960)probeFrames++;return result;};}setInterval(()=>{if(probeBytes||probeFrames)self.postMessage({type:'browseBench',bytes:probeBytes,frames:probeFrames});probeBytes=probeFrames=0},500);`;
 const workerInstrument = `const OriginalBlob=Blob;window.Blob=new Proxy(OriginalBlob,{construct(T,args){if(args[1]?.type?.includes('javascript')&&args[0]?.every(p=>typeof p==='string')&&args[0].some(p=>p.includes('new WebSocket(')||p.includes('function present(f)')))args=[[${JSON.stringify(workerProbe)},...args[0]],args[1]];return new T(...args)}});window.benchWorkers=[];const OriginalWorker=Worker;window.Worker=new Proxy(OriginalWorker,{construct(T,args){const worker=new T(...args);benchWorkers.push(worker);worker.addEventListener('message',e=>{if(e.data?.type==='browseBench'){bench.bytes+=e.data.bytes;if(!bench.video)bench.displayed+=e.data.frames}});return worker}});`;
 const videoInstrument = `const videos=new WeakSet();function bindVideos(){for(const video of document.querySelectorAll('video')){if(videos.has(video))continue;videos.add(video);function frame(){if(video.videoWidth>=960){bench.video=true;bench.displayed++}video.requestVideoFrameCallback(frame)}video.requestVideoFrameCallback(frame)}}new MutationObserver(bindVideos).observe(document,{childList:true,subtree:true});bindVideos();`;
 async function startEngine() {
-  if (mode === "jpeg") return;
+  if (mode === "jpeg" || mode === "custom") return;
   const server = createServer();
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   enginePort = (server.address() as any).port;
@@ -380,7 +397,7 @@ try {
   });
   await viewer.send("Page.navigate", {
     url:
-      mode === "jpeg"
+      mode === "custom" ? "http://127.0.0.1:"+port+"/viewer?id=bench&video=1" : mode === "jpeg"
         ? "http://127.0.0.1:" + port + "/receiver"
         : "http://127.0.0.1:" +
           enginePort +
@@ -396,7 +413,7 @@ try {
       console.log(
         JSON.stringify(
           await viewer.evaluate(
-            `({text:document.body.innerText.slice(0,2000),keys:Object.keys(window).filter(k=>/selk|rfb|stats|app/i.test(k)),canvases:[...document.querySelectorAll('canvas')].map(c=>({id:c.id,width:c.width,height:c.height})),errors:window.benchErrors,bench:window.bench,pixels:[...document.querySelectorAll('canvas')].filter(c=>c.width>=960).map(c=>{try{const copy=document.createElement('canvas');copy.width=1;copy.height=1;const ctx=copy.getContext('2d');ctx.drawImage(c,8,8,1,1,0,0,1,1);return {id:c.id,pixel:[...ctx.getImageData(0,0,1,1).data]}}catch(e){return {id:c.id,error:String(e)}}}),system:window.system_stats,network:window.network_stats})`,
+            `({text:document.body.innerText.slice(0,2000),keys:Object.keys(window).filter(k=>/selk|rfb|stats|app/i.test(k)),canvases:[...document.querySelectorAll('canvas')].map(c=>({id:c.id,width:c.width,height:c.height})),errors:window.benchErrors,bench:window.bench,pixels:[...document.querySelectorAll('canvas')].filter(c=>c.width>=960).map(c=>{try{const copy=window.pixelCanvas||(window.pixelCanvas=document.createElement('canvas'));if(copy.width!==1||copy.height!==1){copy.width=1;copy.height=1;}const ctx=copy.getContext('2d',{willReadFrequently:true});ctx.drawImage(c,8,8,1,1,0,0,1,1);return {id:c.id,pixel:[...ctx.getImageData(0,0,1,1).data]}}catch(e){return {id:c.id,error:String(e)}}}),system:window.system_stats,network:window.network_stats})`,
           ),
         ),
       );
@@ -411,7 +428,7 @@ try {
     }
     if (returnFromInspect) throw Error("Inspect complete");
     await viewer.evaluate(
-      `window.snapshot=()=>({...window.bench,heap:performance.memory?.usedJSHeapSize,at:performance.now()});window.pixel=()=>{const c=[...document.querySelectorAll('video')].find(v=>v.videoWidth>=960)||[...document.querySelectorAll('canvas')].filter(c=>c.width>=960&&c.height>=600).at(-1);if(!c)return[];const copy=document.createElement('canvas');copy.width=1;copy.height=1;const ctx=copy.getContext('2d');ctx.drawImage(c,8*(c.videoWidth||c.width)/1280,8*(c.videoHeight||c.height)/800,1,1,0,0,1,1);return [...ctx.getImageData(0,0,1,1).data]};`,
+      `window.snapshot=()=>({...window.browseMetrics||window.bench,heap:performance.memory?.usedJSHeapSize,at:performance.now()});window.pixel=()=>{const c=[...document.querySelectorAll('video')].find(v=>v.videoWidth>=960)||[...document.querySelectorAll('canvas')].filter(c=>c.width>=960&&c.height>=600).at(-1);if(!c)return[];const copy=window.pixelCanvas||(window.pixelCanvas=document.createElement('canvas'));if(copy.width!==1||copy.height!==1){copy.width=1;copy.height=1;}const ctx=copy.getContext('2d',{willReadFrequently:true});ctx.drawImage(c,8*(c.videoWidth||c.width)/1280,8*(c.videoHeight||c.height)/800,1,1,0,0,1,1);return [...ctx.getImageData(0,0,1,1).data]};`,
     );
   }
   await pause(1500);
@@ -519,6 +536,7 @@ try {
       shaped,
       adaptiveEnabled,
       damageOnly,
+      canvasSink: process.argv.includes("--canvas-sink"),
       backForwardCacheDisabled: process.argv.includes("--no-bfcache"),
       explicitTeardown: process.argv.includes("--teardown"),
       seconds,
@@ -566,6 +584,7 @@ try {
   if (!returnFromInspect) throw error;
 } finally {
   streamClosed = true;
+  await customStream?.stop();
   for (const ws of wss.clients) ws.close();
   for (const c of cdps) c.close();
   for (const child of children) {

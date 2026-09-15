@@ -1,3 +1,4 @@
+import { SelkiesStream } from "./src/selkies";
 import { StreamDemands } from "./src/adaptive-stream";
 import { DirectInput } from "./src/direct-input";
 import { localServers } from "./src/local-servers";
@@ -52,6 +53,7 @@ type LocalSession = {
   };
   id: string;
   managed?: ManagedBrowser;
+  video?: {clientId:string;stream:Promise<SelkiesStream>};
   mode?: "managed" | "native";
   framing?: boolean;
   streamDemands?: StreamDemands;
@@ -581,6 +583,8 @@ function release(s: LocalSession): Promise<void> {
 async function closeSession(s: LocalSession) {
   clearTimeout(s.timer);
   clearTimeout(s.castTimer);
+  if(s.video)await s.video.stream.then(stream=>stream.stop()).catch(()=>{});
+  s.video=undefined;
   await s.direct?.reset();
   if (s.credential) await finishCredential(s, s.credential);
   if (s.busy) {
@@ -684,6 +688,19 @@ export default experimental_defineHostEntry({
       return { cancelled: true };
     },
     "local-servers": async () => localServers(),
+    videoStart: async ({id,clientId})=>{
+      const s=session(id);
+      const deadline=Date.now()+10000;
+      while(s.status==="connecting"&&Date.now()<deadline)await sleep(50);
+      if(s.status!=="ready"||!s.managed?.displayEnv)throw Error("This session has no isolated video display.");
+      if(s.video)throw Error("The video prototype supports one viewer at a time.");
+      const env=s.managed.displayEnv;
+      const stream=(async()=>{if(!s.recording)await s.cdp?.stopLiveCast();return SelkiesStream.start(s.root,env);})();
+      s.video={clientId,stream};
+      try {await stream;return {ok:true};}catch(e){if(s.video?.clientId===clientId)s.video=undefined;throw e;}
+    },
+    videoRead: async ({id,clientId})=>{const s=session(id);if(s.video?.clientId!==clientId)throw Error("Video lease is unavailable.");const packets=await (await s.video.stream).read();if(!s.frameInfo||Date.now()-s.frameInfo.at>500){const info=await s.cdp!.evaluate("({url:location.href,loading:document.readyState==='loading'})");s.frameInfo={...info,at:Date.now()};}return {packets,url:s.frameInfo!.url,loading:s.frameInfo!.loading};},
+    videoStop: async ({id,clientId})=>{const s=sessions.get(id);if(s?.video?.clientId===clientId){const lease=s.video;await lease.stream.then(stream=>stream.stop()).catch(()=>{});if(s.video===lease)s.video=undefined;}return {ok:true};},
     probe: async (_, ctx) => {
       const root = ctx.experimental_paths.dataDir,
         info = await diagnostics(root);
@@ -881,6 +898,7 @@ export default experimental_defineHostEntry({
                 root,
                 input.profileId ?? input.id,
                 signal,
+                input.video,
               );
               s.endpoint = s.managed.endpoint;
               s.managed.process.once("exit", () => {
@@ -902,7 +920,7 @@ export default experimental_defineHostEntry({
               s.endpoint = s.bridge.endpoint;
             }
             const chromeReadyAt = Date.now();
-            s.cdp = await Cdp.connect(s.endpoint, input.mode === "managed");
+            s.cdp = await Cdp.connect(s.endpoint, input.mode === "managed" && !input.video);
             s.targetId = s.cdp.targetId;
             s.cdp.onDisconnect = () => {
               if (s.status !== "released") {
@@ -943,7 +961,7 @@ export default experimental_defineHostEntry({
             if (input.mode === "managed" && input.url !== "about:blank")
               await command(s, ["open", safeUrl(input.url)], signal);
             await command(s, ["get", "title"], signal);
-            if (input.mode === "managed")
+            if (input.mode === "managed" && !input.video)
               await s.cdp.startLiveCast().catch(() => {});
             s.status = "ready";
             j.output = `Stagehand connected. Chrome: ${chromeReadyAt-startupAt}ms; control: ${driverReadyAt-chromeReadyAt}ms; navigation and first capture setup: ${Date.now()-driverReadyAt}ms.`;
