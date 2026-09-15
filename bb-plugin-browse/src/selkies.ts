@@ -18,6 +18,11 @@ export class SelkiesStream {
   private socket?: WebSocket;
   private packets: Buffer[] = [];
   private bytes = 0;
+  private arrived=new WeakMap<Buffer,number>();
+  private packetAt=0;
+  private packetGapMs=0;
+  private queueMs=0;
+  timing(){const result={queueMs:this.queueMs,packetGapMs:this.packetGapMs};this.queueMs=0;this.packetGapMs=0;return result;}
   private awaitingKeyframe = false;
   private captureFps = 30;
   private overloadAt = 0;
@@ -214,6 +219,7 @@ export class SelkiesStream {
       this.fail("Video frame exceeds budget.");
       return;
     }
+    const now=performance.now();if(this.packetAt)this.packetGapMs=Math.max(this.packetGapMs,now-this.packetAt);this.packetAt=now;this.arrived.set(packet,now);
     this.packets.push(packet);
     this.bytes += packet.length;
     this.wake?.();
@@ -243,6 +249,7 @@ export class SelkiesStream {
     if (this.error) throw this.error;
     const packets = this.packets.splice(0, Math.max(1, Math.min(8, limit)));
     for (const packet of packets) {
+      this.queueMs=Math.max(this.queueMs,performance.now()-(this.arrived.get(packet)??performance.now()));
       this.bytes -= packet.length;
       this.socket?.send(`CLIENT_FRAME_ACK ${packet.readUInt16BE(2)} 0`);
     }

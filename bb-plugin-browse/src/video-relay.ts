@@ -43,6 +43,7 @@ export async function videoRelay(
     let begin: () => void = () => {};
     let begun = false;
     const pending: number[] = [];
+    const sentAt:number[]=[];let ackMs=0;
     let bytes = 0,
       lastAck = Date.now(),
       done = false,
@@ -59,7 +60,7 @@ export async function videoRelay(
         ws.close(1008, "Invalid acknowledgement");
         return;
       }
-      bytes -= pending.shift()!;
+      bytes -= pending.shift()!;ackMs=Math.max(ackMs,performance.now()-(sentAt.shift()??performance.now()));
       lastAck = Date.now();
       wake?.();
     });
@@ -102,16 +103,17 @@ export async function videoRelay(
             void info()
               .then((metadata) => {
                 if (!done && !closed)
-                  ws.send(JSON.stringify({ ...metadata, transport: "binary" }));
+                  ws.send(JSON.stringify({ ...metadata, transport: "binary",videoAckMs:ackMs }));
               })
               .catch(() => {})
               .finally(() => {
+                ackMs=0;
                 metadataPending = false;
               });
           }
           for (const packet of packets) {
             if (!pending.length) lastAck = Date.now();
-            pending.push(packet.length);
+            pending.push(packet.length);sentAt.push(performance.now());
             bytes += packet.length;
             ws.send(packet);
           }

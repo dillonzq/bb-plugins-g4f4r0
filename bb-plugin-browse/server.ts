@@ -974,10 +974,16 @@ export default async function plugin(bb: BbPluginApi) {
       return c.json({ error: redact(String(e)) }, 404);
     }
   });
+  const timingStat=z.object({count:z.number().int().min(1).max(128),p50:z.number().min(0).max(60000),p95:z.number().min(0).max(60000),max:z.number().min(0).max(60000)});
+  const timingSummary=z.object({inputRtt:timingStat.optional(),hostInput:timingStat.optional(),inputQueue:timingStat.optional(),decode:timingStat.optional(),paintWait:timingStat.optional(),paintGap:timingStat.optional(),receiveGap:timingStat.optional(),hostQueue:timingStat.optional(),hostPacketGap:timingStat.optional(),videoAck:timingStat.optional()});
+  const timingTraces=new Map<string,{until:number;records:Array<{at:number;clientId:string;trace:z.infer<typeof timingSummary>}>}>();
+  const pruneTraces=()=>{for(const [key,value] of timingTraces)if(Date.now()>value.until+300000)timingTraces.delete(key);};
+  bb.http.route('POST','/trace',async c=>{const request=z.object({id,durationMs:z.number().int().min(1000).max(120000).default(90000)}).parse(await c.req.json());get(request.id);pruneTraces();if(timingTraces.size>=32&&!timingTraces.has(request.id))timingTraces.delete(timingTraces.keys().next().value!);timingTraces.set(request.id,{until:Date.now()+request.durationMs,records:[]});return c.json({ok:true,durationMs:request.durationMs});});
+  bb.http.route('GET','/trace',c=>{pruneTraces();const sid=id.parse(c.req.query('id'));get(sid);const trace=timingTraces.get(sid);return c.json({remainingMs:Math.max(0,(trace?.until??0)-Date.now()),records:trace?.records??[]});});
   bb.http.route("POST", "/presence", async (c) => {
     try {
       const report = z
-        .object({ id, clientId: id, visible: z.boolean(), metrics:z.object({transport:z.enum(["jpeg","h264-rpc","h264-binary"]).optional(),host:z.string().max(200),fps:z.number().min(0).max(1000),mbps:z.number().min(0).max(10000),inputLatencyMs:z.number().min(0).max(60000),displayed:z.number().min(0),dropped:z.number().min(0),streamTier:z.number().int().min(0).max(2).optional(),frameAckMs:z.number().min(0).max(10000).optional()}).optional() })
+        .object({ id, clientId: id, visible: z.boolean(), trace:timingSummary.optional(), metrics:z.object({transport:z.enum(["jpeg","h264-rpc","h264-binary"]).optional(),host:z.string().max(200),fps:z.number().min(0).max(1000),mbps:z.number().min(0).max(10000),inputLatencyMs:z.number().min(0).max(60000),displayed:z.number().min(0),dropped:z.number().min(0),streamTier:z.number().int().min(0).max(2).optional(),frameAckMs:z.number().min(0).max(10000).optional()}).optional() })
         .parse(await c.req.json());
       get(report.id);
       const clients = presence.get(report.id) ?? new Map<string, number>();
@@ -992,7 +998,9 @@ export default async function plugin(bb: BbPluginApi) {
       for(const [key,value] of telemetry)if(Date.now()-value.at>15000)telemetry.delete(key);
       if(report.visible&&report.metrics){if(telemetry.size>=32&&!telemetry.has(report.clientId))telemetry.delete(telemetry.keys().next().value!);telemetry.set(report.clientId,{at:Date.now(),...report.metrics});viewerTelemetry.set(report.id,telemetry);}else telemetry.delete(report.clientId);
       if(!telemetry.size)viewerTelemetry.delete(report.id);
-      return c.json({ ok: true });
+      pruneTraces();const trace=timingTraces.get(report.id);
+      if(trace&&Date.now()<trace.until+5000&&report.trace&&Object.keys(report.trace).length){trace.records.push({at:Date.now(),clientId:report.clientId,trace:report.trace});if(trace.records.length>45)trace.records.shift();}
+      return c.json({ ok: true,traceRemainingMs:Math.max(0,(trace?.until??0)-Date.now()) });
     } catch {
       return c.json({ error: "Invalid viewer presence" }, 400);
     }

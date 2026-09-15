@@ -1,3 +1,4 @@
+import {viewerTrace} from '../src/viewer-trace';
 import {it,expect,vi} from 'vitest';import {JSDOM} from 'jsdom';import {viewerHtml} from '../src/viewer';
 it('paints the freshest decoded frame and closes every replaced bitmap',async()=>{
  const dom=new JSDOM('<div id="viewport"></div><div id="viewport-skeleton"></div><canvas id="screen"></canvas><span id="resolution"></span>',{runScripts:'outside-only',pretendToBeVisual:true});
@@ -8,7 +9,7 @@ it('paints the freshest decoded frame and closes every replaced bitmap',async()=
  dom.window.requestAnimationFrame=(cb:any)=>{callbacks.push(cb);return callbacks.length;};
  (dom.window.document.querySelector('canvas') as any).getContext=()=>({drawImage:draw});
  const code=viewerHtml.slice(viewerHtml.indexOf('let statusErrorUntil=0,'),viewerHtml.indexOf('function show(frame)'));
- dom.window.eval(`const screen=document.querySelector('canvas'),metrics={bytes:0,dropped:0,displayed:0},status={textContent:''},address={value:''};let closed=false,inViewport=true,vw=1280,vh=800,lastFrame=0,seq=0,pageLoading=false,currentUrl='',acting=false;function fit(){}function renderCopy(){};${code};window.accept=acceptFrame;window.metrics=metrics;`);
+ dom.window.eval(`${viewerTrace}const screen=document.querySelector('canvas'),metrics={bytes:0,dropped:0,displayed:0},status={textContent:''},address={value:''};let closed=false,inViewport=true,vw=1280,vh=800,lastFrame=0,seq=0,pageLoading=false,currentUrl='',acting=false;function fit(){}function renderCopy(){};${code};window.accept=acceptFrame;window.metrics=metrics;`);
  try{
   const accept=(dom.window as any).accept;
   accept({size:1},{seq:1,width:1280,height:800},acks[0]);

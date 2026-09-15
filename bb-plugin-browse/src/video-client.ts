@@ -2,10 +2,12 @@
 export const videoWorker = `let decoder = null,
   codec = "",
   count = 0;
+const pendingTimes=new Map();
 function close() {
   decoder?.close();
   decoder = null;
   codec = "";
+  pendingTimes.clear();
 }
 onmessage = async (e) => {
   try {
@@ -48,9 +50,10 @@ onmessage = async (e) => {
       codec = next;
       decoder = new VideoDecoder({
         output: (frame) => {
+          const decodeMs=performance.now()-(pendingTimes.get(frame.timestamp)||performance.now());pendingTimes.delete(frame.timestamp);
           try {
             postMessage(
-              { frame, width: frame.displayWidth, height: frame.displayHeight },
+              { frame, decodeMs, width: frame.displayWidth, height: frame.displayHeight },
               [frame],
             );
           } finally {
@@ -71,10 +74,11 @@ onmessage = async (e) => {
       });
     }
     if (decoder.decodeQueueSize >= 8) throw Error("Video decoding fell behind");
+    const timestamp=++count*33333;pendingTimes.set(timestamp,performance.now());
     decoder.decode(
       new EncodedVideoChunk({
         type: key ? "key" : "delta",
-        timestamp: ++count * 16667,
+        timestamp,
         data,
       }),
     );
@@ -95,9 +99,9 @@ function openVideo(){
   const ws=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+location.pathname.replace(/\\/viewer$/,'/video')+'?id='+encodeURIComponent(id));
   ws.binaryType='arraybuffer';cast=ws;
   const ack=()=>{videoOutstanding=Math.max(0,videoOutstanding-1);if(ws.readyState===1)ws.send('ack');};
-  worker.onmessage=e=>{const result=e.data;if(videoWorker!==worker){result.frame?.close();return;}if(result.error){fallbackVideo();return;}const frame=result.frame;if(!frame)return;metrics.transport=metrics.relay==='binary'?'h264-binary':'h264-rpc';if(closed||document.hidden||!inViewport||videoWorker!==worker){frame.close();ack();return;}if(decodedFrame){decodedFrame.bitmap.close();decodedFrame.ack();metrics.dropped++;}decodedFrame={bitmap:frame,frame:{width:result.width,height:result.height,url:currentUrl,loading:pageLoading},ack};if(!paintScheduled){paintScheduled=true;requestAnimationFrame(drawFrame);}};
+  worker.onmessage=e=>{const result=e.data;if(videoWorker!==worker){result.frame?.close();return;}if(result.error){fallbackVideo();return;}const frame=result.frame;if(!frame)return;traceSample('decode',result.decodeMs);metrics.transport=metrics.relay==='binary'?'h264-binary':'h264-rpc';if(closed||document.hidden||!inViewport||videoWorker!==worker){frame.close();ack();return;}if(decodedFrame){decodedFrame.bitmap.close();decodedFrame.ack();metrics.dropped++;}decodedFrame={readyAt:performance.now(),bitmap:frame,frame:{width:result.width,height:result.height,url:currentUrl,loading:pageLoading},ack};if(!paintScheduled){paintScheduled=true;requestAnimationFrame(drawFrame);}};
   worker.onerror=()=>{if(videoWorker===worker)fallbackVideo();};
-  ws.onmessage=e=>{if(cast!==ws||videoWorker!==worker)return;if(typeof e.data==='string'){try{const info=JSON.parse(e.data);if(info.error){fallbackVideo();return;}if(info.transport)metrics.relay=info.transport;if(info.url){currentUrl=info.url;if(document.activeElement!==address)address.value=info.url;}pageLoading=!!info.loading;renderCopy();}catch{}return;}if(videoOutstanding>=12){fallbackVideo();return;}videoOutstanding++;metrics.bytes+=e.data.byteLength;lastSocketFrame=Date.now();worker.postMessage(e.data,[e.data]);};
+  ws.onmessage=e=>{if(cast!==ws||videoWorker!==worker)return;if(typeof e.data==='string'){try{const info=JSON.parse(e.data);if(info.error){fallbackVideo();return;}if(info.transport)metrics.relay=info.transport;if(info.hostVideo){traceSample('hostQueue',info.hostVideo.queueMs);traceSample('hostPacketGap',info.hostVideo.packetGapMs);}traceSample('videoAck',info.videoAckMs);if(info.url){currentUrl=info.url;if(document.activeElement!==address)address.value=info.url;}pageLoading=!!info.loading;renderCopy();}catch{}return;}if(videoOutstanding>=12){fallbackVideo();return;}videoOutstanding++;metrics.bytes+=e.data.byteLength;traceSample('receiveGap',lastSocketFrame?Date.now()-lastSocketFrame:0);lastSocketFrame=Date.now();worker.postMessage(e.data,[e.data]);};
   ws.onclose=()=>{if(cast===ws){cast=null;stopVideo();if(!closed&&!document.hidden&&inViewport)setTimeout(openCast,400);}};
   ws.onerror=()=>{if(cast===ws)fallbackVideo();};
 }

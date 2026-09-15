@@ -1,9 +1,10 @@
 import {it,expect} from 'vitest';
 import {JSDOM} from 'jsdom';
+import {viewerTrace} from '../src/viewer-trace';
 import {viewerInteraction} from '../src/viewer-interaction';
 function viewer(){
  const dom=new JSDOM('<canvas id="screen"></canvas>',{url:'http://localhost/viewer?id=test',runScripts:'outside-only',pretendToBeVisual:true});
- dom.window.eval(`
+ dom.window.eval(`${viewerTrace}
  let closed=false,inViewport=true,statusErrorUntil=0,cast=null,pendingFrame=null,decodedFrame=null;
  const id='test',screen=document.querySelector('#screen'),status={textContent:''},metrics={inputLatencyMs:0,maxInputQueue:0};
  const vh=800;function point(){return{x:0,y:0}}function openCast(){}

@@ -846,3 +846,13 @@ it('uses one private controller handshake without per-batch host RPCs',async()=>
   await control.close();await vi.waitFor(()=>expect(reset).toHaveBeenCalledTimes(1));
  }finally{relay.stop();await f.harness.lifecycle.dispose();}
 });
+it('collects bounded numeric trace reports only during an explicitly started trace',async()=>{
+ const f=await fixture();try{
+  const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});const sid=r.session.id;
+  const send=()=>f.harness.behavior.fetchHttp('POST','/presence',{headers:{'content-type':'application/json'},body:JSON.stringify({id:sid,clientId:'test',visible:true,trace:{inputRtt:{count:2,p50:4,p95:5,max:5},pageContent:'not stored'}})});
+  await send();expect(await(await f.harness.behavior.fetchHttp('GET',`/trace?id=${sid}`)).json()).toMatchObject({records:[]});
+  await f.harness.behavior.fetchHttp('POST','/trace',{headers:{'content-type':'application/json'},body:JSON.stringify({id:sid,durationMs:60000})});
+  for(let i=0;i<48;i++)await send();
+  const data:any=await(await f.harness.behavior.fetchHttp('GET',`/trace?id=${sid}`)).json();expect(data.records).toHaveLength(45);expect(JSON.stringify(data)).not.toContain('pageContent');expect(data.records[0].trace.inputRtt.p95).toBe(5);
+ }finally{await f.harness.lifecycle.dispose();}
+});

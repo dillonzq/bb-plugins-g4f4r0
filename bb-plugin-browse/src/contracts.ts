@@ -179,7 +179,7 @@ export const hostContract = defineRpcContract({
   videoRead: {input:z.object({id,clientId:id}),output:z.object({packets:z.array(z.string()),url:z.string(),loading:z.boolean()})},
   videoStop: {input:z.object({id,clientId:id}),output:z.object({ok:z.boolean()})},
   controlStart: {input:z.object({id,clientId:id}),output:z.object({port:z.number().int().min(1).max(65535),token:z.string()})},
-  direct: { input: directBatch, output: z.object({selection:z.string().optional(),cursor:z.string().optional()}) },
+  direct: { input: directBatch, output: z.object({selection:z.string().optional(),cursor:z.string().optional(),hostMs:z.number().optional()}) },
   "local-servers": { input: z.null(), output: localServerList },
   credentialPrepare: {
     input: credentialRequest,

@@ -107,6 +107,7 @@ function touchSession(s: LocalSession) {
   scheduleExpiry(s);
 }
 async function runDirect({id,clientId,events}:z.infer<typeof directBatch>){
+      const began=performance.now();
       const s=session(id);
       if(s.status!=='ready'||!s.cdp||s.closing||s.expiresAt<=Date.now())throw Error('Browser is not ready.');
       if(s.credential)throw Error('Browser is waiting for private credential input.');
@@ -114,7 +115,7 @@ async function runDirect({id,clientId,events}:z.infer<typeof directBatch>){
       s.direct??=new DirectInput(s.cdp);
       const result=await s.direct.run(clientId,events);
       if(events.some(e=>e.kind!=='reset'&&(e.kind!=='pointer'||e.type!=='move'||e.buttons)))touchSession(s);
-      return result;
+      return {...result,hostMs:performance.now()-began};
 }
 function publicSession(s: LocalSession) {
   return {
@@ -714,7 +715,7 @@ export default experimental_defineHostEntry({
       const env=s.managed.displayEnv;
       const stream=(async()=>{if(!s.recording)await s.cdp?.stopLiveCast();return SelkiesStream.start(s.root,env);})();
       s.video={clientId,stream};
-      try {const encoder=await stream;const relay=binary?await videoRelay(encoder,async()=>s.cdp!.evaluate("({url:location.href,loading:document.readyState==='loading'})")):undefined;return {ok:true,...(relay?{relay}:{})};}catch(e){await stream.then(encoder=>encoder.stop()).catch(()=>{});if(s.video?.clientId===clientId)s.video=undefined;throw e;}
+      try {const encoder=await stream;const relay=binary?await videoRelay(encoder,async()=>({...await s.cdp!.evaluate("({url:location.href,loading:document.readyState==='loading'})"),hostVideo:encoder.timing()})):undefined;return {ok:true,...(relay?{relay}:{})};}catch(e){await stream.then(encoder=>encoder.stop()).catch(()=>{});if(s.video?.clientId===clientId)s.video=undefined;throw e;}
     },
     videoRead: async ({id,clientId})=>{const s=session(id);if(s.video?.clientId!==clientId)throw Error("Video lease is unavailable.");const packets=await (await s.video.stream).read();if(!s.frameInfo||Date.now()-s.frameInfo.at>500){const info=await s.cdp!.evaluate("({url:location.href,loading:document.readyState==='loading'})");s.frameInfo={...info,at:Date.now()};}return {packets,url:s.frameInfo!.url,loading:s.frameInfo!.loading};},
     videoStop: async ({id,clientId})=>{const s=sessions.get(id);if(s?.video?.clientId===clientId){const lease=s.video;await lease.stream.then(stream=>stream.stop()).catch(()=>{});if(s.video===lease)s.video=undefined;}return {ok:true};},
