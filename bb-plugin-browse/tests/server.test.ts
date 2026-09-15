@@ -24,6 +24,7 @@ async function fixture(
     connectJobFails?: boolean;
     executionHost?: string;
     busyOnce?: boolean;
+    connectingOnce?: boolean;
     credentialFailure?: boolean;
     acquireFails?: boolean;
     closeFails?: boolean;
@@ -134,7 +135,7 @@ async function fixture(
             ? { busy: "finished-connect" }
             : {}),
           id: input.id,
-          status: "ready",
+          status: options.connectingOnce && calls.filter(c => c.method === "inspect").length === 1 ? "connecting" : "ready",
           recording: false,
           artifactRoot: "/private/artifacts/session",
         };
@@ -755,5 +756,17 @@ it("opens an existing session in the current panel without starting another brow
     expect(f.calls.filter(c => c.method === "connect")).toHaveLength(connects);
     expect(options.panelTabs).toHaveLength(1);
     expect(options.panelTabs[0]).toMatchObject({ id: "blank", paramsJson: JSON.stringify({ id: existing.session.id }) });
+  } finally { await f.harness.lifecycle.dispose(); }
+});
+
+
+it("streams the first frame after host startup without a session-list refresh", async () => {
+  const f = await fixture({ connectingOnce: true });
+  try {
+    const started: any = await f.harness.behavior.callRpc("start", { threadId: "thread_one", url: "https://example.com" });
+    expect(started.session.status).toBe("connecting");
+    const frame: any = await f.harness.behavior.callRpc("frame", { id: started.session.id });
+    expect(frame.seq).toBe(1);
+    expect(f.calls.filter(c => c.method === "inspect")).toHaveLength(2);
   } finally { await f.harness.lifecycle.dispose(); }
 });

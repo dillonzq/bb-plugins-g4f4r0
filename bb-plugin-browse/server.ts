@@ -47,6 +47,7 @@ export default async function plugin(bb: BbPluginApi) {
     }
   }
   const panelNavigation = new Map<string, number>();
+  const connectingRefresh = new Map<string, Promise<Session>>();
   const changed = () => bb.realtime.publish("browser-changed", {});
   async function persist(s: Session) {
     await bb.storage.kv.set(`session:${s.id}`, s);
@@ -563,6 +564,16 @@ export default async function plugin(bb: BbPluginApi) {
     frame: async ({ id, after = 0 }) => {
       const s = get(id);
       await ensurePlacement(s);
+      // Startup completes on the host. Streaming must not wait for a UI list
+      // refresh to learn that the browser is ready.
+      if (s.status === "connecting") {
+        let pending = connectingRefresh.get(id);
+        if (!pending) {
+          pending = refresh(s).finally(() => connectingRefresh.delete(id));
+          connectingRefresh.set(id, pending);
+        }
+        await pending;
+      }
       if (s.status !== "ready")
         throw new Error("Browser is not ready. Reconnect the session.");
       try {
