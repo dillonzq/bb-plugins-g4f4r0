@@ -1,3 +1,5 @@
+import { videoClient } from "../src/video-client";
+import { webrtcReceiver } from "./webrtc-receiver";
 import {videoRelay,connectVideoRelay} from "../src/video-relay";
 import { SelkiesStream } from "../src/selkies";
 import { viewerHtml } from "../src/viewer";
@@ -10,7 +12,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { promises as fs, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import { Cdp } from "../src/cdp";
 import { acquireDisplay, managedEnv, chromeArgs } from "../src/managed";
 import { chromeExecutable } from "../src/runtime";
@@ -21,6 +23,11 @@ if (!["jpeg", "selkies", "kasm", "custom"].includes(mode))
   throw Error("Expected jpeg, selkies, or kasm");
 if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600)
   throw Error("Duration must be between 0 and 3600 seconds");
+const remoteTest=process.argv.includes("--remote-test");
+if(remoteTest&&!process.argv.includes("--webrtc"))throw Error("Remote test requires WebRTC");
+let remoteUrl="https://jackfir.com/";
+const webrtc=process.argv.includes("--webrtc");
+if(webrtc&&(mode!=="custom"||process.argv.some(a=>a.startsWith("--ack-delay=")||a.startsWith("--video-kbps="))))throw Error("WebRTC requires custom mode and unshaped comparison");
 const binaryRelay=process.argv.includes("--binary-relay");
 const ackDelay=Number(process.argv.find(a=>a.startsWith("--ack-delay="))?.split("=")[1]||0);
 if(!Number.isFinite(ackDelay)||ackDelay<0||ackDelay>1000)throw Error("Invalid ACK delay");
@@ -61,8 +68,12 @@ const http = createServer((req, res) => {
   res.setHeader("content-type", "text/html; charset=utf-8");
   if(mode==="custom") {
     const url=new URL(req.url!,"http://127.0.0.1");
-    if(url.pathname==="/viewer"){res.end(viewerHtml);return;}
-    if(url.pathname!=="/source"){res.setHeader("content-type","application/json");res.end(JSON.stringify(url.pathname==="/viewer-info"?{hostLabel:"Fixture",url:"http://127.0.0.1:"+port+"/source"}:{}));return;}
+    if(remoteTest && url.pathname==="/"){res.writeHead(302,{location:"/viewer?id=bench&video=1"});res.end();return;}
+    if(remoteTest && url.pathname==="/input"){
+      let body="";req.on("data",b=>{body+=b;if(body.length>65536)req.destroy();});req.on("end",()=>void(async()=>{try{const {input}=JSON.parse(body);if(input?.kind!=="navigate")throw Error("Unsupported test action");const target=new URL(input.url);if(!["http:","https:"].includes(target.protocol))throw Error("Invalid URL");remoteUrl=target.href;await source.send("Page.navigate",{url:remoteUrl});res.setHeader("content-type","application/json");res.end("{}");}catch{res.writeHead(400);res.end("{}");}})());return;
+    }
+    if(url.pathname==="/viewer"){res.end(webrtc?viewerHtml.replace(videoClient,webrtcReceiver(port)):viewerHtml);return;}
+    if(url.pathname!=="/source"){res.setHeader("content-type","application/json");res.end(JSON.stringify(url.pathname==="/viewer-info"?{hostLabel:remoteTest?"server · WebRTC test":"Fixture",url:remoteTest?remoteUrl:"http://127.0.0.1:"+port+"/source"}:{}));return;}
   }
   res.end(req.url === "/source" ? fixture : receiver);
 });
@@ -72,6 +83,14 @@ const wss = new WebSocketServer({ server: http });
 let source: Cdp, viewer: Cdp;
 wss.on("connection", (ws,req) => {
   if(mode==="custom") {
+    if(webrtc && req.url!.startsWith("/api/webrtc/signaling")) {
+      const upstream=new WebSocket("ws://127.0.0.1:"+enginePort+"/api/webrtc/signaling");
+      const pending: string[]=[];
+      ws.on("message",raw=>{if(upstream.readyState===1)upstream.send(String(raw));else if(pending.length<16)pending.push(String(raw));else ws.close();});
+      upstream.on("open",()=>{if(ws.readyState!==1){upstream.close();return;}for(const m of pending)upstream.send(m);pending.length=0;});
+      upstream.on("message",raw=>{if(ws.readyState===1)ws.send(String(raw));});
+      upstream.on("error",()=>ws.close());upstream.on("close",()=>ws.close());ws.on("close",()=>upstream.close());return;
+    }
     if(req.url!.startsWith("/control")){const direct=new DirectInput(source);let chain=Promise.resolve();ws.on("message",raw=>{chain=chain.then(async()=>{try{const m=JSON.parse(String(raw));const result=await direct.run("bench",m.events);ws.send(JSON.stringify({seq:m.seq,...result}));}catch{ws.close();}});});ws.on("close",()=>void chain.finally(()=>direct.reset()));return;}
     if(!req.url!.startsWith("/video")){ws.close();return;}
     if(binaryRelay){
@@ -266,7 +285,7 @@ const workerProbe = (process.argv.includes("--canvas-sink") ? "self.VideoTrackGe
 const workerInstrument = `const OriginalBlob=Blob;window.Blob=new Proxy(OriginalBlob,{construct(T,args){if(args[1]?.type?.includes('javascript')&&args[0]?.every(p=>typeof p==='string')&&args[0].some(p=>p.includes('new WebSocket(')||p.includes('function present(f)')))args=[[${JSON.stringify(workerProbe)},...args[0]],args[1]];return new T(...args)}});window.benchWorkers=[];const OriginalWorker=Worker;window.Worker=new Proxy(OriginalWorker,{construct(T,args){const worker=new T(...args);benchWorkers.push(worker);worker.addEventListener('message',e=>{if(e.data?.type==='browseBench'){bench.bytes+=e.data.bytes;if(!bench.video)bench.displayed+=e.data.frames}});return worker}});`;
 const videoInstrument = `const videos=new WeakSet();function bindVideos(){for(const video of document.querySelectorAll('video')){if(videos.has(video))continue;videos.add(video);function frame(){if(video.videoWidth>=960){bench.video=true;bench.displayed++}video.requestVideoFrameCallback(frame)}video.requestVideoFrameCallback(frame)}}new MutationObserver(bindVideos).observe(document,{childList:true,subtree:true});bindVideos();`;
 async function startEngine() {
-  if (mode === "jpeg" || mode === "custom") return;
+  if (mode === "jpeg" || (mode === "custom"&&!webrtc)) return;
   const server = createServer();
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   enginePort = (server.address() as any).port;
@@ -274,7 +293,7 @@ async function startEngine() {
   let command: string,
     args: string[],
     env = { ...display.env };
-  if (mode === "selkies") {
+  if (mode === "selkies" || webrtc) {
     command = "python3";
     args = [
       "-m",
@@ -298,26 +317,24 @@ async function startEngine() {
       "--enable-clipboard",
       "false",
       "--file-transfers",
-      "disabled",
+      "none",
       "--command-enabled",
       "false",
       "--enable-resize",
       "false",
       "--video-streaming-mode",
-      damageOnly ? "false" : "true",
+      (damageOnly || webrtc) ? "false" : "true",
       "--encoder",
       "h264enc",
       "--framerate",
-      "60",
+      webrtc ? "30,15-30" : "60",
       "--video-bitrate",
-      "8000",
+      webrtc ? "4000,2000-4000" : "8000",
       "--rate-control-mode",
       "cbr",
     ];
-    env.PYTHONPATH = join(
-      cache,
-      "selkies/opt/selkies/lib/python3.13/site-packages",
-    );
+    if(webrtc)args.push("--mode","webrtc");
+    env.PYTHONPATH = join(root,"selkies-runtime/opt/selkies/lib/python3.13/site-packages");
   } else {
     // Replace this test's private Xvfb only; no installed Browse displays are touched.
     const number = Number(env.DISPLAY!.slice(1));
@@ -383,7 +400,7 @@ async function startEngine() {
         ["-fsS", "--max-time", "1", "http://127.0.0.1:" + enginePort + "/"],
         { stdio: "ignore" },
       );
-      return;
+      if(!webrtc || errors.includes("Registered peer server-"))return;
     } catch {}
     await pause(100);
   }
@@ -393,6 +410,12 @@ async function startEngine() {
 try {
   await startEngine();
   source = await launch("source");
+  if(remoteTest){
+    await source.send("Page.navigate",{url:remoteUrl});
+    console.log(JSON.stringify({port,url:"http://127.0.0.1:"+port+"/viewer?id=bench&video=1",expiresInMinutes:30}));
+    await new Promise<void>(resolve=>{const timer=setTimeout(resolve,30*60*1000);const stopRemote=()=>{clearTimeout(timer);resolve();};process.once("SIGTERM",stopRemote);process.once("SIGINT",stopRemote);});
+    returnFromInspect=true;throw Error("Remote test finished");
+  }
   viewer = await launch("receiver");
   await source.send("Page.navigate", {
     url: "http://127.0.0.1:" + port + "/source",
@@ -441,6 +464,7 @@ try {
       returnFromInspect = true;
     }
     if (returnFromInspect) throw Error("Inspect complete");
+    if(webrtc && !(await viewer.evaluate("window.testPeer?.connectionState==='connected' && document.querySelector('video')?.videoWidth>0")))throw Error("WebRTC did not deliver video: "+JSON.stringify(await viewer.evaluate("({state:window.testPeer?.connectionState,errors:window.benchErrors})")));
     await viewer.evaluate(
       `window.snapshot=()=>({...window.browseMetrics||window.bench,heap:performance.memory?.usedJSHeapSize,at:performance.now()});window.pixel=()=>{const c=[...document.querySelectorAll('video')].find(v=>v.videoWidth>=960)||[...document.querySelectorAll('canvas')].filter(c=>c.width>=960&&c.height>=600).at(-1);if(!c)return[];const copy=window.pixelCanvas||(window.pixelCanvas=document.createElement('canvas'));if(copy.width!==1||copy.height!==1){copy.width=1;copy.height=1;}const ctx=copy.getContext('2d',{willReadFrequently:true});ctx.drawImage(c,8*(c.videoWidth||c.width)/1280,8*(c.videoHeight||c.height)/800,1,1,0,0,1,1);return [...ctx.getImageData(0,0,1,1).data]};`,
     );
@@ -454,6 +478,7 @@ try {
   }
   const sourceBefore = await source.evaluate("sourceFrames");
   const before = await viewer.evaluate("snapshot()");
+  const rtcBefore=webrtc?await viewer.evaluate("testPeer.getStats().then(s=>[...s.values()].find(x=>x.type==='inbound-rtp'&&x.kind==='video'))"):null;
   const memBefore = await memory();
   const memorySamples = [];
   for (let elapsed = 0; elapsed < seconds; elapsed += 5) {
@@ -463,6 +488,8 @@ try {
   const after = await viewer.evaluate("snapshot()"),
     sourceAfter = await source.evaluate("sourceFrames"),
     memAfter = await memory();
+  const rtcAfter=webrtc?await viewer.evaluate("testPeer.getStats().then(s=>[...s.values()].find(x=>x.type==='inbound-rtp'&&x.kind==='video'))"):null;
+  if(webrtc){before.bytes=rtcBefore.bytesReceived;after.bytes=rtcAfter.bytesReceived;}
   if (process.argv.includes("--scroll")) await viewer.evaluate("clearInterval(window.scrollTimer)");
   await source.evaluate("window.idle=true");
   await pause(3000);
@@ -553,7 +580,9 @@ try {
   console.log(
     JSON.stringify({
       mode,
-      binaryRelay,
+      binaryRelay, webrtc,
+      rtcBefore, rtcAfter,
+      rtcStats: webrtc ? await viewer.evaluate("testPeer.getStats().then(s=>[...s.values()].filter(x=>['inbound-rtp','candidate-pair','codec'].includes(x.type)))") : undefined,
       ackDelay,
       disconnected,
       shaped,
@@ -620,7 +649,8 @@ try {
   for (const child of children)
     if (child.exitCode === null) child.kill("SIGKILL");
   await display.release();
+  if(remoteTest){try{execFileSync("bb",["connect","unexpose",String(port)],{stdio:"ignore",timeout:10000});}catch{}}
   wss.close();
   http.close();
-  await fs.rm(directory, { recursive: true, force: true });
+  await fs.rm(directory, { recursive: true, force: true, maxRetries:5,retryDelay:100 });
 }
