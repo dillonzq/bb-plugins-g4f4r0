@@ -604,31 +604,47 @@ function LiveBrowser({
         </div>
       </div>
     );
-  return (
-    <div className="relative flex h-full min-h-0 flex-col">
-      <div className="absolute bottom-3 right-3 z-10 text-sm">
-        {current && ["error", "released"].includes(current.status) && (
+  if (current && ["error", "released"].includes(current.status))
+    return (
+      <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-auto bg-background p-6 text-center">
+        <BrowseIcon name="Globe" className="mb-3 size-6 text-muted-foreground" />
+        <h2 className="text-sm font-medium">{current.status === "released" ? "Session closed" : "Browser disconnected"}</h2>
+        <p className="mt-2 max-w-sm text-xs text-muted-foreground">Reconnect to open the page again.</p>
+        <BrowserActionTooltip label="Reconnect">
           <Button
+            className="mt-4"
             variant="outline"
             size="sm"
+            disabled={opening}
             onClick={async () => {
+              if (launching.current) return;
+              launching.current = true;
+              setOpening(true);
+              setError("");
               try {
                 const r = await rpc.call("reconnect", { id });
-                nav.openThreadPanel({
+                if (!nav.openThreadPanel({
                   actionId: "live",
                   params: { id: r.session.id },
                   title: browserTitle(r.session),
-                });
+                })) throw new Error("Browser started. Open its session from a new browser tab.");
               } catch (e) {
                 setError(String(e));
+              } finally {
+                launching.current = false;
+                setOpening(false);
               }
             }}
           >
-            Reconnect
+            {opening ? "Reconnecting…" : "Reconnect"}
           </Button>
-        )}
-        {error && <span role="alert">{error}</span>}
+        </BrowserActionTooltip>
+        {error && <p role="alert" className="mt-3 max-w-sm break-words text-xs text-muted-foreground">{error}</p>}
       </div>
+    );
+  return (
+    <div className="relative flex h-full min-h-0 flex-col">
+      {error && <p role="alert" className="shrink-0 px-4 py-2 text-xs text-muted-foreground">{error}</p>}
       <iframe
         title="Live browser"
         className="min-h-0 w-full flex-1 border-0 bg-black"
