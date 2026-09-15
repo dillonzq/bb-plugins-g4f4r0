@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { videoClient } from "../src/video-client";
 import { webrtcReceiver } from "./webrtc-receiver";
 import {videoRelay,connectVideoRelay} from "../src/video-relay";
@@ -25,6 +26,9 @@ if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 3600)
   throw Error("Duration must be between 0 and 3600 seconds");
 const remoteTest=process.argv.includes("--remote-test");
 if(remoteTest&&!process.argv.includes("--webrtc"))throw Error("Remote test requires WebRTC");
+const embedded=process.argv.includes("--embedded");
+if(embedded&&!remoteTest)throw Error("Embedded fixture requires remote test");
+const embeddedToken=randomBytes(32).toString("hex");
 let remoteUrl="https://jackfir.com/";
 const webrtc=process.argv.includes("--webrtc");
 if(webrtc&&(mode!=="custom"||process.argv.some(a=>a.startsWith("--ack-delay=")||a.startsWith("--video-kbps="))))throw Error("WebRTC requires custom mode and unshaped comparison");
@@ -65,6 +69,7 @@ window.snapshot=()=>({...stats,heap:performance.memory?.usedJSHeapSize,at:perfor
 window.pixel=()=>[...paint.getImageData(8,8,1,1).data];
 </script>`;
 const http = createServer((req, res) => {
+  if(embedded&&req.headers.authorization!==`Bearer ${embeddedToken}`){res.writeHead(403);res.end();return;}
   res.setHeader("content-type", "text/html; charset=utf-8");
   if(mode==="custom") {
     const url=new URL(req.url!,"http://127.0.0.1");
@@ -73,14 +78,14 @@ const http = createServer((req, res) => {
     if(remoteTest && url.pathname==="/input"){
       let body="";req.on("data",b=>{body+=b;if(body.length>65536)req.destroy();});req.on("end",()=>void(async()=>{try{const {input}=JSON.parse(body);if(input?.kind!=="navigate")throw Error("Unsupported test action");const target=new URL(input.url);if(!["http:","https:"].includes(target.protocol))throw Error("Invalid URL");remoteUrl=target.href;await source.send("Page.navigate",{url:remoteUrl});res.setHeader("content-type","application/json");res.end("{}");}catch{res.writeHead(400);res.end("{}");}})());return;
     }
-    if(url.pathname==="/viewer"){res.end(webrtc?viewerHtml.replace(videoClient,webrtcReceiver(remoteTest)):viewerHtml);return;}
+    if(url.pathname==="/viewer"){res.end(webrtc?viewerHtml.replace(videoClient,embedded?videoClient.replace("function openVideo()", "function openFallbackVideo()").replace("function stopVideo()", "function stopFallbackVideo()")+webrtcReceiver(remoteTest,true):webrtcReceiver(remoteTest,false)):viewerHtml);return;}
     if(url.pathname!=="/source"){res.setHeader("content-type","application/json");res.end(JSON.stringify(url.pathname==="/viewer-info"?{hostLabel:remoteTest?"server · WebRTC test":"Fixture",url:remoteTest?remoteUrl:"http://127.0.0.1:"+port+"/source"}:{}));return;}
   }
   res.end(req.url === "/source" ? fixture : receiver);
 });
 await new Promise<void>((r) => http.listen(remoteTest?Number(process.env.BROWSE_TEST_PORT||0):0, "127.0.0.1", r));
 const port = (http.address() as any).port;
-const wss = new WebSocketServer({ server: http });
+const wss = new WebSocketServer({ server: http, maxPayload:65536, verifyClient:({req}:{req:import("node:http").IncomingMessage})=>!embedded||req.headers.authorization===`Bearer ${embeddedToken}` });
 let source: Cdp, viewer: Cdp;
 wss.on("connection", (ws,req) => {
   if(mode==="custom") {
@@ -414,6 +419,7 @@ try {
   source = await launch("source");
   if(remoteTest){
     await source.send("Page.navigate",{url:remoteUrl});
+    if(embedded)await fs.writeFile(join(cache,"embedded.json"),JSON.stringify({port,token:embeddedToken,expires:Date.now()+30*60*1000}),{mode:0o600});
     console.log(JSON.stringify({port,url:"http://127.0.0.1:"+port+"/viewer?id=bench&video=1",expiresInMinutes:30}));
     await new Promise<void>(resolve=>{const timer=setTimeout(resolve,30*60*1000);const stopRemote=()=>{clearTimeout(timer);resolve();};process.once("SIGTERM",stopRemote);process.once("SIGINT",stopRemote);});
     returnFromInspect=true;throw Error("Remote test finished");
@@ -641,6 +647,7 @@ try {
   if (!returnFromInspect) throw error;
 } finally {
   streamClosed = true;
+  if(embedded){try{const config=JSON.parse(await fs.readFile(join(cache,"embedded.json"),"utf8"));if(config.token===embeddedToken)await fs.rm(join(cache,"embedded.json"));}catch{}}
   await customStream?.stop();
   for (const ws of wss.clients) ws.close();
   for (const c of cdps) c.close();

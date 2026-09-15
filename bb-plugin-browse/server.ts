@@ -1,3 +1,4 @@
+import { registerStreamTest } from "./src/stream-test";
 import {connectControlRelay} from "./src/control-relay";
 import { connectVideoRelay } from "./src/video-relay";
 import { AdaptiveStream } from "./src/adaptive-stream";
@@ -29,6 +30,7 @@ import { safeUrl, redact } from "./src/policy";
 export { rpcContract } from "./src/contracts";
 export type { Session, Job, Artifact } from "./src/contracts";
 export default async function plugin(bb: BbPluginApi) {
+  registerStreamTest(bb);
   const host = bb.hosts.experimental_client({ contract: hostContract });
   // Legacy desktop preference is used only for explicit native mode.
   const preferredHost = async () =>

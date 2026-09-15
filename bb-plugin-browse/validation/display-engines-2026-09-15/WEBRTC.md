@@ -86,3 +86,25 @@ This establishes an unreachable TCP fallback, not proof of the exact firewall
 rule or of UDP failure. Further remote testing requires fixing direct media
 reachability or adding a reachable TURN relay. BB Connect's HTTP share alone
 does not forward this port. Do not claim another retry will solve it.
+
+## Embedded BB test
+
+`--remote-test --embedded --binary-relay` writes a 30-minute, owner-readable
+endpoint capability to `~/.cache/browse-stream-bench/embedded.json`. The temporary
+HTTP/WebSocket fixture rejects requests without its random bearer token. BB's
+normal authenticated routes proxy only the enumerated test endpoints; arbitrary
+client-supplied URLs and ports are not accepted. The token remains server-side.
+No Connect share or public port is needed for the viewer/signaling path.
+
+Open a Browse `live` panel with `paramsJson: {"streamTest":true}`. This renders
+the test iframe directly inside BB, rather than inside another managed Chrome.
+It is an isolated Jackfir browser, not a user's existing session. The overlay
+identifies Trying WebRTC, WebRTC, or Current stream · WebRTC unavailable. ICE
+failure/timeout switches to the existing binary H.264 relay. This fallback
+is not evidence that remote WebRTC works. The existing network blocker remains.
+
+The opt-in live check with `--embedded` verified actual WebRTC frames followed
+by actual H.264 frames after a forced connection failure. The fixture cleans
+its capability file and browser processes on timeout/shutdown. The persisted
+BB test tab then shows that the test has ended. Tailscale Serve still requires
+administrator access and has not been configured.

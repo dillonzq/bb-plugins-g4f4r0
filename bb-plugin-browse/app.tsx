@@ -497,7 +497,13 @@ function LoadingBrowserFrame({ url }: { url: string }) {
   </div>;
 }
 
-function LiveBrowser({
+function LiveBrowser(props: Parameters<typeof SessionBrowser>[0]) {
+  if(props.params && typeof props.params==='object' && 'streamTest' in props.params && props.params.streamTest===true)
+    return <iframe title="WebRTC browser test" className="h-full min-h-0 w-full border-0 bg-background" src="/api/v1/plugins/browse/http/stream-test/viewer?id=bench&video=1" />;
+  return <SessionBrowser {...props} />;
+}
+
+function SessionBrowser({
   params,
   threadId,
 }: {
