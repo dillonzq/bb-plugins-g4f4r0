@@ -39,3 +39,15 @@ it('retries recovery when the encoder is silent and clears the retry on stop',as
   await vi.advanceTimersByTimeAsync(1100);expect(send).toHaveBeenCalledTimes(count);
  }finally{await stream.stop();vi.useRealTimers();}
 });
+it('schedules a throttled second recovery even if no more frames arrive',async()=>{
+ vi.useFakeTimers();const stream=new SelkiesStream();const send=vi.fn();
+ stream['socket']={send,terminate:vi.fn()} as unknown as WebSocket;
+ const enqueue=(key=false)=>{const b=Buffer.alloc(11);b[0]=4;b[1]=key?1:0;stream['enqueue'](b);};
+ try {
+  for(let i=0;i<9;i++)enqueue();enqueue(true);
+  for(let i=0;i<8;i++)enqueue();
+  expect(send.mock.calls.filter(c=>c[0]==='REQUEST_KEYFRAME')).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(300);
+  expect(send.mock.calls.filter(c=>c[0]==='REQUEST_KEYFRAME')).toHaveLength(2);
+ }finally{await stream.stop();vi.useRealTimers();}
+});

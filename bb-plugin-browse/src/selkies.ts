@@ -81,7 +81,7 @@ export class SelkiesStream {
           "--encoder",
           "h264enc",
           "--framerate",
-          "60",
+          "30",
           "--video-bitrate",
           "4000",
           "--rate-control-mode",
@@ -138,7 +138,7 @@ export class SelkiesStream {
               manual_width: 1280,
               manual_height: 800,
               encoder: "h264enc",
-              framerate: 60,
+              framerate: 30,
               video_bitrate: 4000,
               video_streaming_mode: false,
               video_fullcolor: false,
@@ -160,11 +160,16 @@ export class SelkiesStream {
     }
   }
   private requestKeyframe() {
-    if (Date.now() - this.keyframeRequestedAt < 500) return;
-    this.keyframeRequestedAt = Date.now();
-    this.socket?.send("REQUEST_KEYFRAME");
+    if (this.closed || !this.awaitingKeyframe) return;
     clearTimeout(this.keyframeRetry);
-    this.keyframeRetry = setTimeout(() => { if (!this.closed && this.awaitingKeyframe) this.requestKeyframe(); }, 550);
+    // The encoder throttles requests to 250 ms. Schedule the remainder even
+    // after a previous recovery completed, rather than waiting for more frames.
+    const remaining = Math.max(0, 300 - (Date.now() - this.keyframeRequestedAt));
+    if (!remaining) {
+      this.keyframeRequestedAt = Date.now();
+      this.socket?.send("REQUEST_KEYFRAME");
+    }
+    this.keyframeRetry = setTimeout(() => this.requestKeyframe(), remaining || 300);
     this.keyframeRetry.unref();
   }
   private enqueue(packet: Buffer) {

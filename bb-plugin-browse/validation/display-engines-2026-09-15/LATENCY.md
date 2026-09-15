@@ -13,3 +13,9 @@ Sequential disposable fixture runs: `npx tsx tests/display-engine-benchmark.mts 
 | Bounded backlog and recovery | 23.48 | 508 / 1126 ms | 219 / 901 ms | 1.51 | 3.23 | 1269 |
 
 Raw data: latency-before.json, latency-after.json, latency-bounded.json. Initial backlog candidate without throttled retries failed rendered latency sampling (6/12) and was not deployed. The corrected run completed all 12 visual and all 12 input samples. The test does not directly quantify scrolling fidelity, and 60 FPS/instant input remains unachieved. More frames increased CPU and bandwidth versus baseline; this is not a memory or CPU saving claim. Real remote-client validation remains necessary.
+
+## Capture cadence follow-up
+
+User reports improved responsiveness but alternating sharp/blocky frames and half-second pauses. Candidate caps capture at 30 FPS (same 4 Mbps budget) and reduces keyframe retry to 300 ms, above the pinned encoder's 250 ms controller throttle. A second recovery inside the throttle window now schedules its remaining delay even when no further frames arrive. Regression coverage includes this silent second recovery.
+
+Same short delayed-ACK fixture completed all samples: delivered 18.05 FPS, input-to-pixel median 293 ms / p95 534 ms, change-to-pixel median 82 ms / p95 122 ms, 2.83 aggregate CPU cores, 1.96 Mbps. Raw cadence-30.json. Compared with the preceding run, latency and aggregate CPU improve while delivered FPS decreases and bandwidth increases. This is a responsiveness tradeoff, not a claim of higher FPS or measured picture fidelity. Shared-server variability and local-only media/input remain limitations; remote visual comparison is outstanding.
