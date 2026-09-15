@@ -640,9 +640,7 @@ function LiveBrowser({
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-auto bg-background p-6 text-center">
         <BrowseIcon name="Globe" className="mb-3 size-6 text-muted-foreground" />
-        <h2 className="text-sm font-medium">{current.status === "released" ? "Session closed" : "Browser disconnected"}</h2>
-        <p className="mt-2 max-w-sm text-xs text-muted-foreground">Reconnect to open the page again.</p>
-        <BrowserActionTooltip label="Reconnect">
+        <h2 className="text-sm font-medium">{current.status === "released" ? "Browser closed" : "Browser disconnected"}</h2>
           <Button
             className="mt-4"
             variant="outline"
@@ -668,9 +666,8 @@ function LiveBrowser({
               }
             }}
           >
-            {opening ? "Reconnecting…" : "Reconnect"}
+            {opening ? "Opening…" : "Reopen page"}
           </Button>
-        </BrowserActionTooltip>
         {error && <p role="alert" className="mt-3 max-w-sm break-words text-xs text-muted-foreground">{error}</p>}
       </div>
     );
