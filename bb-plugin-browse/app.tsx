@@ -480,6 +480,22 @@ function BrowserListSkeleton({ label }: { label: string }) {
   </div>;
 }
 
+function LoadingBrowserFrame({ url }: { url: string }) {
+  return <div role="status" aria-label="Loading page" className="flex h-full min-h-0 flex-col bg-background">
+    <div aria-label="Browser navigation" className="flex h-12 shrink-0 items-center gap-2 border-b px-4 py-2">
+      <div className="flex shrink-0 items-center gap-1">{(["ArrowLeft", "ArrowRight", "RefreshCw"] as const).map(name => <span key={name} className="grid size-7 place-items-center text-muted-foreground"><BrowseIcon name={name} className="size-4" /></span>)}</div>
+      <div className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md text-muted-foreground" style={{ boxShadow: "inset 0 0 0 1px var(--input, var(--border))" }}>
+        <span className="min-w-0 flex-1 truncate px-3 py-1 text-xs">{url}</span>
+        <span className="mr-0.5 grid size-7 shrink-0 place-items-center"><BrowseIcon name="Loading" className="size-4 animate-spin" /></span>
+      </div>
+      <span className="grid size-7 shrink-0 place-items-center text-muted-foreground"><BrowseIcon name="More" className="size-4" /></span>
+    </div>
+    <div className="flex min-h-0 flex-1 items-center justify-center" style={{ containerType: "size" }}>
+      <div aria-hidden="true" className="rounded-md border bg-muted motion-safe:animate-pulse" style={{ width: "min(1280px, calc(100cqw - 24px), calc((100cqh - 24px) * 1.6))", aspectRatio: "8 / 5" }} />
+    </div>
+  </div>;
+}
+
 function LiveBrowser({
   params,
   threadId,
@@ -552,6 +568,7 @@ function LiveBrowser({
     seen.add(s.url); return true;
   }).slice(0, 8);
   const current = sessions.find((s) => s.id === id);
+  if (!id && opening) return <LoadingBrowserFrame url={address} />;
   if (!id)
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
@@ -577,9 +594,7 @@ function LiveBrowser({
           </div>
         </form>
         <div className="min-h-0 flex-1 overflow-auto flex flex-col">
-          {opening ? <div role="status" aria-label="Loading page" className="m-auto w-full max-w-7xl p-3">
-            <div aria-hidden="true" className="aspect-[8/5] w-full rounded-md border bg-muted motion-safe:animate-pulse" />
-          </div> : <div className="m-auto w-full max-w-3xl px-6 py-12">
+          <div className="m-auto w-full max-w-3xl px-6 py-12">
             {error && <p role="alert" className="mb-4 text-sm">{error}</p>}
             {!sessionsLoaded && <BrowserListSkeleton label="Loading browser sessions" />}
             {[{ title: "Recently visited", items: recent }, { title: "Open sessions", items: active }].filter(group => group.items.length > 0).map(group => (
@@ -617,7 +632,7 @@ function LiveBrowser({
                 </button>
               </li>)}</ul>
             </section>}
-          </div>}
+          </div>
         </div>
       </div>
     );
@@ -661,10 +676,7 @@ function LiveBrowser({
     );
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background">
-      {loadedViewerId !== id && <div role="status" aria-label="Loading browser view" className="absolute inset-0 z-10 flex flex-col bg-background">
-        <div className="flex h-12 shrink-0 items-center border-b px-4 py-2"><div className="h-7 w-full rounded-md border px-3 py-1 text-xs text-muted-foreground">{current?.url || address}</div></div>
-        <div className="flex min-h-0 flex-1 items-center justify-center p-3"><div aria-hidden="true" className="aspect-[8/5] w-full max-w-7xl rounded-md border bg-muted motion-safe:animate-pulse" /></div>
-      </div>}
+      {loadedViewerId !== id && <div className="absolute inset-0 z-10"><LoadingBrowserFrame url={current?.url || address} /></div>}
       {error && <p role="alert" className="shrink-0 px-4 py-2 text-xs text-muted-foreground">{error}</p>}
       <iframe
         title="Live browser"

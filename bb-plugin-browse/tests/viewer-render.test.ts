@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';import {JSDOM} from 'jsdom';import {viewerHtml} from '../src/viewer';
 it('paints the freshest decoded frame and closes every replaced bitmap',async()=>{
- const dom=new JSDOM('<div id="viewport-skeleton"></div><canvas id="screen"></canvas><span id="resolution"></span>',{runScripts:'outside-only',pretendToBeVisual:true});
+ const dom=new JSDOM('<div id="viewport"></div><div id="viewport-skeleton"></div><canvas id="screen"></canvas><span id="resolution"></span>',{runScripts:'outside-only',pretendToBeVisual:true});
  const callbacks:Array<()=>void>=[],draw=vi.fn(),bitmaps=[1,2,3].map(n=>({width:1280,height:800,n,close:vi.fn()}));
  const acks=[vi.fn(),vi.fn(),vi.fn()];let finishFirst:(v:unknown)=>void=()=>{};
  const first=new Promise(r=>finishFirst=r);
