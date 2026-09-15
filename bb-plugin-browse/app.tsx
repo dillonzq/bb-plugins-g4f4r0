@@ -762,7 +762,7 @@ function AutoShowBrowsers({ threadId }: { threadId: string }) {
     async (revealId?: string) => {
       if (!threadId) return;
       try {
-        const sessions = await rpc.call("list", { threadId });
+        const sessions = await rpc.call("list", { threadId, onlyUnshown: true });
         if (activeThread.current !== threadId) return;
         // Oldest first leaves the newly opened page selected. Routine refreshes
         // never steal focus from another session or reopen a user-closed tab.

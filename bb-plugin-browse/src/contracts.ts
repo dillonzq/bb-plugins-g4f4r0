@@ -295,7 +295,7 @@ export const rpcContract = defineRpcContract({
   },
   "local-servers": { input: z.object({ threadId: id }), output: localServerList },
   list: {
-    input: z.object({ threadId: id.optional() }),
+    input: z.object({ threadId: id.optional(), onlyUnshown: z.boolean().optional() }),
     output: z.array(session),
   },
   "open-address": { input: z.object({ threadId: id, url: z.string(), paramsJson: z.string(), sessionId: id.optional() }), output: z.object({ session }) },

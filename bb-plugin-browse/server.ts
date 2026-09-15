@@ -46,6 +46,7 @@ export default async function plugin(bb: BbPluginApi) {
       sessions.set(s.id, s);
     }
   }
+  const panelNavigation = new Map<string, number>();
   const changed = () => bb.realtime.publish("browser-changed", {});
   async function persist(s: Session) {
     await bb.storage.kv.set(`session:${s.id}`, s);
@@ -526,13 +527,21 @@ export default async function plugin(bb: BbPluginApi) {
       }));
     },
     "local-servers": async ({ threadId }) => host.call("local-servers", null, { hostId: await threadHost(threadId), timeoutMs: 12000 }),
-    list: async ({ threadId }) =>
-      Promise.all(
-        [...sessions.values()]
-          .filter((s) => !threadId || s.threadId === threadId)
-          .sort((a, b) => b.createdAt - a.createdAt)
-          .map(refresh),
-      ),
+    list: async ({ threadId, onlyUnshown }) => {
+      const results = await Promise.all([...sessions.values()]
+        .filter(s => !threadId || s.threadId === threadId)
+        .sort((a, b) => b.createdAt - a.createdAt).map(refresh));
+      if (!onlyUnshown) return results;
+      if (!threadId) throw new Error("Thread is required for unshown sessions.");
+      const state = await bb.sdk.threads.tabs.get({ threadId });
+      if (panelNavigation.has(threadId)) return [];
+      const shown = new Set<string>();
+      for (const tab of state.tabs) {
+        if (tab.kind !== "plugin-panel" || tab.pluginId !== "browse" || tab.actionId !== "live") continue;
+        try { const value = JSON.parse(tab.paramsJson ?? "null"); if (typeof value?.id === "string") shown.add(value.id); } catch {}
+      }
+      return results.filter(s => !shown.has(s.id));
+    },
     probe: async (input) => {
       const hostId = await machine(input);
       return {
@@ -581,6 +590,8 @@ export default async function plugin(bb: BbPluginApi) {
       return host.call("input", input, { hostId: s.hostId });
     },
     "open-address": async ({ threadId, url, paramsJson, sessionId }) => {
+      panelNavigation.set(threadId, (panelNavigation.get(threadId) ?? 0) + 1);
+      try {
       const before = await bb.sdk.threads.tabs.get({ threadId });
       const original = before.tabs.find(t => t.kind === "plugin-panel" && t.pluginId === "browse" && t.actionId === "live" && (t.paramsJson ?? "{}") === paramsJson);
       if (!original) throw new Error("This browser tab is no longer open.");
@@ -609,6 +620,12 @@ export default async function plugin(bb: BbPluginApi) {
       } catch (error) {
         if (created) await release(get(result.session.id));
         throw error;
+      }
+      } finally {
+        const pending = (panelNavigation.get(threadId) ?? 1) - 1;
+        if (pending) panelNavigation.set(threadId, pending);
+        else panelNavigation.delete(threadId);
+        changed();
       }
     },
     start: async (input) => {

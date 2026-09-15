@@ -739,6 +739,8 @@ it("opens an address in the existing blank panel and preserves other tabs", asyn
     expect(options.panelTabs).toHaveLength(2);
     expect(options.panelTabs[0]).toMatchObject({ id: "blank", title: "example.com", paramsJson: JSON.stringify({ id: result.session.id }) });
     expect(options.panelTabs[1]).toEqual({ id: "other", kind: "thread-info" });
+    expect(await f.harness.behavior.callRpc("list", { threadId: "thread_one", onlyUnshown: true })).toEqual([]);
+    expect(await f.harness.behavior.callRpc("list", { threadId: "thread_one" })).toHaveLength(1);
   } finally { await f.harness.lifecycle.dispose(); }
 });
 
