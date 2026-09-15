@@ -21,7 +21,7 @@ try {
  }
  if(value?.state!=='connected'||value?.frame!=='true')throw Error(JSON.stringify(value));
  await cdp.evaluate(`rtcFail('Test connection failure')`);
- if(process.argv.includes('--embedded')){let fallback:any;for(let i=0;i<100;i++){fallback=await cdp.evaluate(`({transport:window.browseMetrics?.transport,label:transportBadge.textContent,frames:window.browseMetrics?.displayed})`);if(fallback.transport?.startsWith('h264')&&fallback.frames>value.frames)break;await new Promise(r=>setTimeout(r,200));}if(!fallback.transport?.startsWith('h264'))throw Error(JSON.stringify(fallback));console.log(JSON.stringify({video:value,fallback}));}else{
+ if(process.argv.includes('--embedded')||process.argv.includes('--fallback')){let fallback:any;for(let i=0;i<100;i++){fallback=await cdp.evaluate(`({transport:window.browseMetrics?.transport,label:transportBadge.textContent,frames:window.browseMetrics?.displayed})`);if(fallback.transport?.startsWith('h264')&&fallback.frames>value.frames)break;await new Promise(r=>setTimeout(r,200));}if(!fallback.transport?.startsWith('h264'))throw Error(JSON.stringify(fallback));console.log(JSON.stringify({video:value,fallback}));}else{
  const failure=await cdp.evaluate(`({visible:!document.querySelector('#viewport-skeleton').hidden,text:document.querySelector('#viewport-skeleton').textContent,button:document.querySelector('#viewport-skeleton button')?.textContent})`);
  if(!failure.visible||failure.button!=='Retry'||!failure.text.includes('Test connection failure'))throw Error(JSON.stringify(failure));
  console.log(JSON.stringify({video:value,failure}));}
