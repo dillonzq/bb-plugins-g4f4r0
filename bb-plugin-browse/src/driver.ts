@@ -29,8 +29,6 @@ export class BrowserDriver {
   static async connect(root: string, cdp: Cdp, signal: AbortSignal) {
     signal.throwIfAborted();
     const driver = new BrowserDriver(cdp, root);
-    await cdp.send("Page.enable");
-    await cdp.send("Network.enable");
     driver.disposeEvents = cdp.onEvent((method, params) => {
       if (method === "Network.requestWillBeSent") {
         driver.requests.push({
@@ -65,6 +63,10 @@ export class BrowserDriver {
         driver.logs = driver.logs.slice(-100);
       }
     });
+    await Promise.all([
+      cdp.send("Page.enable"),
+      cdp.send("Network.enable"),
+    ]);
     return driver;
   }
 

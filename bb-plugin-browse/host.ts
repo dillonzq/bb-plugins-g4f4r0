@@ -970,17 +970,19 @@ export default experimental_defineHostEntry({
               }
             };
             if (input.mode === "managed") {
-              await s.cdp.send("Emulation.setDeviceMetricsOverride", {
-                width: 1280,
-                height: 800,
-                deviceScaleFactor: 1,
-                mobile: false,
-              });
-              await s.cdp.send(
-                "Browser.setDownloadBehavior",
-                { behavior: "deny" },
-                false,
-              );
+              await Promise.all([
+                s.cdp.send("Emulation.setDeviceMetricsOverride", {
+                  width: 1280,
+                  height: 800,
+                  deviceScaleFactor: 1,
+                  mobile: false,
+                }),
+                s.cdp.send(
+                  "Browser.setDownloadBehavior",
+                  { behavior: "deny" },
+                  false,
+                ),
+              ]);
             }
             try {
               s.driver = await BrowserDriver.connect(root, s.cdp, signal);
