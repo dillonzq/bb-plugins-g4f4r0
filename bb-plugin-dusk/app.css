@@ -546,8 +546,8 @@ button.dusk-panel-toggle[hidden] { display: none; }
   display: flex;
   flex-direction: column;
   gap: 12px;
-  /* Native rows stop 18px short of the sidebar edge. */
-  padding: 4px 18px 12px 8px;
+  /* Match the 8px left inset so row backgrounds align on both edges. */
+  padding: 4px 8px 12px 8px;
 }
 .dusk-status-empty {
   padding: 24px 8px;
