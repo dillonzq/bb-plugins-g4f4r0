@@ -34,6 +34,8 @@ it("offers a responsive-mode toolbar toggle and compact viewport controls", () =
   expect(viewerHtml).not.toContain("Take control before changing the viewport.");
   expect(viewerHtml).toContain("setResponsiveTransport(responsiveEnabled)");
   expect(viewerHtml).toContain("frame.width!==responsiveWidth");
+  expect(viewerHtml).toContain("prepareViewportFrame(1280,800)");
+  expect(viewerHtml).toContain("frame.width!==expectedFrameWidth");
   expect(viewerHtml).toContain("background:var(--popover");
   expect(viewerHtml).not.toContain('id="fit-viewport"');
   expect(viewerHtml).not.toContain("fitMode");

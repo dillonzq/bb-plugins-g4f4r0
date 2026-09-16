@@ -3,14 +3,14 @@ import {it,expect,vi} from 'vitest';import {JSDOM} from 'jsdom';import {viewerHt
 it('paints the freshest decoded frame and closes every replaced bitmap',async()=>{
  const dom=new JSDOM('<div id="viewport"></div><div id="viewport-skeleton"></div><canvas id="screen"></canvas><span id="resolution"></span>',{runScripts:'outside-only',pretendToBeVisual:true});
  const callbacks:Array<()=>void>=[],draw=vi.fn(),bitmaps=[1,2,3].map(n=>({width:1280,height:800,n,close:vi.fn()}));
- const wide={width:1280,height:800,n:4,close:vi.fn()},mobile={width:412,height:915,n:5,close:vi.fn()};
- const acks=[vi.fn(),vi.fn(),vi.fn(),vi.fn(),vi.fn()];let finishFirst:(v:unknown)=>void=()=>{};
+ const wide={width:1280,height:800,n:4,close:vi.fn()},mobile={width:412,height:915,n:5,close:vi.fn()},staleMobile={width:412,height:915,n:6,close:vi.fn()},desktop={width:1280,height:800,n:7,close:vi.fn()};
+ const acks=[vi.fn(),vi.fn(),vi.fn(),vi.fn(),vi.fn(),vi.fn(),vi.fn()];let finishFirst:(v:unknown)=>void=()=>{};
  const first=new Promise(r=>finishFirst=r);
- (dom.window as any).createImageBitmap=vi.fn().mockImplementationOnce(()=>first).mockResolvedValueOnce(bitmaps[2]).mockResolvedValueOnce(wide).mockResolvedValueOnce(mobile);
+ (dom.window as any).createImageBitmap=vi.fn().mockImplementationOnce(()=>first).mockResolvedValueOnce(bitmaps[2]).mockResolvedValueOnce(wide).mockResolvedValueOnce(mobile).mockResolvedValueOnce(staleMobile).mockResolvedValueOnce(desktop);
  dom.window.requestAnimationFrame=(cb:any)=>{callbacks.push(cb);return callbacks.length;};
  (dom.window.document.querySelector('canvas') as any).getContext=()=>({drawImage:draw});
  const code=viewerHtml.slice(viewerHtml.indexOf('let statusErrorUntil=0,'),viewerHtml.indexOf('function show(frame)'));
- dom.window.eval(`${viewerTrace}const screen=document.querySelector('canvas'),metrics={bytes:0,dropped:0,displayed:0},status={textContent:''},address={value:''};let closed=false,inViewport=true,vw=1280,vh=800,lastFrame=0,seq=0,pageLoading=false,currentUrl='',acting=false,responsiveEnabled=false,responsiveWidth=412,responsiveHeight=915;function fit(){}function renderCopy(){};${code};window.accept=acceptFrame;window.metrics=metrics;window.enableResponsive=()=>responsiveEnabled=true;`);
+ dom.window.eval(`${viewerTrace}const screen=document.querySelector('canvas'),metrics={bytes:0,dropped:0,displayed:0},status={textContent:''},address={value:''};let closed=false,inViewport=true,vw=1280,vh=800,lastFrame=0,seq=0,pageLoading=false,currentUrl='',acting=false,responsiveEnabled=false,responsiveWidth=412,responsiveHeight=915,expectedFrameWidth=0,expectedFrameHeight=0;function fit(){}function renderCopy(){};${code};window.accept=acceptFrame;window.metrics=metrics;window.enableResponsive=()=>responsiveEnabled=true;window.expectDesktop=()=>{responsiveEnabled=false;expectedFrameWidth=1280;expectedFrameHeight=800;};`);
  try{
   const accept=(dom.window as any).accept;
   accept({size:1},{seq:1,width:1280,height:800},acks[0]);
@@ -28,5 +28,10 @@ it('paints the freshest decoded frame and closes every replaced bitmap',async()=
   expect(draw).toHaveBeenCalledTimes(1);expect(wide.close).toHaveBeenCalledOnce();expect(acks[3]).toHaveBeenCalledOnce();
   accept({size:1},{seq:5,width:412,height:915},acks[4]);await new Promise(r=>setTimeout(r,0));callbacks.shift()?.();
   expect(draw).toHaveBeenLastCalledWith(mobile,0,0,412,915);expect(mobile.close).toHaveBeenCalledOnce();expect(acks[4]).toHaveBeenCalledOnce();
+  (dom.window as any).expectDesktop();
+  accept({size:1},{seq:6,width:412,height:915},acks[5]);await new Promise(r=>setTimeout(r,0));callbacks.shift()?.();
+  expect(draw).toHaveBeenCalledTimes(2);expect(staleMobile.close).toHaveBeenCalledOnce();expect(acks[5]).toHaveBeenCalledOnce();
+  accept({size:1},{seq:7,width:1280,height:800},acks[6]);await new Promise(r=>setTimeout(r,0));callbacks.shift()?.();
+  expect(draw).toHaveBeenLastCalledWith(desktop,0,0,1280,800);expect(desktop.close).toHaveBeenCalledOnce();expect(acks[6]).toHaveBeenCalledOnce();
  }finally{dom.window.close();}
 });
