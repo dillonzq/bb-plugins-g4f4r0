@@ -21,3 +21,12 @@ Aura's 8×8 pattern, four brightness steps, original colors, two-CSS-pixel cells
 half-resolution framebuffer, 30 fps limit, and gentle threshold-wave animation.
 Unrelated Aura features and Capy assets are not included. The effect makes no
 runtime requests to Aura, Capy, or Paper Design.
+
+## GTD Sidebar
+
+Dusk's snooze rules in `lib/status.ts` follow GTD Sidebar by Scott Sunarto,
+licensed under the MIT License:
+https://github.com/smsunarto/bb-plugins/tree/main/plugins/gtd-sidebar
+See `licenses/GTD-SIDEBAR-MIT.txt`. Dusk reimplements the wake rules (time
+passed, new activity, never hide working or waiting threads) and stores
+snoozes in its own plugin storage. No GTD Sidebar code runs at runtime.

@@ -135,10 +135,23 @@ export const configSchema = z.object({
     return bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
   }, "Choose a valid processed wallpaper."),
 }).strict();
+const threadIdSchema = z.string().regex(/^thr_[a-zA-Z0-9]+$/);
+export const snoozeSchema = z.object({ threadId: threadIdSchema, until: z.number().int().positive(), at: z.number().int().positive() }).strict();
+export type Snooze = z.infer<typeof snoozeSchema>;
+const SNOOZE_KEY = "snoozes";
+
 export const rpcContract = defineRpcContract({
   get: { input: z.null(), output: configSchema },
   save: { input: configSchema, output: configSchema },
-  history: { input: z.object({ threadId: z.string().regex(/^thr_[a-zA-Z0-9]+$/) }).strict(), output: z.array(z.object({ question: z.string(), answer: z.string() })) },
+  snoozes: { input: z.null(), output: z.array(snoozeSchema) },
+  snooze: { input: z.object({ threadId: threadIdSchema, until: z.number().int().positive() }).strict(), output: z.array(snoozeSchema) },
+  unsnooze: { input: z.object({ threadId: threadIdSchema }).strict(), output: z.array(snoozeSchema) },
+  threadDetails: {
+    input: z.object({ threadId: threadIdSchema }).strict(),
+    output: z.object({ model: z.string().nullable(), reasoning: z.string().nullable(), provider: z.string().nullable(), modelProviderId: z.string().nullable(), fullTitle: z.string().nullable() }),
+  },
+  pinOrder: { input: z.null(), output: z.array(z.object({ threadId: z.string(), key: z.string().nullable() })) },
+  history: { input: z.object({ threadId: threadIdSchema }).strict(), output: z.array(z.object({ question: z.string(), answer: z.string() })) },
 });
 export default function plugin(bb: BbPluginApi) {
   const shortcutUsage = [
@@ -188,7 +201,102 @@ export default function plugin(bb: BbPluginApi) {
     },
   });
 
+  // Snoozes live in Dusk's own storage, so removing Dusk removes them too.
+  // Writes are serialized because each one rewrites the whole map.
+  let snoozeWrites: Promise<unknown> = Promise.resolve();
+  const readSnoozes = async (): Promise<Snooze[]> => {
+    const parsed = z.array(snoozeSchema).safeParse(await bb.storage.kv.get(SNOOZE_KEY));
+    const now = Date.now();
+    return parsed.success ? parsed.data.filter((row) => row.until > now) : [];
+  };
+  const updateSnoozes = (change: (rows: Snooze[]) => Snooze[]) => {
+    const next = snoozeWrites.then(async () => {
+      const rows = change(await readSnoozes());
+      await bb.storage.kv.set(SNOOZE_KEY, rows);
+      bb.realtime.publish("snoozes", {});
+      return rows;
+    });
+    snoozeWrites = next.catch(() => undefined);
+    return next;
+  };
+  const clearSnooze = (threadId: string) => updateSnoozes((rows) => rows.filter((row) => row.threadId !== threadId));
+  bb.events.on("thread.archived", ({ thread }) => { void clearSnooze(thread.id); });
+  bb.events.on("thread.deleted", ({ thread }) => { void clearSnooze(thread.id); });
+  bb.onDispose(bb.sdk.subscribe({
+    event: "thread:changed",
+    callback: (event) => {
+      if (event.id !== undefined && event.changes.includes("pin-state-changed")) bb.realtime.publish("pins", {});
+    },
+  }));
+
+  // Model lists change rarely and cost a provider round trip; cache briefly.
+  type ModelInfo = { name: string; route: string | null };
+  const modelCache = new Map<string, { at: number; names: Promise<Map<string, ModelInfo>> }>();
+  const modelNames = (providerId: string) => {
+    const cached = modelCache.get(providerId);
+    if (cached && Date.now() - cached.at < 5 * 60_000) return cached.names;
+    const names = bb.sdk.providers.models({ providerId })
+      .then((result) => new Map(result.models.flatMap((m) => {
+        const info = { name: m.displayName, route: m.routeProviderId ?? null };
+        return [[m.id, info], [m.model, info]] as [string, ModelInfo][];
+      })))
+      .catch(() => { modelCache.delete(providerId); return new Map<string, ModelInfo>(); });
+    modelCache.set(providerId, { at: Date.now(), names });
+    return names;
+  };
+
+  const firstMessage = async (threadId: string): Promise<string | null> => {
+    try {
+      // The user's first turn request carries the prompt as sent.
+      type Part = { type: string; text?: string };
+      const rows = await bb.sdk.threads.events.list({ threadId, order: "asc", limit: "20", types: ["client/turn/requested"] });
+      for (const row of rows) {
+        const data = row.data as { initiator?: string; input?: Part[] };
+        if (data.initiator !== "user") continue;
+        const text = data.input?.flatMap((part) => part.type === "text" && part.text ? [part.text] : []).join("\n").trim();
+        if (text) return text.replace(/\s+/g, " ");
+      }
+    } catch {}
+    return null;
+  };
+
   bb.rpc.register(rpcContract, {
+    threadDetails: async ({ threadId }) => {
+      const [thread, options] = await Promise.all([
+        bb.sdk.threads.get({ threadId }),
+        bb.sdk.threads.defaultExecutionOptions({ threadId }).catch(() => null),
+      ]);
+      const [names, providers, fullTitle] = await Promise.all([
+        modelNames(thread.providerId),
+        bb.sdk.providers.list().catch(() => []),
+        // Untitled threads only carry BB's shortened first message; read it in full.
+        thread.title ? Promise.resolve(null) : firstMessage(threadId),
+      ]);
+      const model = options?.model ?? null;
+      const info = model === null ? undefined : names.get(model);
+      return {
+        model: model === null ? null : info?.name ?? model,
+        reasoning: options && options.reasoningLevel !== "none" ? options.reasoningLevel : null,
+        provider: providers.find((p) => p.id === thread.providerId)?.displayName ?? null,
+        modelProviderId: info?.route ?? null,
+        fullTitle,
+      };
+    },
+    snoozes: () => readSnoozes(),
+    snooze: ({ threadId, until }) => {
+      if (until <= Date.now()) throw new Error("Choose a time in the future.");
+      return updateSnoozes((rows) => [...rows.filter((row) => row.threadId !== threadId), { threadId, until, at: Date.now() }]);
+    },
+    unsnooze: ({ threadId }) => clearSnooze(threadId),
+    pinOrder: async () => {
+      const pins: { threadId: string; key: string | null }[] = [];
+      for (let offset = 0; ; offset += 200) {
+        const rows = await bb.sdk.threads.list({ archived: false, limit: 200, offset });
+        for (const thread of rows) if (thread.pinnedAt !== null) pins.push({ threadId: thread.id, key: thread.pinSortKey });
+        if (rows.length < 200 || offset >= 5000) break;
+      }
+      return pins;
+    },
     history: async ({ threadId }) => {
       const outline = await bb.sdk.threads.conversationOutline({ threadId });
       const pairs: { question: string; answer: string }[] = [];

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { mountHomepage, getSlots, subscribeSlots, getConfig, subscribeConfig, setConfig } from "./lib/homepage";
 import { prepareImage } from "./lib/wallpaper";
 import { SidebarDetails } from "./lib/sidebar";
+import { SNOOZE_EVENT, StatusThreadList, statusListMounted } from "./lib/status-list";
 import "./app.css";
 
 function useBackground() {
@@ -84,4 +85,16 @@ export default definePluginApp((app) => {
   app.contentScripts.register({ id: "homepage", mount: ({ signal }) => mountHomepage(signal) });
   app.slots.experimental_appOverlay({ id: "background-controller", component: HomepageController });
   app.slots.experimental_appOverlay({ id: "sidebar-details", component: SidebarDetails });
+  app.slots.experimental_threadList({
+    id: "status",
+    title: "Dusk (status)",
+    description: "Pinned, Waiting, Ready, Working, Done, and Snoozed, with no project headings.",
+    component: StatusThreadList,
+  });
+  app.slots.commandPaletteAction({
+    id: "snooze-thread",
+    title: "Dusk: snooze thread…",
+    isAvailable: ({ threadId }) => threadId !== null && statusListMounted > 0,
+    run: ({ threadId }) => { if (threadId) window.dispatchEvent(new CustomEvent(SNOOZE_EVENT, { detail: threadId })); },
+  });
 });

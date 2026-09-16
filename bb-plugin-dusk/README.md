@@ -26,6 +26,25 @@ Disable Dusk to restore BB's native layout. Switch back to the default palette w
 bb theme set default
 ```
 
+## Status sidebar
+
+Dusk can replace BB's thread list with status sections: **Pinned**, **Waiting**, **Ready**, **Working**, **Done**, and **Snoozed**. There are no project headings; each row shows its project (Personal for threads outside a project) and last update. BB turns it on when Dusk loads. To switch between it and BB's list, open **Settings → Appearance → Sidebar** and choose **Dusk (status)** or BB's list.
+
+- **Waiting**: the agent is waiting on you, with a question or approval, or a run failed and you haven't read it.
+- **Ready**: the agent finished and you haven't read the result.
+- **Working**: the agent, a workflow, a background job, plan mode, or a goal is active.
+- **Done**: finished threads you've read, newest first.
+- Opening an unread thread keeps it in Ready or Waiting for 5 seconds. Leave sooner and Dusk marks it unread again, so a mis-click doesn't lose it.
+- Child threads stay under their parent. A group takes its most urgent state: Waiting, then Working, then Ready.
+
+Hover a row for Pin, Snooze, Archive, and the `…` menu. Rest on a row for half a second to see a card with the project, the full title (the full first prompt for untitled threads), the model with its provider logo and reasoning level, and the branch or worktree. Snooze offers In 1 hour, In 3 hours, Tomorrow (9:00), Next week (Monday 9:00), or Custom, which asks for a date (calendar popover) and a time. **Dusk: snooze thread…** in the command palette opens the Custom picker. A snoozed thread returns when its time is up or when anything in it changes. Threads that are working or asking can't be snoozed. Archive is BB's normal archive.
+
+The calendar, popover, and hover card come from BB's shadcn registry (`npx shadcn add @bb/<name>`). BB uses Tailwind v4, so write CSS variable classes as `h-(--cell-size)`, not `h-[--cell-size]`.
+
+Snoozes are stored in Dusk's plugin storage, so removing Dusk removes them. The rules live in `lib/status.ts`; run `node --test tests/status.test.ts` after changing them.
+
+## Keyboard shortcuts
+
 To opt into Dusk's T3-inspired keyboard layout, apply it explicitly:
 
 ```sh
@@ -53,6 +72,7 @@ Before calling a change done, run:
 
 ```sh
 npm run typecheck
+node --test tests/status.test.ts
 bb plugin build
 bb plugin reload dusk
 ```

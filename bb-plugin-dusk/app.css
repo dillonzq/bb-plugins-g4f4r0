@@ -539,3 +539,180 @@ button.dusk-panel-toggle[hidden] { display: none; }
   background-color: var(--state-hover);
   color: var(--foreground);
 }
+
+/* Dusk (status) thread list: status sections, no project headings.
+   Rows mirror the native two-line rows above. */
+.dusk-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Native rows stop 18px short of the sidebar edge. */
+  padding: 4px 18px 12px 8px;
+}
+.dusk-status-empty {
+  padding: 24px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--subtle-foreground);
+}
+.dusk-status-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dusk-status-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding-inline: 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--subtle-foreground);
+  text-align: left;
+  cursor: pointer;
+}
+.dusk-status-heading:hover { color: var(--muted-foreground); }
+.dusk-status-heading:focus-visible { outline: 2px solid var(--sidebar-ring); outline-offset: -2px; }
+.dusk-status-count { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.dusk-status-chevron {
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  transition: transform 120ms ease;
+}
+.dusk-status-heading:is(:hover, :focus-visible) .dusk-status-chevron,
+.dusk-status-heading[aria-expanded="false"] .dusk-status-chevron { opacity: 1; }
+.dusk-status-heading[aria-expanded="true"] .dusk-status-chevron { transform: rotate(90deg); }
+
+.dusk-status-family { display: flex; flex-direction: column; gap: 2px; }
+.dusk-status-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 15px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+.dusk-status-row {
+  --dusk-title-cover: 0px;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 20px 16px;
+  align-items: center;
+  column-gap: 8px;
+  height: var(--dusk-thread-row-height, 3rem);
+  padding: 6px 0 6px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--sidebar-foreground);
+  user-select: none;
+}
+.dusk-status-row:is(:hover, [data-menu-open]) { background-color: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.dusk-status-row[data-active] { background-color: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+.dusk-status-link {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  outline: none;
+}
+.dusk-status-link:focus-visible { box-shadow: inset 0 0 0 2px var(--sidebar-ring); }
+.dusk-status-title {
+  grid-row: 1;
+  grid-column: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 20px;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, #000 max(0px, calc(100% - var(--dusk-title-cover) - 24px)), transparent max(0px, calc(100% - var(--dusk-title-cover))));
+  mask-image: linear-gradient(to right, #000 max(0px, calc(100% - var(--dusk-title-cover) - 24px)), transparent max(0px, calc(100% - var(--dusk-title-cover))));
+}
+.dusk-status-row .dusk-thread-meta { grid-row: 2; grid-column: 1 / -1; }
+.dusk-status-trailing {
+  grid-row: 1;
+  grid-column: 2;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 28px;
+  height: 28px;
+  margin-right: 0;
+}
+.dusk-status-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+}
+.dusk-status-indicator {
+  position: relative;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+.dusk-status-indicator > span { width: 16px; height: 16px; }
+.dusk-status-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+.dusk-status-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--subtle-foreground);
+  cursor: pointer;
+}
+.dusk-status-action:is(:hover, :focus-visible, [data-state="open"]) { color: var(--foreground); outline: none; }
+.dark .dusk-status-action:is(:hover, :focus-visible, [data-state="open"]) { color: #fff; }
+.dusk-status-action:disabled { opacity: 0.5; cursor: default; }
+@media (min-width: 768px), (pointer: fine) {
+  .dusk-status-row:is(:hover, :focus-within, [data-menu-open]) .dusk-status-actions { display: flex; }
+  .dusk-status-row:is(:hover, :focus-within, [data-menu-open]) .dusk-status-state { visibility: hidden; }
+  .dusk-status-row:is(:hover, :focus-within, [data-menu-open]) { --dusk-title-cover: 90px; }
+  .dusk-status-row[data-child]:is(:hover, :focus-within, [data-menu-open]) { --dusk-title-cover: 58px; }
+  /* Without a status icon the title runs 36px further, under the actions. */
+  .dusk-status-row:not([data-has-state]):is(:hover, :focus-within, [data-menu-open]) { --dusk-title-cover: 118px; }
+  .dusk-status-row[data-child]:not([data-has-state]):is(:hover, :focus-within, [data-menu-open]) { --dusk-title-cover: 86px; }
+}
+
+/* No status icon: give the title the empty status slot too, so it only fades
+   when it really reaches the row's 8px right inset. */
+.dusk-status-row:not([data-has-state]) .dusk-status-title {
+  grid-column: 1 / -1;
+  margin-right: 8px;
+}
+.dusk-status-row:not([data-has-state]) .dusk-status-trailing { grid-column: 2; }
+
+.dusk-snooze-time {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--subtle-foreground);
+  opacity: 1;
+}
+
+/* Thread hover card. */
+.dusk-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; font-size: 12px; line-height: 16px; }
+.dusk-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--subtle-foreground); }
+.dusk-card-project { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.dusk-card-head time { flex-shrink: 0; }
+.dusk-card-title { margin: 0; max-height: 240px; overflow-y: auto; scrollbar-width: thin; color: var(--foreground); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
+.dusk-card-facts { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted-foreground); }
+.dusk-card-fact { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+/* 14px glyphs in the subtle tone, like the composer's provider logo. */
+.dusk-card-icon { flex-shrink: 0; width: 14px; height: 14px; color: var(--subtle-foreground); }
+.dusk-card-muted { color: var(--subtle-foreground); }
