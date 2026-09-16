@@ -1,6 +1,6 @@
 # Custom BB plugins
 
-Live source for Browse, Beacon, Sidetree, Dusk, and Reserve. BB loads these folders in place from this checkout. The GitHub remote is [https://github.com/g4f4r0/bb-plugins](https://github.com/g4f4r0/bb-plugins)
+Live source for Browse, Beacon, Sidetree, Dusk, Reserve, and MCPs. BB loads these folders in place from this checkout. The GitHub remote is [https://github.com/g4f4r0/bb-plugins](https://github.com/g4f4r0/bb-plugins)
 
 Do not install these from a thread workspace, `/tmp`, or a throwaway worktree. If the thread is archived, BB deletes the directory. The plugin entry survives, pointing at a hole.
 
@@ -12,6 +12,7 @@ Do not install these from a thread workspace, `/tmp`, or a throwaway worktree. I
 | Sidetree | `sidetree` | `bb-plugin-sidetree` |
 | Dusk     | `dusk`     | `bb-plugin-dusk`     |
 | Reserve  | `reserve`  | `bb-plugin-reserve`  |
+| MCPs     | `mcps`     | `bb-plugin-mcps`     |
 
 
 Keep these IDs. Change the id and BB treats it as a new plugin and drops its settings. Agent Plugins is a separate local package at `/home/g4f4r0/.bb/local-plugins/bb-plugin-agent-plugins`.
