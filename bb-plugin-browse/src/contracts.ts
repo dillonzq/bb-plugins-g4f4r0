@@ -109,6 +109,12 @@ export const hostSession = z.object({
     height: z.number().int().min(320).max(2560),
     mobile: z.boolean(),
   }).optional(),
+  devtoolsOpen: z.boolean().optional(),
+  dialog: z.object({
+    type: z.enum(["alert", "confirm", "prompt", "beforeunload"]),
+    message: z.string(),
+    defaultPrompt: z.string().optional(),
+  }).optional(),
 });
 export const scope = z.object({
   hostId: id,
@@ -181,6 +187,11 @@ export const viewerInput = z.discriminatedUnion("kind", [
     mobile: z.boolean(),
   }),
   z.object({ kind: z.literal("maintenance"), action: z.enum(["hard-reload", "open-devtools", "clear-cookies", "clear-cache"]) }),
+  z.object({
+    kind: z.literal("dialog"),
+    accept: z.boolean(),
+    promptText: z.string().max(10000).optional(),
+  }),
   z.object({ kind: z.literal("history"), action: z.enum(["back", "forward", "reload"]) }),
   z.object({ kind: z.literal("navigate"), url: z.string().max(4000) }),
 ]);

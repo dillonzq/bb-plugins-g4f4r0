@@ -1,9 +1,10 @@
 import { existsSync, promises as fs } from "node:fs";
 import { join, delimiter } from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { runProcess } from "./process";
 import { configureProfilePreferences } from "./profile-preferences";
+import { spawnWatched } from "./watched-process";
 import {
   installed,
   fortressExecutable,
@@ -310,9 +311,9 @@ export async function acquireDisplay(
   reservedDisplays.add(n);
   let child: ChildProcess;
   try {
-    child = spawn(launch.command, launch.args, {
+    child = spawnWatched(launch.command, launch.args, {
       env: launch.env,
-      stdio: ["ignore", "ignore", "pipe"],
+      stderr: "pipe",
     });
   } catch (error) {
     reservedDisplays.delete(n);
@@ -450,12 +451,12 @@ async function launchBrowser(
     process.platform,
     video,
   );
-  const child = spawn(
+  const child = spawnWatched(
     browserPath,
     video ? videoChromeArgs(profile, initialUrl) : chromeArgs(profile, initialUrl),
     {
       env: display.env,
-      stdio: ["ignore", "ignore", "pipe"],
+      stderr: "pipe",
       windowsHide: true,
     },
   );

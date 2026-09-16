@@ -67,6 +67,16 @@ it("uses the BB sidebar surface for the browser shell", () => {
   expect(viewerHtml).toContain("sidebar-border");
 });
 
+it("renders browser dialogs as interactive BB overlays", () => {
+  expect(viewerHtml).toContain('id="dialog-overlay"');
+  expect(viewerHtml).toContain('id="dialog-prompt"');
+  expect(viewerHtml).toContain("kind:'dialog'");
+  expect(viewerHtml).toContain("dialogMessage.textContent=dialog.message");
+  expect(viewerHtml).toContain("const viewerInfoTimer=setInterval(refreshViewerInfo,1000)");
+  expect(viewerHtml).toContain("You’re controlling");
+  expect(viewerHtml).toContain("@media(max-width:520px){#status,#machine{display:none}}");
+});
+
 it('backs off capture without demand and permits a short active pipeline',async()=>{
   const {Cdp}=await import('../src/cdp');
   const c:any=Object.create(Cdp.prototype);

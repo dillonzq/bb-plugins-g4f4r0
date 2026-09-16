@@ -51,6 +51,7 @@ vi.mock("../src/cdp", () => ({
         height: 800,
         seq: 1,
       }),
+      onEvent: () => () => {},
       close: () => mock.events.push("cdp-close"),
     }),
   },

@@ -46,6 +46,11 @@ import { runSequence } from "./src/sequence";
 import { observeExpression, deepQuerySource } from "./src/observe";
 import { Bridge } from "./src/bridge";
 import { validateCommand, redact } from "./src/policy";
+import {
+  openDevToolsLayout,
+  restorePageWindow,
+  type DevToolsLayoutState,
+} from "./src/devtools-layout";
 
 type LocalSession = {
   credential?: {
@@ -60,6 +65,13 @@ type LocalSession = {
   videoMode?: boolean;
   videoInput?: SelkiesStream;
   devtoolsOpen?: boolean;
+  devtoolsLayout?: DevToolsLayoutState;
+  browserEvents?: () => void;
+  dialog?: {
+    type: "alert" | "confirm" | "prompt" | "beforeunload";
+    message: string;
+    defaultPrompt?: string;
+  };
   viewport?: { width: number; height: number; mobile: boolean };
   mode?: "managed" | "native";
   framing?: boolean;
@@ -149,7 +161,17 @@ function publicSession(s: LocalSession) {
     busy: s.busy,
     expiresAt: s.expiresAt,
     viewport: s.viewport,
+    devtoolsOpen: !!s.devtoolsOpen,
+    dialog: s.dialog,
   };
+}
+
+async function restoreDevToolsSession(s: LocalSession) {
+  const layout = s.devtoolsLayout;
+  s.devtoolsOpen = false;
+  s.devtoolsLayout = undefined;
+  if (!s.cdp || !s.targetId) return;
+  await restorePageWindow(s.cdp, s.targetId, layout?.pageWindowId).catch(() => {});
 }
 function session(id: string) {
   const s = sessions.get(id);
@@ -622,6 +644,8 @@ function release(s: LocalSession): Promise<void> {
 async function closeSession(s: LocalSession) {
   clearTimeout(s.timer);
   clearTimeout(s.castTimer);
+  s.browserEvents?.();
+  s.browserEvents = undefined;
   if(s.video)await s.video.stream.then(stream=>stream.stop()).catch(()=>{});
   s.video=undefined;
   s.videoInput=undefined;
@@ -907,6 +931,17 @@ export default experimental_defineHostEntry({
               s.viewport = input;
               await s.cdp!.refreshLiveCast();
               break;
+            case "dialog":
+              if (!s.dialog)
+                throw new Error("The browser dialog is no longer open.");
+              await s.cdp!.send("Page.handleJavaScriptDialog", {
+                accept: input.accept,
+                ...(input.promptText !== undefined
+                  ? { promptText: input.promptText }
+                  : {}),
+              });
+              s.dialog = undefined;
+              break;
             case "maintenance":
               if (input.action === "hard-reload") {
                 await s.cdp!.send("Page.reload", { ignoreCache: true });
@@ -919,14 +954,20 @@ export default experimental_defineHostEntry({
                 const videoInput = s.videoInput;
                 if (!videoInput || videoInput.isClosed)
                   throw new Error("The live browser view could not reconnect for DevTools.");
-                await videoInput.runInput(`devtools:${s.id}`, [
+                const trigger = () => videoInput.runInput(`devtools:${s.id}`, [
                   { kind: "keyboard", type: "down", key: "Control", code: "ControlLeft", modifiers: 2, repeat: false },
                   { kind: "keyboard", type: "down", key: "Shift", code: "ShiftLeft", modifiers: 10, repeat: false },
                   { kind: "keyboard", type: "down", key: "i", code: "KeyI", modifiers: 10, repeat: false },
                   { kind: "keyboard", type: "up", key: "i", code: "KeyI", modifiers: 10, repeat: false },
                   { kind: "keyboard", type: "up", key: "Shift", code: "ShiftLeft", modifiers: 2, repeat: false },
                   { kind: "keyboard", type: "up", key: "Control", code: "ControlLeft", modifiers: 0, repeat: false },
-                ]);
+                ]).then(() => {});
+                s.devtoolsLayout = await openDevToolsLayout(
+                  s.cdp!,
+                  s.targetId!,
+                  trigger,
+                  signal,
+                );
                 s.devtoolsOpen = true;
               } else {
                 if (s.mode !== "managed") throw new Error("Clearing browser data is supported only in an isolated Browse profile.");
@@ -1030,6 +1071,28 @@ export default experimental_defineHostEntry({
                   "Browser disconnected or its tab closed. Reconnect the session.";
               }
             };
+            s.browserEvents = s.cdp.onEvent((method, params) => {
+              if (method === "Page.javascriptDialogOpening")
+                s.dialog = {
+                  type: ["alert", "confirm", "prompt", "beforeunload"].includes(
+                    params?.type,
+                  )
+                    ? params.type
+                    : "alert",
+                  message: String(params?.message ?? ""),
+                  ...(params?.defaultPrompt
+                    ? { defaultPrompt: String(params.defaultPrompt) }
+                    : {}),
+                };
+              if (method === "Page.javascriptDialogClosed")
+                s.dialog = undefined;
+              if (
+                method === "Target.targetDestroyed" &&
+                params?.targetId === s.devtoolsLayout?.targetId
+              )
+                void restoreDevToolsSession(s);
+            });
+            await s.cdp.send("Page.enable", {});
             if (input.mode === "managed") {
               await Promise.all([
                 s.cdp.send("Emulation.setDeviceMetricsOverride", {

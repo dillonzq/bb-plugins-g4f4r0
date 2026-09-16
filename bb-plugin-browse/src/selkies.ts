@@ -1,10 +1,11 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import WebSocket from "ws";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { DirectEvent } from "./direct-input";
+import { spawnWatched } from "./watched-process";
 
 /** Private encoder connection; display input is enabled only for docked browser UI. */
 export class SelkiesStream {
@@ -191,7 +192,7 @@ export class SelkiesStream {
       });
       const port = (listener.address() as { port: number }).port;
       await new Promise<void>((resolve) => listener.close(() => resolve()));
-      stream.child = spawn(
+      stream.child = spawnWatched(
         "python3",
         [
           "-m",
@@ -233,7 +234,7 @@ export class SelkiesStream {
         ],
         {
           env: { ...env, PYTHONPATH: runtime },
-          stdio: ["ignore", "ignore", "ignore"],
+          stderr: "ignore",
         },
       );
       stream.child.once("error", () =>

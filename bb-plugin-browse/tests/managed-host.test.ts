@@ -18,6 +18,7 @@ const mock = vi.hoisted(() => ({
     seq: 1,
   })),
   events: [] as string[],
+  cdpListeners: [] as Array<(method: string, params: any) => void>,
   commands: [] as string[][],
   driverClose: vi.fn(async () => {}),
   videoInput: {
@@ -76,6 +77,13 @@ vi.mock("../src/cdp", () => ({
       stopLiveCast: mock.stopLiveCast,
       refreshLiveCast: mock.refreshLiveCast,
       nextLiveFrame: mock.nextLiveFrame,
+      onEvent: (listener: (method: string, params: any) => void) => {
+        mock.cdpListeners.push(listener);
+        return () => {
+          const index = mock.cdpListeners.indexOf(listener);
+          if (index >= 0) mock.cdpListeners.splice(index, 1);
+        };
+      },
       close: () => mock.events.push("cdp-close"),
     }),
   },
@@ -103,8 +111,24 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
   mock.close.mockImplementation(async () => {
     mock.events.push("browser-close");
   });
-  mock.send.mockImplementation(async (_method: any, params: any) => {
+  let devtoolsOpen = false;
+  mock.videoInput.runInput.mockImplementation(async () => {
+    devtoolsOpen = true;
+    return {};
+  });
+  mock.send.mockImplementation(async (method: any, params: any) => {
     if (params.type) mock.events.push(params.type);
+    if (method === "Target.getTargets")
+      return {
+        targetInfos: [
+          { targetId: "managed", type: "page", url: "https://example.com" },
+          ...(devtoolsOpen
+            ? [{ targetId: "devtools", type: "page", url: "devtools://devtools/bundled/inspector.html" }]
+            : []),
+        ],
+      };
+    if (method === "Browser.getWindowForTarget")
+      return { windowId: params.targetId === "managed" ? 1 : 2 };
     return {};
   });
   try {
@@ -153,6 +177,18 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
       binary: false,
     });
     expect((await wait(devtools)).status).toBe("succeeded");
+    expect(mock.send).toHaveBeenCalledWith(
+      "Browser.setWindowBounds",
+      expect.objectContaining({ windowId: 1, bounds: expect.objectContaining({ width: 720 }) }),
+      false,
+      2000,
+    );
+    expect(mock.send).toHaveBeenCalledWith(
+      "Browser.setWindowBounds",
+      expect.objectContaining({ windowId: 2, bounds: expect.objectContaining({ left: 720, width: 560 }) }),
+      false,
+      2000,
+    );
     expect(mock.send).not.toHaveBeenCalledWith(
       "Emulation.clearDeviceMetricsOverride",
     );
@@ -166,6 +202,33 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
         expect.objectContaining({ kind: "keyboard", type: "down", key: "Shift" }),
         expect.objectContaining({ kind: "keyboard", type: "down", key: "i" }),
       ]),
+    );
+    for (const listener of mock.cdpListeners)
+      listener("Page.javascriptDialogOpening", {
+        type: "prompt",
+        message: "Your name?",
+        defaultPrompt: "Ada",
+      });
+    expect(await h.experimental_call("inspect", { id: "ab-managed-host" })).toMatchObject({
+      dialog: { type: "prompt", message: "Your name?", defaultPrompt: "Ada" },
+    });
+    const dialog = await h.experimental_call("input", {
+      id: "ab-managed-host",
+      input: { kind: "dialog", accept: true, promptText: "Grace" },
+    });
+    expect((await wait(dialog)).status).toBe("succeeded");
+    expect(mock.send).toHaveBeenCalledWith("Page.handleJavaScriptDialog", {
+      accept: true,
+      promptText: "Grace",
+    });
+    for (const listener of mock.cdpListeners)
+      listener("Target.targetDestroyed", { targetId: "devtools" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mock.send).toHaveBeenCalledWith(
+      "Browser.setWindowBounds",
+      expect.objectContaining({ windowId: 1, bounds: expect.objectContaining({ width: 1280 }) }),
+      false,
+      2000,
     );
     mock.videoInput.isClosed = true;
     const staleDevtools = await h.experimental_call("input", {
