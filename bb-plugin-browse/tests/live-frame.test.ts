@@ -1,6 +1,8 @@
 import { it, expect } from "vitest";
 import { liveFrameFromEvent } from "../src/cdp";
 import { viewerHtml } from "../src/viewer";
+import { browserIcons } from "../src/browser-icons";
+import { OrientationPotraitToLandscapeIcon } from "@hugeicons/core-free-icons";
 
 it("reads viewport size from a screencast event", () => {
   expect(
@@ -30,6 +32,9 @@ it("offers a responsive-mode toolbar toggle and compact viewport controls", () =
   expect(viewerHtml).toContain("kind:'viewport'");
   expect(viewerHtml).toContain("responsiveToggle.onclick=()=>withHumanControl");
   expect(viewerHtml).not.toContain("Take control before changing the viewport.");
+  expect(viewerHtml).toContain("setResponsiveTransport(responsiveEnabled)");
+  expect(viewerHtml).toContain("frame.width!==responsiveWidth");
+  expect(browserIcons.Rotate).toBe(OrientationPotraitToLandscapeIcon);
 });
 it("uses the BB sidebar surface for the browser shell", () => {
   expect(viewerHtml).toContain("var(--sidebar,var(--background");
