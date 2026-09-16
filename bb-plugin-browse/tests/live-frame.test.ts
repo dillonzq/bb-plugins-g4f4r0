@@ -28,6 +28,8 @@ it("offers a responsive-mode toolbar toggle and compact viewport controls", () =
   expect(viewerHtml).toContain('id="responsive-controls"');
   expect(viewerHtml).toContain('iPhone 17 Pro Max');
   expect(viewerHtml).toContain("kind:'viewport'");
+  expect(viewerHtml).toContain("responsiveToggle.onclick=()=>withHumanControl");
+  expect(viewerHtml).not.toContain("Take control before changing the viewport.");
 });
 it("uses the BB sidebar surface for the browser shell", () => {
   expect(viewerHtml).toContain("var(--sidebar,var(--background");

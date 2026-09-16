@@ -11,7 +11,7 @@ function viewer(){
  class Socket {static OPEN=1;static urls=[];readyState=1;sent=[];constructor(url){Socket.urls.push(url);queueMicrotask(()=>this.onopen?.());}send(v){this.sent.push(JSON.parse(v));}close(){this.readyState=3;this.onclose?.();}}
  window.WebSocket=Socket;
  ${viewerInteraction}
- window.test={keyboard,screen,directQueue,flushDirect,socketUrls:Socket.urls,take(){controlToggle.click();control.onopen();control.onmessage({data:JSON.stringify({type:'control',state:'human'})});control.sent.length=0;},get control(){return control},ack(){control.onmessage({data:JSON.stringify({seq:inflight.keys().next().value})})}};
+ window.test={keyboard,screen,directQueue,flushDirect,socketUrls:Socket.urls,request(action){withHumanControl(action);},grant(){control.onopen();control.onmessage({data:JSON.stringify({type:'control',state:'human'})});},take(){controlToggle.click();this.grant();control.sent.length=0;},get control(){return control},ack(){control.onmessage({data:JSON.stringify({seq:inflight.keys().next().value})})}};
  `);
  return {dom,test:(dom.window as any).test};
 }
@@ -43,6 +43,14 @@ it('keeps the takeover label while showing a disabled loading icon',()=>{
   expect(button.textContent).toContain('Take control');
   expect((button.querySelector('[data-kind="cursor"]') as HTMLElement).hidden).toBe(true);
   expect((button.querySelector('[data-kind="loading"]') as HTMLElement).hidden).toBe(false);
+ }finally{dom.window.close();}
+});
+it('runs a toolbar action immediately after it acquires human control',()=>{
+ const {dom,test}=viewer();let applied=0;
+ try{
+  test.request(()=>applied++);expect(applied).toBe(0);
+  test.grant();expect(applied).toBe(1);
+  expect(dom.window.document.querySelector('#viewport')?.getAttribute('data-control')).toBe('human');
  }finally{dom.window.close();}
 });
 it('splits paste bursts below the server message limit without losing order',()=>{
