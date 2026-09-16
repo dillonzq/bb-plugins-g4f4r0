@@ -1,9 +1,8 @@
 // Sidekick frontend. Agents are defined in Settings > Agents and chosen per
 // thread from the thread header. There are no Sidekick-only screens.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   definePluginApp,
-  experimental_PermissionModePicker as PermissionModePicker,
   experimental_ProviderModelPicker as ProviderModelPicker,
   useBbNavigate,
   useRealtime,
@@ -12,14 +11,6 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import type { Agent, rpcContract } from "./server";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 const NEW_AGENT_PROMPT =
   "I want a new agent. Ask me what it should do, then propose a handle, a name, and its instructions. Create it with sidekick_agent_create once I confirm.";
@@ -54,104 +46,239 @@ function useAgents() {
   return { agents, error };
 }
 
-function AgentDialog({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+const PERMISSION_OPTIONS: ReadonlyArray<{
+  value: Agent["permissionMode"];
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "accept-edits",
+    label: "Accept Edits",
+    description:
+      "Applies edits inside the workspace automatically. Anything beyond the workspace asks you first.",
+  },
+  {
+    value: "auto",
+    label: "Approve for me",
+    description:
+      "Same workspace sandbox, with requests reviewed automatically. High-risk actions can still come back to you.",
+  },
+  {
+    value: "full",
+    label: "Full Access",
+    description: "No sandbox and no approvals. The agent can run anything on your machine.",
+  },
+];
+
+const permissionLabel = (mode: Agent["permissionMode"]) =>
+  PERMISSION_OPTIONS.find((option) => option.value === mode)?.label ?? mode;
+
+function SectionHeading({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="mb-3">
+      <h3 className="text-sm font-medium">{title}</h3>
+      {description === undefined ? null : (
+        <p className="text-sm text-muted-foreground">{description}</p>
+      )}
+    </div>
+  );
+}
+
+function Panel({ children }: { children: ReactNode }) {
+  return <div className="rounded-lg border border-border bg-card">{children}</div>;
+}
+
+/** A labelled text row that saves when it loses focus. */
+function TextRow({
+  label,
+  value,
+  placeholder,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onSave: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <label className="flex items-center gap-4 px-4 py-3">
+      <span className="w-28 shrink-0 text-sm">{label}</span>
+      <Input
+        value={draft}
+        placeholder={placeholder}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          if (draft !== value) onSave(draft);
+        }}
+      />
+    </label>
+  );
+}
+
+function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => void }) {
   const rpc = useRpc<typeof rpcContract>();
-  const [draft, setDraft] = useState(agent);
-  const [saving, setSaving] = useState(false);
+  const [instructions, setInstructions] = useState(agent.instructions);
   const [error, setError] = useState<string | null>(null);
-  const set = (patch: Partial<Agent>) => setDraft((current) => ({ ...current, ...patch }));
-  const save = async () => {
-    setSaving(true);
-    try {
-      await rpc.call("agents_update", {
-        id: agent.id,
-        handle: draft.handle,
-        name: draft.name,
-        description: draft.description,
-        instructions: draft.instructions,
-        providerId: draft.providerId,
-        model: draft.model,
-        reasoningLevel: draft.reasoningLevel,
-        permissionMode: draft.permissionMode,
-      });
-      onClose();
-    } catch (cause) {
-      setError(errorText(cause));
-    } finally {
-      setSaving(false);
-    }
+  useEffect(() => setInstructions(agent.instructions), [agent.instructions]);
+  const save = (patch: Partial<Agent>) => {
+    rpc.call("agents_update", { id: agent.id, ...patch }).then(
+      () => setError(null),
+      (cause: unknown) => setError(errorText(cause)),
+    );
   };
   return (
-    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Edit @{agent.handle}</DialogTitle>
-          <DialogDescription>
-            Changes apply to new threads, and to existing threads after their context is cleared.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <label className="block space-y-1">
-            <span className="text-xs text-muted-foreground">Handle</span>
-            <Input value={draft.handle} onChange={(event) => set({ handle: event.target.value })} />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-muted-foreground">Name</span>
-            <Input value={draft.name} onChange={(event) => set({ name: event.target.value })} />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-muted-foreground">Description</span>
-            <Input
-              value={draft.description}
-              onChange={(event) => set({ description: event.target.value })}
+    <div className="space-y-8">
+      <div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <Icon name="ChevronLeft" className="size-4" />
+          Agents
+        </button>
+        <div className="mt-3 flex items-center gap-2">
+          <Icon name="Bot" className="size-4 text-muted-foreground" />
+          <h2 className="text-base font-medium">@{agent.handle}</h2>
+          <span className="rounded border border-border px-1.5 text-xs text-muted-foreground">
+            {permissionLabel(agent.permissionMode)}
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {agent.name} · {agent.model} · {agent.reasoningLevel}
+        </p>
+        {error === null ? null : (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+      </div>
+
+      <section>
+        <SectionHeading title="Identity" description="How you call this agent in threads." />
+        <Panel>
+          <div className="divide-y divide-border">
+            <TextRow label="Handle" value={agent.handle} onSave={(handle) => save({ handle })} />
+            <TextRow label="Name" value={agent.name} onSave={(name) => save({ name })} />
+            <TextRow
+              label="Description"
+              value={agent.description}
+              placeholder="What this agent is for"
+              onSave={(description) => save({ description })}
             />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-muted-foreground">Instructions</span>
-            <textarea
-              rows={8}
-              value={draft.instructions}
-              onChange={(event) => set({ instructions: event.target.value })}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-            />
-          </label>
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          </div>
+        </Panel>
+      </section>
+
+      <section>
+        <SectionHeading
+          title="Instructions"
+          description="Standing behavior for every thread this agent runs in. New threads get changes right away; existing threads after their context is cleared."
+        />
+        <Panel>
+          <textarea
+            rows={10}
+            value={instructions}
+            onChange={(event) => setInstructions(event.target.value)}
+            onBlur={() => {
+              if (instructions !== agent.instructions) save({ instructions });
+            }}
+            className="block w-full resize-y rounded-lg bg-transparent px-4 py-3 text-sm outline-none"
+          />
+        </Panel>
+      </section>
+
+      <section>
+        <SectionHeading
+          title="Model"
+          description="The model and reasoning level this agent's threads run on."
+        />
+        <Panel>
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <span className="text-sm">Model</span>
             <ProviderModelPicker
+              align="end"
               value={{
-                providerId: draft.providerId,
-                model: draft.model,
-                reasoningLevel: draft.reasoningLevel,
+                providerId: agent.providerId,
+                model: agent.model,
+                reasoningLevel: agent.reasoningLevel,
               }}
               onChange={(value) =>
-                set({
+                save({
                   providerId: value.providerId,
                   model: value.model,
                   reasoningLevel: value.reasoningLevel,
                 })
               }
             />
-            <PermissionModePicker
-              providerId={draft.providerId}
-              value={draft.permissionMode}
-              onChange={(permissionMode) => set({ permissionMode })}
-            />
           </div>
-          {error === null ? null : (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={save} disabled={saving}>
-            Save
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </Panel>
+      </section>
+
+      <section>
+        <SectionHeading
+          title="Permission limit"
+          description="Highest permission mode this agent's threads may run with. A turn that asks for more is refused."
+        />
+        <Panel>
+          <div role="radiogroup" aria-label="Permission limit" className="divide-y divide-border">
+            {PERMISSION_OPTIONS.map((option) => {
+              const selected = option.value === agent.permissionMode;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    if (!selected) save({ permissionMode: option.value });
+                  }}
+                  className="flex w-full items-start gap-3 px-4 py-3 text-left"
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+                      selected ? "border-foreground" : "border-muted-foreground",
+                    )}
+                  >
+                    {selected ? <span className="size-2 rounded-full bg-foreground" /> : null}
+                  </span>
+                  <span>
+                    <span className="block text-sm">{option.label}</span>
+                    <span className="block text-sm text-muted-foreground">
+                      {option.description}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Panel>
+      </section>
+
+      <section>
+        <SectionHeading
+          title="Danger zone"
+          description="Deleting an agent keeps its threads. They stop using its instructions."
+        />
+        <Panel>
+          <div className="px-4 py-3">
+            <Button
+              variant="destructive"
+              onClick={() => {
+                rpc.call("agents_delete", { id: agent.id }).then(onBack, (cause: unknown) =>
+                  setError(errorText(cause)),
+                );
+              }}
+            >
+              Delete agent
+            </Button>
+          </div>
+        </Panel>
+      </section>
+    </div>
   );
 }
 
@@ -159,12 +286,22 @@ function AgentsSettings() {
   const rpc = useRpc<typeof rpcContract>();
   const navigate = useBbNavigate();
   const { agents, error } = useAgents();
-  const [editing, setEditing] = useState<Agent | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = (agents ?? []).find((agent) => agent.id === openId) ?? null;
+  if (open !== null) return <AgentDetail agent={open} onBack={() => setOpenId(null)} />;
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-medium">Agents</h2>
+          <p className="text-sm text-muted-foreground">
+            Reusable identities with their own instructions, model, and permissions. Pick one from
+            any thread header.
+          </p>
+        </div>
         <Button
           variant="outline"
+          className="shrink-0"
           onClick={() => navigate.toCompose({ initialPrompt: NEW_AGENT_PROMPT, focusPrompt: true })}
         >
           <Icon name="Plus" className="size-4" />
@@ -176,27 +313,35 @@ function AgentsSettings() {
           {error}
         </p>
       )}
-      <div className="rounded-lg border border-border bg-card">
+      <Panel>
         {agents === null ? null : agents.length === 0 ? (
           <p className="px-4 py-5 text-sm text-muted-foreground">
             No agents yet. Choose New agent and describe what it should do.
           </p>
         ) : (
-          <ul className="divide-y divide-border px-4">
+          <ul className="divide-y divide-border">
             {agents.map((agent) => (
-              <li key={agent.id} className="flex items-center gap-3 py-3">
-                <Icon name="Bot" className="size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
+              <li key={agent.id} className="flex items-center gap-2 pr-2">
+                <button
+                  type="button"
+                  onClick={() => setOpenId(agent.id)}
+                  className="min-w-0 flex-1 px-4 py-3 text-left"
+                >
+                  <span className="flex items-center gap-2">
+                    <Icon name="Bot" className="size-4 shrink-0 text-muted-foreground" />
                     <span className="text-sm font-medium">@{agent.handle}</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {agent.name} · {agent.model} · {agent.permissionMode}
+                    <span className="rounded border border-border px-1.5 text-xs text-muted-foreground">
+                      {agent.name}
                     </span>
-                  </div>
-                  {agent.description === "" ? null : (
-                    <p className="truncate text-xs text-muted-foreground">{agent.description}</p>
-                  )}
-                </div>
+                  </span>
+                  <span className="mt-1 flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+                    <span>{agent.model}</span>
+                    <span>{agent.reasoningLevel}</span>
+                    <span className={cn(agent.permissionMode === "full" && "text-orange-500")}>
+                      {permissionLabel(agent.permissionMode)}
+                    </span>
+                  </span>
+                </button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" aria-label={`Actions for @${agent.handle}`}>
@@ -204,7 +349,7 @@ function AgentsSettings() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => setEditing(agent)}>Edit</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setOpenId(agent.id)}>Open</DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-destructive"
                       onSelect={() => void rpc.call("agents_delete", { id: agent.id })}
@@ -217,10 +362,7 @@ function AgentsSettings() {
             ))}
           </ul>
         )}
-      </div>
-      {editing === null ? null : (
-        <AgentDialog key={editing.id} agent={editing} onClose={() => setEditing(null)} />
-      )}
+      </Panel>
     </div>
   );
 }
@@ -296,12 +438,9 @@ function ThreadAgentSelector({ threadId, isCompactViewport }: PluginThreadHeader
 }
 
 export default definePluginApp((app) => {
-  app.slots.settingsSection({
-    id: "agents",
-    title: "Agents",
-    description: "Reusable identities with their own instructions, model, and permissions.",
-    component: AgentsSettings,
-  });
+  // The section renders its own heading so it can switch between the list and
+  // an agent's detail page, like Settings > Machines.
+  app.slots.settingsSection({ id: "agents", component: AgentsSettings });
   app.slots.experimental_threadHeaderAction({
     id: "thread-agent",
     title: "Agent",

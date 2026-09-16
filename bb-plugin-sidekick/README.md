@@ -2,8 +2,9 @@
 
 Reusable BB agents with their own instructions, model, and permissions.
 
-- **Settings > Sidekick > Agents** lists agents. Edit one to change its handle,
-  name, instructions, model, reasoning, or permission mode.
+- **Settings > Sidekick > Agents** lists agents. Open one to change its handle,
+  name, instructions, model, reasoning, or permission limit. Changes save as
+  you go.
 - **Thread header > Agent** picks the agent for a thread. Switching clears the
   model context so the new instructions load; messages stay visible.
 - An agent thread refuses a different model and any permission mode above the

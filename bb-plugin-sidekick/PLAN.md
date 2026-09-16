@@ -59,7 +59,7 @@ Cost: BB's parent permission ceiling no longer applies, so Sidekick clamps permi
 | Need | BB surface | Verified |
 | --- | --- | --- |
 | Agent registry | `app.slots.settingsSection` titled "Agents" on the plugin's settings page | Yes |
-| Editing an agent | Vendored dialog with host `experimental_ProviderModelPicker` and `experimental_PermissionModePicker` | Yes |
+| Editing an agent | Detail page inside the settings section, with host `experimental_ProviderModelPicker` | Yes |
 | Choosing a thread's agent | `app.slots.experimental_threadHeaderAction` dropdown | Yes |
 | `@handle` menu | `bb.ui.registerMentionProvider`, `@` trigger | Yes, see mention notes |
 | Agent identity on a thread | Thread plugin metadata | Yes, on the first `configure` pass |
@@ -121,9 +121,16 @@ The CLI mirrors the tools: `bb sidekick list`, `bb sidekick automation update <i
 ## Settings > Agents
 
 - BB titles a plugin's settings page with the plugin's name, so the page reads "Sidekick" and holds one section, "Agents". See open questions.
-- One card with a row per agent: icon, `@handle`, name, model, permission mode, description, and a `⋯` menu with Edit and Delete agent.
+- Follows Settings > Machines: a heading with a description and **New agent** on the right, then one card with a row per agent (`@handle`, name badge, model, reasoning, permission label) and a `⋯` menu with Open and Delete agent.
+- Clicking a row replaces the list with the agent's detail page, not a modal: a back link to Agents, the handle with a permission badge, then sections.
+  - **Identity:** handle, name, description.
+  - **Instructions:** one text area.
+  - **Model:** BB's model picker, which only offers reasoning levels the model supports.
+  - **Permission limit:** a radio list using BB's permission names and descriptions.
+  - **Danger zone:** Delete agent.
+  - Later: **Memory** and **Automations** sections.
+- Changes save as you go: text fields when they lose focus, pickers and radios on change.
 - **New agent** opens BB's compose screen with a prompt to describe the agent; that thread's agent calls `sidekick_agent_create`.
-- **Edit** opens a dialog with handle, name, description, instructions, and BB's own model and permission pickers. The model picker only offers reasoning levels the model supports.
 
 ## Thread header selector
 
@@ -289,7 +296,7 @@ Out: a separate chat app, drafts, hidden projects, `@all` beyond the conversatio
 
 ## Follow-ups
 
-- Agents created by tool or CLI can store a reasoning level their model lacks (Haiku has no `high`). The edit dialog's picker corrects it; validate on write too.
+- Agents created by tool or CLI can store a reasoning level their model lacks (Haiku has no `high`). The detail page's model picker corrects it; validate on write too.
 - The dispatch hook locks the model and caps permissions, not reasoning, because reasoning reconciles per model.
 - A handoff note when switching agents: store a short outline of the conversation so far and include it in the new agent's instructions for that thread.
 - Tested and rejected for starting threads: a thread with no first message (BB requires input), and forking a hidden seed thread (BB refuses to fork a thread that never ran, and forks copy history).
