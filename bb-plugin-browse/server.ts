@@ -1103,12 +1103,12 @@ export default async function plugin(bb: BbPluginApi) {
       const current = await host.call("inspect", { id: s.id }, { hostId: s.hostId, timeoutMs: 3000 }).catch(() => undefined);
       return c.json({
         id: s.id,
-        url: s.url,
+        url: current?.url ?? s.url,
         mode: s.mode,
         hostId: s.hostId,
         hostLabel: s.hostLabel,
-        status: s.status,
-        expiresAt: s.expiresAt,
+        status: current?.status ?? s.status,
+        expiresAt: current?.expiresAt ?? s.expiresAt,
         viewport: current?.viewport,
       });
     } catch (e) {
