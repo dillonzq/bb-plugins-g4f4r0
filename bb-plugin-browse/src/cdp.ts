@@ -287,6 +287,17 @@ export class Cdp {
     this.acknowledgeLiveFrames();
     await this.send("Page.stopScreencast").catch(() => {});
   }
+  async refreshLiveCast() {
+    while (this.configuring) await this.configuring;
+    if (this.restartingCast) await this.restartingCast;
+    if (!this.casting) return;
+    this.restartingCast = (async () => {
+      await this.stopLiveCast();
+      this.latest = undefined;
+      await this.startLiveCast();
+    })().finally(() => { this.restartingCast = undefined; });
+    await this.restartingCast;
+  }
   async nextLiveFrame(after = 0, timeoutMs = 8000): Promise<LiveFrame> {
     while (this.configuring) await this.configuring;
     const now = Date.now();

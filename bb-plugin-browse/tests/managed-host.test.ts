@@ -10,6 +10,7 @@ const mock = vi.hoisted(() => ({
   evaluate: vi.fn(async () => "https://example.com"),
   configureLiveCast: async () => {}, startLiveCast: vi.fn(async () => {}),
   stopLiveCast: vi.fn(async () => {}),
+  refreshLiveCast: vi.fn(async () => {}),
   nextLiveFrame: vi.fn(async () => ({
     data: "jpeg",
     width: 1280,
@@ -72,6 +73,7 @@ vi.mock("../src/cdp", () => ({
       evaluate: mock.evaluate,
       configureLiveCast: async () => {}, startLiveCast: mock.startLiveCast,
       stopLiveCast: mock.stopLiveCast,
+      refreshLiveCast: mock.refreshLiveCast,
       nextLiveFrame: mock.nextLiveFrame,
       close: () => mock.events.push("cdp-close"),
     }),
@@ -126,6 +128,7 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
         screenOrientation: { type: "portraitPrimary", angle: 0 },
       }),
     );
+    expect(mock.refreshLiveCast).toHaveBeenCalledOnce();
     expect(await h.experimental_call("inspect", { id: "ab-managed-host" })).toMatchObject({
       viewport: { width: 390, height: 844, mobile: true },
     });

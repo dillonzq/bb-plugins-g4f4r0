@@ -905,6 +905,7 @@ export default experimental_defineHostEntry({
                 },
               });
               s.viewport = input;
+              await s.cdp!.refreshLiveCast();
               break;
             case "maintenance":
               if (input.action === "hard-reload") {

@@ -98,6 +98,15 @@ it('refreshes a static image when resuming after capture backpressure',async()=>
  expect(calls.filter(m=>m==='Page.stopScreencast')).toHaveLength(1);
 });
 
+it('refreshes an active static screencast after a viewport change',async()=>{
+ const {Cdp}=await import('../src/cdp');const c:any=Object.create(Cdp.prototype);const calls:string[]=[];
+ c.casting=true;c.liveAcks=[];c.waiters=new Set();c.seq=4;c.latest={data:'old',seq:4};c.streamTier=0;
+ c.send=async(method:string)=>{calls.push(method);return{};};
+ await c.refreshLiveCast();
+ expect(calls).toEqual(['Page.stopScreencast','Page.startScreencast']);
+ expect(c.latest).toBeUndefined();expect(c.casting).toBe(true);
+});
+
 it('serializes quality changes with concurrent frame requests without changing viewport',async()=>{
  const {Cdp}=await import('../src/cdp');const c:any=Object.create(Cdp.prototype);const calls:any[]=[];
  c.casting=true;c.streamTier=0;c.liveAcks=[];c.waiters=new Set();c.seq=0;c.lastFrameDemand=Date.now();
