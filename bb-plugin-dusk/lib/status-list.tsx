@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { buildFamilies, canSnooze, lastActivity, SECTIONS, snoozePresets, wakeLabel, type Family, type SectionId, type SnoozeRow } from './status';
 import { relativeMessageTime } from './sidebar';
 
@@ -131,7 +132,7 @@ type RowActions = {
 
 function SnoozeItems({ family, now, actions }: { family: Family; now: number; actions: RowActions }) {
   const id = family.root.id;
-  if (family.snooze) return <DropdownMenuItem onSelect={() => actions.unsnooze(id)}>Unsnooze</DropdownMenuItem>;
+  if (family.snooze) return <DropdownMenuItem onSelect={() => actions.unsnooze(id)}><Icon name="Clock" className="size-4" aria-hidden />Unsnooze</DropdownMenuItem>;
   if (!canSnooze([family.root, ...family.children])) return <DropdownMenuItem disabled>Can't snooze while it's working or asking</DropdownMenuItem>;
   return <>
     {snoozePresets(new Date(now)).map(p => <DropdownMenuItem key={p.id} className="gap-6" onSelect={() => actions.snooze(id, p.until)}>
@@ -244,34 +245,56 @@ const StatusRow = memo(function StatusRow({ thread, project, family, child, acti
         </span>}
       </span>
       <span className="dusk-status-actions">
+      <TooltipProvider>
+        <Tooltip disableHoverableContent open={menuOpen ? false : undefined}>
+          <TooltipTrigger asChild>
         <button type="button" className="dusk-status-action" aria-label={thread.isPinned ? 'Unpin thread' : 'Pin thread'} aria-pressed={thread.isPinned} disabled={busy} onClick={pin} onPointerDown={e => e.stopPropagation()}>
           <Icon name={thread.isPinned ? 'PinOff' : 'Pin'} className="size-4" aria-hidden />
         </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{thread.isPinned ? 'Unpin' : 'Pin'}</TooltipContent>
+        </Tooltip>
         {!child && <DropdownMenu onOpenChange={setMenuOpen}>
+          <Tooltip disableHoverableContent open={menuOpen ? false : undefined}>
+            <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild><button type="button" className="dusk-status-action" aria-label={snooze ? 'Snoozed thread' : 'Snooze thread'} onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
             <Icon name="Clock" className="size-4" aria-hidden />
           </button></DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{snooze ? `Snoozed · ${wakeLabel(snooze.until, now)}` : 'Snooze'}</TooltipContent>
+          </Tooltip>
           <DropdownMenuContent align="end" side="bottom"><SnoozeItems family={family} now={now} actions={actions} /></DropdownMenuContent>
         </DropdownMenu>}
+        <Tooltip disableHoverableContent open={menuOpen ? false : undefined}>
+          <TooltipTrigger asChild>
         <button type="button" className="dusk-status-action" aria-label="Archive thread" onPointerDown={e => e.stopPropagation()} onClick={event => { stop(event); threadActions.archive(thread.id); }}>
           <Icon name="Archive" className="size-4" aria-hidden />
         </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Archive</TooltipContent>
+        </Tooltip>
         <DropdownMenu onOpenChange={setMenuOpen}>
+          <Tooltip disableHoverableContent open={menuOpen ? false : undefined}>
+            <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild><button type="button" className="dusk-status-action" aria-label="Thread actions" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
             <Icon name="MoreHorizontal" className="size-4" aria-hidden />
           </button></DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Thread actions</TooltipContent>
+          </Tooltip>
           <DropdownMenuContent align="end" side="bottom">
-            {split.isAvailable && <DropdownMenuItem onSelect={() => threadActions.open(thread.id, { split: true })}>Open in split</DropdownMenuItem>}
-            <DropdownMenuItem onSelect={() => void threadActions.setRead(thread.id, thread.isUnread).catch(() => toast.error('Could not update the thread.'))}>{thread.isUnread ? 'Mark as read' : 'Mark as unread'}</DropdownMenuItem>
+            {split.isAvailable && <DropdownMenuItem onSelect={() => threadActions.open(thread.id, { split: true })}><Icon name="Columns2" className="size-4" aria-hidden />Open in split</DropdownMenuItem>}
+            <DropdownMenuItem onSelect={() => void threadActions.setRead(thread.id, thread.isUnread).catch(() => toast.error('Could not update the thread.'))}><Icon name={thread.isUnread ? 'MailOpen' : 'Mail'} className="size-4" aria-hidden />{thread.isUnread ? 'Mark as read' : 'Mark as unread'}</DropdownMenuItem>
             {!child && <DropdownMenuSub>
-              <DropdownMenuSubTrigger>{snooze ? `Snoozed · ${wakeLabel(snooze.until, now)}` : 'Snooze'}</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger><Icon name="Clock" className="size-4" aria-hidden />{snooze ? `Snoozed · ${wakeLabel(snooze.until, now)}` : 'Snooze'}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent><SnoozeItems family={family} now={now} actions={actions} /></DropdownMenuSubContent>
             </DropdownMenuSub>}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => threadActions.archive(thread.id)}>Archive</DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onSelect={() => threadActions.requestDelete(thread.id)}>Delete</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => threadActions.archive(thread.id)}><Icon name="Archive" className="size-4" aria-hidden />Archive</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onSelect={() => threadActions.requestDelete(thread.id)}><Icon name="Trash2" className="size-4" aria-hidden />Delete</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </TooltipProvider>
       </span>
     </span>
     <span className="dusk-thread-meta">
