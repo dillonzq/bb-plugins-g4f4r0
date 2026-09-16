@@ -24,7 +24,7 @@ Principle: agents complement BB's existing screens. No Sidekick-only pages, no e
 | Mention one | `@handle` |
 | Mention all in thread | `@all`, with `@everyone` as an alias, scoped to the thread |
 
-UI copy follows BB: sentence case for actions and titles, for example "New agent", "New automation", "Edit", "Delete agent".
+UI copy follows BB: sentence case for actions and titles, for example "New agent", "New automation", "Open", "Delete agent".
 
 ## The core decision: one agent per thread
 
@@ -235,7 +235,7 @@ Phase 1 is single agents, complete. Phase 2 adds conversations with several agen
 
 1. ~~Spike.~~ Done. Results below.
 2. ~~**Agents.**~~ Done: storage, `sidekick_agent_*` tools, `bb sidekick` CLI, `configure`, dispatch hook with metadata fallback, forks.
-3. ~~**Settings and header.**~~ Done: Settings > Agents with an edit dialog using BB pickers, and the thread header agent selector.
+3. ~~**Settings and header.**~~ Done: Settings > Agents with a Machines-style list and detail page, and the thread header agent selector.
 4. **Memory.** Adapted store, tools, CLI, index in agent threads, profile section.
 5. **Automations.** Tools over the Automations RPC, `bb sidekick run`, profile list.
 6. **Skill, docs, tests.** `skills/sidekick/SKILL.md`, README and PLUGIN_OVERVIEW, repo README table, tests for handles, permission checks, and memory validation.
