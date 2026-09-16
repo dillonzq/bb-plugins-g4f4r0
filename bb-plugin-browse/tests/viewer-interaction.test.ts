@@ -3,7 +3,7 @@ import {JSDOM} from 'jsdom';
 import {viewerTrace} from '../src/viewer-trace';
 import {viewerInteraction} from '../src/viewer-interaction';
 function viewer(){
- const dom=new JSDOM('<main id="viewport"><canvas id="screen"></canvas><button id="control-toggle"><span></span></button></main><input id="url"><button id="back"></button><button id="forward"></button><button id="reload"></button>',{url:'http://localhost/viewer?id=test',runScripts:'outside-only',pretendToBeVisual:true});
+ const dom=new JSDOM('<main id="viewport"><canvas id="screen"></canvas><button id="control-toggle"><span data-kind="cursor"></span><span data-kind="loading" hidden></span><span>Take control</span></button></main><input id="url"><button id="back"></button><button id="forward"></button><button id="reload"></button>',{url:'http://localhost/viewer?id=test',runScripts:'outside-only',pretendToBeVisual:true});
  dom.window.eval(`${viewerTrace}
  let closed=false,inViewport=true,statusErrorUntil=0,cast=null,pendingFrame=null,decodedFrame=null;
  const id='test',screen=document.querySelector('#screen'),viewport=document.querySelector('#viewport'),address=document.querySelector('#url'),status={textContent:''},metrics={inputLatencyMs:0,maxInputQueue:0};
@@ -23,6 +23,17 @@ it('stays view-only until control is explicitly taken and releases on disconnect
   test.control.close();
   expect(test.control).toBeNull();
   expect(dom.window.document.querySelector('#viewport')?.getAttribute('data-control')).toBe('agent');
+ }finally{dom.window.close();}
+});
+it('keeps the takeover label while showing a disabled loading icon',()=>{
+ const {dom}=viewer();
+ try{
+  const button=dom.window.document.querySelector('#control-toggle') as HTMLButtonElement;
+  button.click();
+  expect(button.disabled).toBe(true);
+  expect(button.textContent).toContain('Take control');
+  expect((button.querySelector('[data-kind="cursor"]') as HTMLElement).hidden).toBe(true);
+  expect((button.querySelector('[data-kind="loading"]') as HTMLElement).hidden).toBe(false);
  }finally{dom.window.close();}
 });
 it('splits paste bursts below the server message limit without losing order',()=>{
