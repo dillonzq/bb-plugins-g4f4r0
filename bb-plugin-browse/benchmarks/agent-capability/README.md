@@ -25,6 +25,8 @@ For every task and trial:
 
 Use the same model, prompt, seeds, viewport, task order, action budget, and trial count for every automation engine. Record success rate, median completion time, p95 completion time, actions, input/output tokens, retries, and browser/tool errors. Run trials sequentially on an otherwise idle host for latency comparisons; use a separate concurrency run for throughput and memory.
 
+Save every run as JSON with `model`, `seed`, `protocol`, and `tasks`. Compare runs with `npm run benchmark:report -- run-a.json run-b.json`. The reporter rejects different seeds, viewport sizes, timeouts, task order, or trial counts and recomputes the aggregate from task records rather than trusting a copied summary. Use at least three fixed seeds before treating a result as a model or engine difference; a single-seed run is only a smoke comparison.
+
 This suite measures interaction primitives and short planning. It does not replace realistic long-horizon evaluation. The next tier should use self-hosted WebArena through BrowserGym or AgentLab once a container runtime is available.
 
 ## Validated smoke trial
@@ -33,4 +35,6 @@ The harness was validated through a managed Fortress session with the `login-use
 
 ## Browser primitive regression
 
-Run `BROWSE_TEST_ROOT=/path/to/browse/host-data npm run benchmark:capabilities`. The opt-in live test executes five seeded trials each for `use-autocomplete`, `click-tab-2`, and `book-flight`, the widget patterns that failed the first model trial. It checks direct MiniWoB rewards through the real Fortress runtime and removes its disposable profile. This is a browser/control regression with no model calls; do not compare its completion times with agent planning times.
+Run `BROWSE_TEST_ROOT=/path/to/browse/host-data npm run benchmark:capabilities`. The opt-in live test executes five seeded trials each for `use-autocomplete`, `click-tab-2`, `book-flight`, and `drag-items`, the widget patterns that failed a model or engine trial. It checks direct MiniWoB rewards through the real Fortress runtime and removes its disposable profile. This is a browser/control regression with no model calls; do not compare its completion times with agent planning times.
+
+The hardened primitive run on 2026-09-16 passed 20/20 trials. Median task time was 1.073 seconds and nearest-rank p95 was 2.020 seconds. Individual task medians were approximately 1.154 seconds for autocomplete, 0.751 seconds for custom tab links, 1.985 seconds for the airport/date/flight flow, and 0.631 seconds for sortable drag. These timings are local browser/control measurements on the validation host; they exclude model planning and remote viewer latency.

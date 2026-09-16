@@ -32,6 +32,9 @@ Commands use argument arrays (no shell), e.g.:
 - `["open","https://example.com"]`
 - `["snapshot","-i"]`, `["snapshot","-i","-c"]`
 - `["click","@0-19"]`, `["fill","@0-20","hello"]`, `["press","Enter"]`
+- `["choose","@0-20","san","San Francisco (SFO)"]` fills an autocomplete and selects an exact visible option. Prefer it to manually timing suggestion clicks.
+- `["date","@0-21","2026-09-16"]` operates a visible calendar widget. Prefer it to clicking month and day controls separately.
+- `["drag","@0-22","@0-23"]` moves through intermediate pointer positions. For sortable lists it automatically crosses the destination midpoint; optional placement is `before`, `after`, or `center`.
 - `["get","text","@0-19"]`, `["get","url"]`, `["is","visible","@0-19"]`
 - `["wait","#results"]`, `["scroll","down","500"]`
 - `["eval","document.title"]` (use for precise inspection or task-authorized page scripting)

@@ -174,6 +174,11 @@ const el=nodes[0];return ${expression}})()`;
   }
 
   private async point(selector: string) {
+    const rect = await this.rect(selector);
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  }
+
+  private async rect(selector: string) {
     const ref = this.ref(selector);
     if (ref) {
       const { quads } = ref.sessionId
@@ -187,22 +192,42 @@ const el=nodes[0];return ${expression}})()`;
           });
       const q = quads?.[0];
       if (!q?.length) throw new Error("Referenced element is not visible.");
+      const xs = [q[0], q[2], q[4], q[6]];
+      const ys = [q[1], q[3], q[5], q[7]];
+      const offset = ref.sessionId ? this.frameOffset : { x: 0, y: 0 };
       return {
-        x:
-          (q[0] + q[2] + q[4] + q[6]) / 4 +
-          (ref.sessionId ? this.frameOffset.x : 0),
-        y:
-          (q[1] + q[3] + q[5] + q[7]) / 4 +
-          (ref.sessionId ? this.frameOffset.y : 0),
+        x: Math.min(...xs) + offset.x,
+        y: Math.min(...ys) + offset.y,
+        width: Math.max(...xs) - Math.min(...xs),
+        height: Math.max(...ys) - Math.min(...ys),
       };
     }
-    const point = await this.evaluate(
+    const rect = await this.evaluate(
       this.queryExpression(
         selector,
-        "(()=>{el.scrollIntoView({block:'nearest',inline:'nearest'});const r=el.getBoundingClientRect();if(r.width<1||r.height<1)throw Error('Element is not visible');return{x:r.x+r.width/2,y:r.y+r.height/2}})()",
+        "(()=>{el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});const r=el.getBoundingClientRect();if(r.width<1||r.height<1)throw Error('Element is not visible');return{x:r.x,y:r.y,width:r.width,height:r.height}})()",
       ),
     );
-    return { x: point.x + this.frameOffset.x, y: point.y + this.frameOffset.y };
+    return { x: rect.x + this.frameOffset.x, y: rect.y + this.frameOffset.y, width: rect.width, height: rect.height };
+  }
+
+  private async drag(source: string, target: string, placement: "auto" | "before" | "after" | "center" = "auto", signal?: AbortSignal) {
+    const fromRect = await this.rect(source), toRect = await this.rect(target);
+    const from = { x: fromRect.x + fromRect.width / 2, y: fromRect.y + fromRect.height / 2 };
+    const vertical = Math.abs(from.y - (toRect.y + toRect.height / 2)) >= Math.abs(from.x - (toRect.x + toRect.width / 2));
+    const forward = vertical ? from.y < toRect.y + toRect.height / 2 : from.x < toRect.x + toRect.width / 2;
+    const edge = placement === "center" ? .5 : placement === "before" ? .15 : placement === "after" ? .85 : forward ? .85 : .15;
+    const to = vertical ? { x: toRect.x + toRect.width / 2, y: toRect.y + toRect.height * edge } : { x: toRect.x + toRect.width * edge, y: toRect.y + toRect.height / 2 };
+    await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...from, buttons: 0 });
+    await this.cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", ...from, button: "left", buttons: 1, clickCount: 1 });
+    // Sortable widgets need real pointer movement to activate and move their placeholder.
+    for (let step = 1; step <= 12; step++) {
+      signal?.throwIfAborted();
+      const progress = step / 12;
+      await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: from.x + (to.x - from.x) * progress, y: from.y + (to.y - from.y) * progress, button: "left", buttons: 1 });
+    }
+    await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...to, button: "left", buttons: 0, clickCount: 1 });
+    return { source, target, placement, axis: vertical ? "vertical" : "horizontal" };
   }
 
   private async pointer(selector: string, count = 1, hover = false) {
@@ -387,7 +412,8 @@ const el=nodes[0];return ${expression}})()`;
         const label = String(element.label ?? "").replace(/\s+/g, " ").trim();
         const role = String(element.role || element.tag || "control").toLowerCase();
         if (!label || !element.selector || accessibleNames.has(label.toLocaleLowerCase())) continue;
-        lines.push(`selector ${JSON.stringify(element.selector)} ${role}: ${JSON.stringify(label.slice(0, 300))}`);
+        const state = [element.disabled ? "disabled=true" : "", element.readOnly ? "readonly=true" : "", typeof element.checked === "boolean" ? `checked=${element.checked}` : "", element.selected != null ? `selected=${element.selected}` : "", element.expanded != null ? `expanded=${element.expanded}` : ""].filter(Boolean).join(" ");
+        lines.push(`selector ${JSON.stringify(element.selector)} ${role}: ${JSON.stringify(label.slice(0, 300))}${state ? ` (${state})` : ""}`);
         if (lines.length >= 1200) break;
       }
     }
@@ -591,11 +617,9 @@ const el=nodes[0];return ${expression}})()`;
         await this.dom(a[0], "el.scrollIntoView({block:'center',inline:'center'})");
         break;
       case "drag": {
-        const from = await this.point(a[0]), to = await this.point(a[1]);
-        await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...from });
-        await this.cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", ...from, button: "left", buttons: 1 });
-        await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...to, button: "left", buttons: 1 });
-        await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...to, button: "left", buttons: 0 });
+        const placement = a[2] ?? "auto";
+        if (!["auto", "before", "after", "center"].includes(placement)) throw new Error("Drag placement must be auto, before, after, or center.");
+        data = await this.drag(a[0], a[1], placement as "auto" | "before" | "after" | "center", signal);
         break;
       }
       case "wait":

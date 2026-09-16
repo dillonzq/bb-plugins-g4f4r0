@@ -12,8 +12,11 @@ export const observeExpression = `(() => {
    if(++inspected>12000||elements.length>=150)return;
    if(e.shadowRoot)walk(e.shadowRoot,prefix+selector(root,e)+' >>> ');
    const r=e.getBoundingClientRect(),style=getComputedStyle(e);if(r.width<1||r.height<1||style.visibility==='hidden'||style.display==='none')continue;
-   if(e.matches('button,a[href],input,select,textarea,[role],[title],[tabindex],[contenteditable],canvas,iframe')||style.cursor==='pointer'){
-    elements.push({selector:prefix+selector(root,e),tag:e.localName,role:e.getAttribute('role'),label:(e.getAttribute('aria-label')||e.getAttribute('title')||e.innerText||'').trim().slice(0,160),type:e.getAttribute('type'),...(e.getAttribute('type')==='color'?{color:e.value}:{}),disabled:e.matches(':disabled,[aria-disabled="true"]')||!!e.closest('[inert],[aria-disabled="true"]'),readOnly:!!e.readOnly,rect:{x:r.x,y:r.y,width:r.width,height:r.height},...(e.localName==='iframe'?{src:e.src}:{}),...(e.localName==='canvas'?{canvasWidth:e.width,canvasHeight:e.height}:{})});
+   if(e.matches('button,a[href],input,select,textarea,[role],[title],[tabindex],[contenteditable],canvas,iframe')||style.cursor==='pointer'||typeof e.onclick==='function'){
+    const type=e.getAttribute('type');
+    const role=e.getAttribute('role')||(e.localName==='a'&&e.hasAttribute('href')?'link':e.localName==='button'||style.cursor==='pointer'||typeof e.onclick==='function'?'button':e.localName==='select'?'combobox':e.localName==='textarea'||e.localName==='input'&&!['button','submit','reset','checkbox','radio','range'].includes(type||'')?'textbox':type==='checkbox'?'checkbox':type==='radio'?'radio':type==='range'?'slider':e.localName);
+    const label=(e.getAttribute('aria-label')||e.getAttribute('title')||e.getAttribute('placeholder')||e.value||e.innerText||e.textContent||'').replace(/\\s+/g,' ').trim().slice(0,160);
+    elements.push({selector:prefix+selector(root,e),tag:e.localName,role,label,type,...(type==='color'?{color:e.value}:{}),disabled:e.matches(':disabled,[aria-disabled="true"]')||!!e.closest('[inert],[aria-disabled="true"]'),readOnly:!!e.readOnly,checked:typeof e.checked==='boolean'?e.checked:undefined,selected:e.getAttribute('aria-selected'),expanded:e.getAttribute('aria-expanded'),rect:{x:r.x,y:r.y,width:r.width,height:r.height},...(e.localName==='iframe'?{src:e.src}:{}),...(e.localName==='canvas'?{canvasWidth:e.width,canvasHeight:e.height}:{})});
    }
   }
  }

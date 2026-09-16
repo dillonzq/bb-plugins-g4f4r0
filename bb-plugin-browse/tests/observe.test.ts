@@ -37,6 +37,13 @@ it("returns unique selectors for direct siblings of nested shadow roots", () => 
     ).toBe(1);
   f.dom.window.close();
 });
+it("preserves labels and infers semantics for custom clickable controls", () => {
+  const f = fixture();
+  f.root.innerHTML = '<span id="custom" style="cursor:pointer" aria-expanded="false">Phasellus link</span>';
+  const r: any = f.w.eval(observeExpression);
+  expect(r.elements).toContainEqual(expect.objectContaining({ selector: "custom-app >>> #custom", role: "button", label: "Phasellus link", expanded: "false" }));
+  f.w.close();
+});
 it("checks occlusion before a shadow element click", async () => {
   const f = fixture();
   const field = f.root.querySelector("input")!;

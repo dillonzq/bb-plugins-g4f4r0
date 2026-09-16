@@ -69,14 +69,37 @@ it("supplements interactive snapshots with visible non-semantic controls", async
   (cdp.evaluate as any).mockImplementation(async (expression: string) => expression.includes("DOM observations supplement") ? {
     elements: [
       { selector: "#save", tag: "button", label: "Save" },
-      { selector: "#area span:nth-of-type(2)", tag: "span", label: "Custom link" },
+      { selector: "#area span:nth-of-type(2)", tag: "span", role: "button", label: "Custom link", expanded: "false" },
     ],
   } : "complete");
   const driver = await BrowserDriver.connect("/tmp", cdp, new AbortController().signal);
   const snapshot = JSON.parse(await driver.execute(["snapshot", "-i"]));
   expect(snapshot.data.snapshot.match(/Save/g)).toHaveLength(1);
-  expect(snapshot.data.snapshot).toContain('selector "#area span:nth-of-type(2)" span: "Custom link"');
+  expect(snapshot.data.snapshot).toContain('selector "#area span:nth-of-type(2)" button: "Custom link" (expanded=false)');
   expect(snapshot.data.referenceSyntax).toContain("DOM selectors");
+});
+
+it("drags through intermediate points and crosses the target midpoint", async () => {
+  const { cdp, send } = fixture();
+  (cdp.evaluate as any).mockImplementation(async (expression: string) => {
+    if (expression.includes('const selector="#from"')) return { x: 10, y: 10, width: 100, height: 20 };
+    if (expression.includes('const selector="#to"')) return { x: 10, y: 70, width: 100, height: 20 };
+    return "complete";
+  });
+  const driver = await BrowserDriver.connect("/tmp", cdp, new AbortController().signal);
+  const result = JSON.parse(await driver.execute(["drag", "#from", "#to"]));
+  expect(result.data).toMatchObject({ placement: "auto", axis: "vertical" });
+  const events = (send.mock.calls as any[]).filter(([method]) => method === "Input.dispatchMouseEvent").map(([, params]) => params);
+  expect(events[0]).toMatchObject({ type: "mouseMoved", x: 60, y: 20, buttons: 0 });
+  expect(events[1]).toMatchObject({ type: "mousePressed", x: 60, y: 20, buttons: 1 });
+  expect(events.filter((event) => event.type === "mouseMoved" && event.buttons === 1)).toHaveLength(12);
+  expect(events.at(-1)).toMatchObject({ type: "mouseReleased", x: 60, y: 87, buttons: 0 });
+});
+
+it("rejects unknown drag placement", async () => {
+  const { cdp } = fixture();
+  const driver = await BrowserDriver.connect("/tmp", cdp, new AbortController().signal);
+  await expect(driver.execute(["drag", "#from", "#to", "near"])).rejects.toThrow("Drag placement must be auto, before, after, or center");
 });
 
 it("reports dialog state without dismissing it", async () => {

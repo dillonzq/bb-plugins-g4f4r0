@@ -1,6 +1,6 @@
 /**
- * Opt-in live regression for the three MiniWoB widget patterns that previously
- * failed the model trial. This measures browser primitives, not model quality.
+ * Opt-in live regression for MiniWoB widget patterns that failed model trials.
+ * This measures browser primitives, not model quality.
  * BROWSE_TEST_ROOT=/host/data npx tsx tests/agent-capability-live.mts
  */
 import assert from "node:assert/strict";
@@ -62,6 +62,19 @@ async function run(args: string[]) {
   const result = json(await driver!.execute(args, AbortSignal.timeout(15000)));
   return { result, ms: performance.now() - began };
 }
+async function removeProfile(path: string) {
+  let last: unknown;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      await rm(path, { recursive: true, force: true, maxRetries: 2 });
+      return;
+    } catch (error) {
+      last = error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw last;
+}
 async function options() {
   const deadline = Date.now() + 5000;
   for (;;) {
@@ -110,19 +123,26 @@ async function autocomplete() {
 async function tabs(instruction: string) {
   const target = instruction.match(/link "([^"]+)"/)?.[1];
   assert.ok(target);
+  const inspected: string[] = [];
   for (let tab = 1; tab <= 3; tab++) {
     await run(["click", `a[href="#tabs-${tab}"]`]);
     const snapshot = String((await run(["snapshot", "-i"])).result.snapshot);
+    inspected.push(snapshot);
     const line = snapshot
       .split("\n")
       .find((value) => value.includes(`: ${JSON.stringify(target)}`));
     if (!line) continue;
+    const ref = line.match(/^@(\S+) /)?.[1];
+    if (ref) {
+      await run(["click", `@${ref}`]);
+      return;
+    }
     const encoded = line.match(/^selector ("(?:[^"\\]|\\.)*") /)?.[1];
     assert.ok(encoded, `Custom link lacked a DOM selector: ${line}`);
     await run(["click", JSON.parse(encoded)]);
     return;
   }
-  assert.fail(`Link ${target} was not exposed in any visible tab`);
+  assert.fail(`Link ${target} was not exposed in any visible tab. Snapshots: ${inspected.join("\n---\n")}`);
 }
 async function chooseAirport(field: string, query: string) {
   await run(["fill", field, query]);
@@ -154,6 +174,16 @@ async function flight(instruction: string) {
   );
   await run(["click", `#results > .flight:nth-of-type(${index + 2}) .flight-price`]);
 }
+async function dragItems(instruction: string) {
+  const match = instruction.match(/^Drag (.+?) (to the top|to the bottom|down by one position|up by one position|to the \d+(?:st|nd|rd|th) position)\.$/);
+  assert.ok(match, instruction);
+  const items = (await run(["eval", `[...document.querySelectorAll('#sortable > li')].map(e=>(e.innerText||e.textContent||'').trim())`])).result.result as string[];
+  const source = items.indexOf(match[1]);
+  assert.ok(source >= 0, `Drag source ${match[1]} was not found`);
+  const destination = match[2] === "to the top" ? 0 : match[2] === "to the bottom" ? items.length - 1 : match[2] === "down by one position" ? source + 1 : match[2] === "up by one position" ? source - 1 : Number(match[2].match(/\d+/)?.[0]) - 1;
+  assert.ok(destination >= 0 && destination < items.length && destination !== source);
+  await run(["drag", `#sortable > li:nth-of-type(${source + 1})`, `#sortable > li:nth-of-type(${destination + 1})`]);
+}
 
 const records: Array<Record<string, unknown>> = [];
 try {
@@ -166,13 +196,15 @@ try {
     "use-autocomplete",
     "click-tab-2",
     "book-flight",
+    "drag-items",
   ] as const) {
     for (let trial = 0; trial < trials; trial++) {
       const began = performance.now();
       const instruction = await startTask(task, `browse-${task}-${trial}`);
       if (task === "use-autocomplete") await autocomplete();
       else if (task === "click-tab-2") await tabs(instruction);
-      else await flight(instruction);
+      else if (task === "book-flight") await flight(instruction);
+      else await dragItems(instruction);
       const score = await finish();
       records.push({
         task,
@@ -205,7 +237,7 @@ try {
   await driver?.close();
   cdp?.close();
   await browser?.close();
-  await rm(join(root, "profiles", profileId), { recursive: true, force: true });
+  await removeProfile(join(root, "profiles", profileId));
   if (site && site.exitCode === null) {
     site.kill("SIGTERM");
     await Promise.race([
