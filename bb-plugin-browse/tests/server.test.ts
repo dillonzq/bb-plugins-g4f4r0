@@ -771,6 +771,7 @@ it('sends binary frames with bounded credit and rejects arbitrary direct protoco
   await stream.receive(JSON.stringify({ack:1}));
   await vi.waitFor(()=>expect(stream.sent).toHaveLength(18));await stream.close();
   const control=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}`);
+  await control.receive(JSON.stringify({type:'take'}));
   await control.receive(JSON.stringify({seq:1,events:[{kind:'cdp',method:'Browser.close'}]}));
   expect(control.closeCalls[0]).toMatchObject({code:1008});
   expect(f.calls.filter(c=>c.method==='direct'&&c.input.events.some((e:any)=>e.kind==='cdp'))).toHaveLength(0);
@@ -782,15 +783,33 @@ it('orders direct input and releases controller state when its socket disconnect
  try{
   const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
   const control=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}`);
+  await control.receive(JSON.stringify({type:'take'}));
+  await vi.waitFor(()=>expect(control.sent.map(value=>JSON.parse(String(value)))).toContainEqual({type:'control',state:'human'}));
   await control.receive(JSON.stringify({seq:1,events:[{kind:'text',text:'one'}]}));
   await control.receive(JSON.stringify({seq:2,events:[{kind:'text',text:'two'}]}));
-  await vi.waitFor(()=>expect(control.sent).toHaveLength(2));
-  expect(control.sent.map(v=>JSON.parse(String(v)).seq)).toEqual([1,2]);
+  await vi.waitFor(()=>expect(control.sent).toHaveLength(3));
+  expect(control.sent.map(v=>JSON.parse(String(v)).seq).filter(Boolean)).toEqual([1,2]);
   await control.close();
   await vi.waitFor(()=>expect(f.calls.filter(c=>c.method==='direct')).toHaveLength(3));
   const calls=f.calls.filter(c=>c.method==='direct');
   expect(calls.map(c=>c.input.events)).toEqual([[{kind:'text',text:'one'}],[{kind:'text',text:'two'}],[{kind:'reset'}]]);
   expect(new Set(calls.map(c=>c.input.clientId)).size).toBe(1);
+ }finally{await f.harness.lifecycle.dispose();}
+});
+
+it('gives one viewer exclusive control and returns control to the agent on disconnect',async()=>{
+ const f=await fixture();
+ try{
+  const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+  const first=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}`);
+  await first.receive(JSON.stringify({type:'take'}));
+  await vi.waitFor(()=>expect(first.sent.map(value=>JSON.parse(String(value)))).toContainEqual({type:'control',state:'human'}));
+  await expect(f.harness.behavior.callRpc('run',{id:r.session.id,operation:{kind:'command',args:['snapshot','-i']}})).rejects.toThrow('You have control');
+  const second=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}`);
+  await second.receive(JSON.stringify({type:'take'}));
+  await vi.waitFor(()=>expect(second.sent.map(value=>JSON.parse(String(value)))).toContainEqual({type:'control',state:'busy'}));
+  await second.close();await first.close();
+  await expect(f.harness.behavior.callRpc('run',{id:r.session.id,operation:{kind:'command',args:['snapshot','-i']}})).resolves.toMatchObject({status:'succeeded'});
  }finally{await f.harness.lifecycle.dispose();}
 });
 
@@ -906,9 +925,11 @@ it('uses one private controller handshake without per-batch host RPCs',async()=>
  try{
   const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
   const control=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}`);
+  await control.receive(JSON.stringify({type:'take'}));
+  await vi.waitFor(()=>expect(control.sent.map(value=>JSON.parse(String(value)))).toContainEqual({type:'control',state:'human'}));
   await control.receive(JSON.stringify({seq:1,events:[{kind:'heartbeat'}]}));
   await control.receive(JSON.stringify({seq:2,events:[{kind:'heartbeat'}]}));
-  await vi.waitFor(()=>expect(control.sent).toHaveLength(2));
+  await vi.waitFor(()=>expect(control.sent).toHaveLength(3));
   expect(input).toHaveBeenCalledTimes(2);
   expect(f.calls.filter(c=>c.method==='controlStart')).toHaveLength(1);
   expect(f.calls.filter(c=>c.method==='direct')).toHaveLength(0);
