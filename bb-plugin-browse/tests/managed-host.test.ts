@@ -95,9 +95,23 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
     const j = await h.experimental_call("connect", {
       id: "ab-managed-host",
       mode: "managed",
+      video: true,
       expiresAt: Date.now() + 60000,
     });
     expect((await wait(j)).status).toBe("succeeded");
+    const devtools = await h.experimental_call("input", {
+      id: "ab-managed-host",
+      input: { kind: "maintenance", action: "open-devtools" },
+    });
+    expect((await wait(devtools)).status).toBe("succeeded");
+    expect(mock.send).toHaveBeenCalledWith(
+      "Emulation.clearDeviceMetricsOverride",
+    );
+    expect(mock.send).toHaveBeenCalledWith(
+      "Target.openDevTools",
+      { targetId: "managed", panelId: "elements" },
+      false,
+    );
     const running = await h.experimental_call("submit", {
       id: "ab-managed-host",
       operation: {

@@ -57,6 +57,9 @@ type LocalSession = {
   id: string;
   managed?: ManagedBrowser;
   video?: {clientId:string;stream:Promise<SelkiesStream>};
+  videoMode?: boolean;
+  videoInput?: SelkiesStream;
+  devtoolsOpen?: boolean;
   mode?: "managed" | "native";
   framing?: boolean;
   streamDemands?: StreamDemands;
@@ -124,8 +127,15 @@ async function runDirect({id,clientId,events}:z.infer<typeof directBatch>){
       if(s.status!=='ready'||!s.cdp||s.closing||s.expiresAt<=Date.now())throw Error('Browser is not ready.');
       if(s.credential)throw Error('Browser is waiting for private credential input.');
       if(s.busy)throw Error('Browser is busy with an agent action.');
-      s.direct??=new DirectInput(s.cdp);
-      const result=await s.direct.run(clientId,events);
+      let result: { selection?: string; cursor?: string };
+      if (s.devtoolsOpen) {
+        if (!s.videoInput)
+          throw Error("Open the live browser view before interacting with DevTools.");
+        result = await s.videoInput.runInput(clientId, events);
+      } else {
+        s.direct??=new DirectInput(s.cdp);
+        result=await s.direct.run(clientId,events);
+      }
       if(events.some(e=>e.kind!=='reset'&&(e.kind!=='pointer'||e.type!=='move'||e.buttons)))touchSession(s);
       return {...result,hostMs:performance.now()-began};
 }
@@ -170,7 +180,8 @@ function startJob(
 ): Job {
   if (s?.credential)
     throw new Error("Browser is waiting for private credential input.");
-  if (s?.direct?.busy || s?.direct?.held) throw new Error("Browser is being controlled by a viewer.");
+  if (s?.direct?.busy || s?.direct?.held || s?.videoInput?.controlBusy || s?.videoInput?.controlHeld)
+    throw new Error("Browser is being controlled by a viewer.");
   if (s?.busy)
     throw new Error(
       `Session is busy with job ${s.busy}. Poll it or cancel it first.`,
@@ -613,6 +624,7 @@ async function closeSession(s: LocalSession) {
   clearTimeout(s.castTimer);
   if(s.video)await s.video.stream.then(stream=>stream.stop()).catch(()=>{});
   s.video=undefined;
+  s.videoInput=undefined;
   for(const stop of s.controlRelays??[])stop();
   s.controlRelays?.clear();
   await s.direct?.reset();
@@ -727,10 +739,22 @@ export default experimental_defineHostEntry({
       const env=s.managed.displayEnv;
       const stream=(async()=>{if(!s.recording)await s.cdp?.stopLiveCast();return SelkiesStream.start(s.root,env);})();
       s.video={clientId,stream};
-      try {const encoder=await stream;const relay=binary?await videoRelay(encoder,async()=>({...await s.cdp!.evaluate("({url:location.href,loading:document.readyState==='loading'})"),hostVideo:encoder.timing()})):undefined;return {ok:true,...(relay?{relay}:{})};}catch(e){await stream.then(encoder=>encoder.stop()).catch(()=>{});if(s.video?.clientId===clientId)s.video=undefined;throw e;}
+      let encoder: SelkiesStream | undefined;
+      try {
+        const ready=await stream;
+        encoder=ready;
+        s.videoInput=ready;
+        const relay=binary?await videoRelay(ready,async()=>({...await s.cdp!.evaluate("({url:location.href,loading:document.readyState==='loading'})"),hostVideo:ready.timing()})):undefined;
+        return {ok:true,...(relay?{relay}:{})};
+      } catch(e) {
+        await encoder?.stop().catch(()=>{});
+        if(s.video?.clientId===clientId)s.video=undefined;
+        if(s.videoInput===encoder)s.videoInput=undefined;
+        throw e;
+      }
     },
     videoRead: async ({id,clientId})=>{const s=session(id);if(s.video?.clientId!==clientId)throw Error("Video lease is unavailable.");const packets=await (await s.video.stream).read();if(!s.frameInfo||Date.now()-s.frameInfo.at>500){const info=await s.cdp!.evaluate("({url:location.href,loading:document.readyState==='loading'})");s.frameInfo={...info,at:Date.now()};}return {packets,url:s.frameInfo!.url,loading:s.frameInfo!.loading};},
-    videoStop: async ({id,clientId})=>{const s=sessions.get(id);if(s?.video?.clientId===clientId){const lease=s.video;await lease.stream.then(stream=>stream.stop()).catch(()=>{});if(s.video===lease)s.video=undefined;}return {ok:true};},
+    videoStop: async ({id,clientId})=>{const s=sessions.get(id);if(s?.video?.clientId===clientId){const lease=s.video;const encoder=await lease.stream.catch(()=>undefined);await encoder?.resetInput(clientId);await encoder?.stop().catch(()=>{});if(s.video===lease)s.video=undefined;if(s.videoInput===encoder)s.videoInput=undefined;}return {ok:true};},
     probe: async (_, ctx) => {
       const root = ctx.experimental_paths.dataDir,
         info = await diagnostics(root);
@@ -868,6 +892,28 @@ export default experimental_defineHostEntry({
             case "maintenance":
               if (input.action === "hard-reload") {
                 await s.cdp!.send("Page.reload", { ignoreCache: true });
+              } else if (input.action === "open-devtools") {
+                if (s.mode !== "managed" || !s.videoMode)
+                  throw new Error("DevTools is available only in an isolated live Browse session.");
+                if (!s.targetId) throw new Error("The browser tab is unavailable.");
+                await s.cdp!.send("Emulation.clearDeviceMetricsOverride").catch(() => {});
+                const existing = await s.cdp!
+                  .send("Target.getDevToolsTarget", { targetId: s.targetId }, false)
+                  .catch(() => undefined);
+                if (existing?.targetId) {
+                  await s.cdp!.send(
+                    "Target.activateTarget",
+                    { targetId: existing.targetId },
+                    false,
+                  );
+                } else {
+                  await s.cdp!.send(
+                    "Target.openDevTools",
+                    { targetId: s.targetId, panelId: "elements" },
+                    false,
+                  );
+                }
+                s.devtoolsOpen = true;
               } else {
                 if (s.mode !== "managed") throw new Error("Clearing browser data is supported only in an isolated Browse profile.");
                 await s.cdp!.send(input.action === "clear-cookies" ? "Network.clearBrowserCookies" : "Network.clearBrowserCache", {});
@@ -897,6 +943,7 @@ export default experimental_defineHostEntry({
       const s: LocalSession = {
         id: input.id,
         mode: input.mode,
+        videoMode: input.video,
         status: "connecting",
         recording: false,
         artifactRoot,

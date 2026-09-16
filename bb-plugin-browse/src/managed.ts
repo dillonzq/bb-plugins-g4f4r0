@@ -32,6 +32,16 @@ export function managedEnv(root: string) {
   env.XKB_CONFIG_ROOT = join(libs, "usr/share/X11/xkb");
   return env;
 }
+export function videoChromeArgs(profile: string, initialUrl: string) {
+  return [
+    ...chromeArgs(profile, initialUrl).filter((arg) => arg !== initialUrl),
+    "--test-type",
+    "--start-fullscreen",
+    "--disable-infobars",
+    "--window-position=0,0",
+    initialUrl,
+  ];
+}
 export async function diagnostics(root: string) {
   const runtime = await installed(root);
   let browserPath: string | undefined,
@@ -443,15 +453,7 @@ async function launchBrowser(
   );
   const child = spawn(
     browserPath,
-    video
-      ? [
-          ...chromeArgs(profile, initialUrl).filter((a) => a !== initialUrl),
-          "--kiosk",
-          "--disable-infobars",
-          "--window-position=0,0",
-          `--app=${initialUrl}`,
-        ]
-      : chromeArgs(profile, initialUrl),
+    video ? videoChromeArgs(profile, initialUrl) : chromeArgs(profile, initialUrl),
     {
       env: display.env,
       stdio: ["ignore", "ignore", "pipe"],

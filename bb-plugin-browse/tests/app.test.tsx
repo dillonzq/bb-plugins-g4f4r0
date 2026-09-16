@@ -408,6 +408,9 @@ it("separates this thread's active sessions and recent pages from local web serv
   });
   try {
     await slot.findByText("active.example");
+    expect(document.querySelector("[data-browser-shell]")?.className).toContain(
+      "bg-sidebar",
+    );
     expect(within(slot.getByRole("region", { name: "Open sessions" })).queryByText("recent.example")).toBeNull();
     expect(within(slot.getByRole("region", { name: "Recently visited" })).getAllByRole("button")).toHaveLength(1);
     expect(slot.queryByText("other.example")).toBeNull();

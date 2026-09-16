@@ -18,6 +18,15 @@ it("opens a same-origin screencast websocket from the viewer", () => {
   expect(viewerHtml).toContain("/cast");
   expect(viewerHtml).not.toContain("setTimeout(refresh,800)");
 });
+it("offers docked DevTools in the browser options", () => {
+  expect(viewerHtml).toContain('data-maintenance="open-devtools"');
+  expect(viewerHtml).toContain("Open DevTools");
+});
+it("uses the BB sidebar surface for the browser shell", () => {
+  expect(viewerHtml).toContain("var(--sidebar,var(--background");
+  expect(viewerHtml).toContain("sidebar-foreground");
+  expect(viewerHtml).toContain("sidebar-border");
+});
 
 it('backs off capture without demand and permits a short active pipeline',async()=>{
   const {Cdp}=await import('../src/cdp');

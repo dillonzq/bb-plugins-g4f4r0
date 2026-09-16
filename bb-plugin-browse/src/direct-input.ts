@@ -10,7 +10,7 @@ export const directEvent = z.discriminatedUnion('kind',[
   z.object({kind:z.literal('heartbeat')}),
 ]);
 export const directBatch = z.object({id:z.string().min(1).max(200),clientId:z.string().min(1).max(200),events:z.array(directEvent).min(1).max(64)});
-type Event = z.infer<typeof directEvent>;
+export type DirectEvent = z.infer<typeof directEvent>;
 const keyCodes:Record<string,number>={Backspace:8,Tab:9,Enter:13,Shift:16,Control:17,Alt:18,Escape:27,' ':32,PageUp:33,PageDown:34,End:35,Home:36,ArrowLeft:37,ArrowUp:38,ArrowRight:39,ArrowDown:40,Delete:46,Meta:91};
 export const selectionExpression=`(()=>{let e=document.activeElement;while(e?.shadowRoot?.activeElement)e=e.shadowRoot.activeElement;if(e?.tagName==='INPUT'||e?.tagName==='TEXTAREA'){if(e.type==='password')return '';return typeof e.selectionStart==='number'?e.value.slice(e.selectionStart,e.selectionEnd).slice(0,100000):'';}return String(getSelection()||'').slice(0,100000)})()`;
 /** One controller while keys/buttons are held. Disconnect/timeout always releases them. */
@@ -30,7 +30,7 @@ export class DirectInput {
     for(const params of this.keys.values())await this.cdp.send('Input.dispatchKeyEvent',{...params,type:'keyUp',text:undefined,commands:undefined}).catch(()=>{});
     this.buttons.clear();this.keys.clear();this.owner=undefined;
   }
-  async run(clientId:string,events:Event[]){
+  async run(clientId:string,events:DirectEvent[]){
     if(this.busy||(this.owner&&this.owner!==clientId))throw Error('Browser is being controlled by another viewer.');
     clearTimeout(this.timer);this.busy=true;this.owner=clientId;let selection=false;let cursor:string|undefined;
     try{

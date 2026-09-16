@@ -1,6 +1,48 @@
 import { it, expect, vi } from "vitest";
 import { SelkiesStream } from "../src/selkies";
 import type WebSocket from "ws";
+it("routes page and DevTools input through the isolated display", async () => {
+  const stream = new SelkiesStream();
+  const send = vi.fn();
+  stream["socket"] = {
+    readyState: 1,
+    send,
+    terminate: vi.fn(),
+  } as unknown as WebSocket;
+  await stream.runInput("viewer", [
+    {
+      kind: "pointer",
+      type: "down",
+      x: 12.2,
+      y: 24.8,
+      button: "right",
+      buttons: 2,
+      clickCount: 1,
+      modifiers: 0,
+    },
+    {
+      kind: "pointer",
+      type: "up",
+      x: 12.2,
+      y: 24.8,
+      button: "right",
+      buttons: 0,
+      clickCount: 1,
+      modifiers: 0,
+    },
+    { kind: "wheel", x: 12, y: 25, deltaX: 0, deltaY: 120, modifiers: 0 },
+    { kind: "keyboard", type: "down", key: "Enter", code: "Enter", modifiers: 0, repeat: false },
+    { kind: "keyboard", type: "up", key: "Enter", code: "Enter", modifiers: 0, repeat: false },
+    { kind: "text", text: "hello, world" },
+  ]);
+  expect(send).toHaveBeenCalledWith("m,12,25,4,0");
+  expect(send).toHaveBeenCalledWith("m,12,25,0,0");
+  expect(send).toHaveBeenCalledWith("m,12,25,16,2");
+  expect(send).toHaveBeenCalledWith("kd,65293");
+  expect(send).toHaveBeenCalledWith("ku,65293");
+  expect(send).toHaveBeenCalledWith("co,end,hello, world");
+  await stream.stop();
+});
 it("discards stale delta frames and resumes only at a keyframe", async () => {
   const stream = new SelkiesStream();
   const send = vi.fn();

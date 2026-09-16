@@ -169,7 +169,7 @@ export const viewerInput = z.discriminatedUnion("kind", [
       "Delete",
     ]),
   }),
-  z.object({ kind: z.literal("maintenance"), action: z.enum(["hard-reload", "clear-cookies", "clear-cache"]) }),
+  z.object({ kind: z.literal("maintenance"), action: z.enum(["hard-reload", "open-devtools", "clear-cookies", "clear-cache"]) }),
   z.object({ kind: z.literal("history"), action: z.enum(["back", "forward", "reload"]) }),
   z.object({ kind: z.literal("navigate"), url: z.string().max(4000) }),
 ]);

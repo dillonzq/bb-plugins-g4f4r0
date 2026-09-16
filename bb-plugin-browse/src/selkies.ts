@@ -4,8 +4,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import WebSocket from "ws";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { DirectEvent } from "./direct-input";
 
-/** Private, read-only encoder connection. Browser input continues through CDP. */
+/** Private encoder connection; display input is enabled only for docked browser UI. */
 export class SelkiesStream {
   onStop?: () => void;
   get isClosed() {
@@ -16,6 +17,133 @@ export class SelkiesStream {
     return this.child?.pid;
   }
   private socket?: WebSocket;
+  private inputOwner?: string;
+  private inputBusy = false;
+  private inputButtons = new Set<"left" | "middle" | "right">();
+  private inputKeys = new Set<number>();
+  private inputPoint = { x: 0, y: 0 };
+  private inputTimer?: ReturnType<typeof setTimeout>;
+  get controlBusy() {
+    return this.inputBusy;
+  }
+  get controlHeld() {
+    return this.inputButtons.size > 0 || this.inputKeys.size > 0;
+  }
+  private sendInput(message: string) {
+    if (this.closed || this.socket?.readyState !== WebSocket.OPEN)
+      throw new Error("Live browser input is unavailable.");
+    this.socket.send(message);
+  }
+  private buttonMask() {
+    return (
+      (this.inputButtons.has("left") ? 1 : 0) |
+      (this.inputButtons.has("middle") ? 2 : 0) |
+      (this.inputButtons.has("right") ? 4 : 0)
+    );
+  }
+  private keysym(key: string) {
+    const special: Record<string, number> = {
+      Backspace: 65288,
+      Tab: 65289,
+      Enter: 65293,
+      Shift: 65505,
+      Control: 65507,
+      Alt: 65513,
+      Escape: 65307,
+      Home: 65360,
+      ArrowLeft: 65361,
+      ArrowUp: 65362,
+      ArrowRight: 65363,
+      ArrowDown: 65364,
+      PageUp: 65365,
+      PageDown: 65366,
+      End: 65367,
+      Meta: 65515,
+      Delete: 65535,
+    };
+    return special[key] ?? (Array.from(key).length === 1 ? key.codePointAt(0) : undefined);
+  }
+  async resetInput(clientId?: string) {
+    if (clientId && this.inputOwner && this.inputOwner !== clientId) return;
+    clearTimeout(this.inputTimer);
+    if (!this.closed && this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(`m,${this.inputPoint.x},${this.inputPoint.y},0,0`);
+      this.socket.send("kr");
+    }
+    this.inputButtons.clear();
+    this.inputKeys.clear();
+    this.inputOwner = undefined;
+  }
+  /** XTEST input reaches both the page and docked Chromium DevTools. */
+  async runInput(clientId: string, events: DirectEvent[]) {
+    if (this.inputBusy || (this.inputOwner && this.inputOwner !== clientId))
+      throw new Error("Browser is being controlled by another viewer.");
+    clearTimeout(this.inputTimer);
+    this.inputBusy = true;
+    this.inputOwner = clientId;
+    try {
+      for (const event of events) {
+        if (event.kind === "reset") {
+          await this.resetInput(clientId);
+          continue;
+        }
+        if (event.kind === "heartbeat") continue;
+        if (event.kind === "pointer") {
+          this.inputPoint = { x: Math.round(event.x), y: Math.round(event.y) };
+          if (event.type === "down" && event.button !== "none")
+            this.inputButtons.add(event.button);
+          if (event.type === "up" && event.button !== "none")
+            this.inputButtons.delete(event.button);
+          this.sendInput(
+            `m,${this.inputPoint.x},${this.inputPoint.y},${this.buttonMask()},0`,
+          );
+          continue;
+        }
+        if (event.kind === "wheel") {
+          this.inputPoint = { x: Math.round(event.x), y: Math.round(event.y) };
+          const scroll = (delta: number, bit: number) => {
+            if (!delta) return;
+            const magnitude = Math.min(64, Math.max(1, Math.ceil(Math.abs(delta) / 100)));
+            this.sendInput(
+              `m,${this.inputPoint.x},${this.inputPoint.y},${this.buttonMask() | bit},${magnitude}`,
+            );
+            this.sendInput(
+              `m,${this.inputPoint.x},${this.inputPoint.y},${this.buttonMask()},0`,
+            );
+          };
+          scroll(event.deltaY, event.deltaY > 0 ? 16 : 8);
+          scroll(event.deltaX, event.deltaX > 0 ? 128 : 64);
+          continue;
+        }
+        if (event.kind === "text") {
+          if (event.text) this.sendInput(`co,end,${event.text}`);
+          continue;
+        }
+        const keysym = this.keysym(event.key);
+        if (keysym === undefined) continue;
+        if (event.type === "down") {
+          this.inputKeys.add(keysym);
+          this.sendInput(`kd,${keysym}`);
+        } else {
+          this.inputKeys.delete(keysym);
+          this.sendInput(`ku,${keysym}`);
+        }
+      }
+      return {};
+    } catch (error) {
+      await this.resetInput(clientId);
+      throw error;
+    } finally {
+      this.inputBusy = false;
+      clearTimeout(this.inputTimer);
+      if (this.controlHeld) {
+        this.inputTimer = setTimeout(() => void this.resetInput(clientId), 5000);
+        this.inputTimer.unref();
+      } else {
+        this.inputOwner = undefined;
+      }
+    }
+  }
   private packets: Buffer[] = [];
   private bytes = 0;
   private arrived=new WeakMap<Buffer,number>();
@@ -262,10 +390,12 @@ export class SelkiesStream {
   }
   stop(): Promise<void> {
     return (this.stopping ??= (async () => {
+      await this.resetInput();
       this.closed = true;
       this.onStop?.();
       clearInterval(this.timer);
       clearTimeout(this.keyframeRetry);
+      clearTimeout(this.inputTimer);
       this.wake?.();
       this.packets = [];
       this.bytes = 0;

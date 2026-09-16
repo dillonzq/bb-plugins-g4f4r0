@@ -6,6 +6,7 @@ import {
   acquireDisplay,
   LINUX_DEP_PACKAGES,
   chromeArgs,
+  videoChromeArgs,
   xvfbArgs,
   xvfbLaunch,
 } from "../src/managed";
@@ -15,6 +16,14 @@ it("launches headed Chrome without a headless flag", () => {
   expect(args.some((a) => a.includes("headless"))).toBe(false);
   expect(args).toContain("--remote-debugging-port=0");
   expect(args.some((a) => a.startsWith("--user-data-dir="))).toBe(true);
+});
+it("uses a fullscreen browser window that can dock DevTools for live video", () => {
+  const args = videoChromeArgs("/tmp/browse-profile", "https://example.com/");
+  expect(args).toContain("--start-fullscreen");
+  expect(args).toContain("--test-type");
+  expect(args).not.toContain("--kiosk");
+  expect(args.some((arg) => arg.startsWith("--app="))).toBe(false);
+  expect(args.at(-1)).toBe("https://example.com/");
 });
 it("can begin loading the requested page during browser startup", () => {
   expect(chromeArgs("/tmp/browse-profile", "https://example.com/").at(-1)).toBe(

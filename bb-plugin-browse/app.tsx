@@ -479,7 +479,7 @@ function BrowserListSkeleton({ label }: { label: string }) {
 }
 
 function LoadingBrowserFrame({ url }: { url: string }) {
-  return <div role="status" aria-label="Loading page" className="flex h-full min-h-0 flex-col bg-background">
+  return <div role="status" aria-label="Loading page" className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
     <div aria-label="Browser navigation" className="flex h-12 shrink-0 items-center gap-2 border-b px-4 py-2">
       <div className="flex shrink-0 items-center gap-1">{(["ArrowLeft", "ArrowRight", "RefreshCw"] as const).map(name => <span key={name} className="grid size-7 place-items-center text-muted-foreground"><BrowseIcon name={name} className="size-4" /></span>)}</div>
       <div className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md text-muted-foreground" style={{ boxShadow: "inset 0 0 0 1px var(--input, var(--border))" }}>
@@ -496,7 +496,7 @@ function LoadingBrowserFrame({ url }: { url: string }) {
 
 function LiveBrowser(props: Parameters<typeof SessionBrowser>[0]) {
   if(props.params && typeof props.params==='object' && 'streamTest' in props.params && props.params.streamTest===true)
-    return <iframe title="WebRTC browser test" className="h-full min-h-0 w-full border-0 bg-background" src="/api/v1/plugins/browse/http/stream-test/viewer?id=bench&video=1" />;
+    return <iframe title="WebRTC browser test" className="h-full min-h-0 w-full border-0 bg-sidebar" src="/api/v1/plugins/browse/http/stream-test/viewer?id=bench&video=1" />;
   return <SessionBrowser {...props} />;
 }
 
@@ -575,7 +575,7 @@ function SessionBrowser({
   if (opening) return <LoadingBrowserFrame url={current?.url || address} />;
   if (!id)
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
+      <div data-browser-shell className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
         <form aria-label="Browser navigation" className="flex h-12 shrink-0 items-center gap-2 border-b px-4 py-2" onSubmit={(event) => { event.preventDefault(); void openAddress(); }}>
           <div role="group" aria-label="Navigation" className="flex shrink-0 items-center gap-1">
           <BrowserActionTooltip label="Back"><Button type="button" variant="ghost" size="icon-xs" aria-label="Back" disabled><BrowseIcon name="ArrowLeft" className="size-4" /></Button></BrowserActionTooltip>
@@ -642,7 +642,7 @@ function SessionBrowser({
     );
   if (current && ["error", "released"].includes(current.status))
     return (
-      <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-auto bg-background p-6 text-center">
+      <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-auto bg-sidebar p-6 text-center text-sidebar-foreground">
         <BrowseIcon name="Globe" className="mb-3 size-6 text-muted-foreground" />
         <h2 className="text-sm font-medium">{current.status === "released" ? "Browser closed" : "Browser disconnected"}</h2>
           <Button
@@ -671,12 +671,12 @@ function SessionBrowser({
       </div>
     );
   return (
-    <div data-browse-session={id} className="relative flex h-full min-h-0 flex-col bg-background">
+    <div data-browse-session={id} className="relative flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       {loadedViewerId !== id && <div className="absolute inset-0 z-10"><LoadingBrowserFrame url={current?.url || address} /></div>}
       {error && <p role="alert" className="shrink-0 px-4 py-2 text-xs text-muted-foreground">{error}</p>}
       <iframe
         title="Live browser"
-        className="min-h-0 w-full flex-1 border-0 bg-background"
+        className="min-h-0 w-full flex-1 border-0 bg-sidebar"
         style={{ opacity: loadedViewerId === id ? 1 : 0 }}
         onLoad={() => setLoadedViewerId(id)}
         src={`/api/v1/plugins/browse/http/viewer?id=${encodeURIComponent(id)}`}
