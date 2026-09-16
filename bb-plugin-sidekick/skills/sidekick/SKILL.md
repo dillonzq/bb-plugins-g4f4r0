@@ -36,8 +36,10 @@ The same operations are available as `bb sidekick ...` commands.
 
 - The thread's model and permission mode are the agent's. Changing them in the
   thread is refused; change them on the agent instead.
-- Editing the agent's instructions applies the next time BB builds the thread's
-  session, not mid-turn.
+- Edited instructions reach new threads right away. An existing thread keeps
+  the instructions it started with until its context is cleared.
+- The user switches a thread's agent from the thread header. Switching clears
+  the model context; the messages stay visible.
 
 ## Safety
 

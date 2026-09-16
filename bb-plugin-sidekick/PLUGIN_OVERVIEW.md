@@ -1,21 +1,24 @@
-Keep a todo list beside the work it belongs to, in the sidebar and in
-your agent threads.
+Give BB reusable agents: named identities with their own instructions, model,
+and permissions, chosen per thread.
 
 ## What you get
 
-- An **Example todos** page in the left sidebar that adds, completes, and
-  removes todos.
-- A `bb sidekick` command that does the same from a terminal.
-- Live updates, so a change made in one place reaches every open page at once.
+- An **Agents** section in Sidekick's settings to create, edit, and delete
+  agents. Editing uses BB's own model and permission pickers.
+- An agent selector in every thread header. Picking an agent switches the
+  thread to that agent's model and starts a fresh model context with its
+  instructions. The conversation stays visible.
+- Agent threads stay on their agent's model and never run with more
+  permission than the agent allows.
+- A `bb sidekick` command and agent tools, so agents can be created and
+  maintained from chat.
 
 ## How it works
 
-The todos live in this plugin's own storage on the BB server, one list per
-installation. Nothing leaves the machine, and the plugin needs no account, API
-key, or external service.
+Agents live in this plugin's own storage on the BB server. Nothing leaves the
+machine, and the plugin needs no account, API key, or external service.
 
 ## For agents
 
-The bundled skill tells an agent to read the list with `bb sidekick list`, add
-one todo at a time with `bb sidekick add`, and close finished work with
-`bb sidekick done`.
+The bundled skill explains when agents may be created or changed, and how an
+agent's instructions reach its threads.

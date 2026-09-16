@@ -8,7 +8,9 @@ Automations owns schedules and runs.
 BB threads own conversation and execution.
 ```
 
-Status: Phase 1 in progress (BB 0.43.1, Plugin SDK 0.4.87). Agents, the agents page, and "Start conversation" are built and verified live. Memory and automations are next. Spike results are at the end.
+Status: Phase 1 in progress (BB 0.43.1, Plugin SDK 0.4.87). Agents, Settings > Agents, and the thread header selector are built and verified live. Memory and automations are next. Spike results are at the end.
+
+Principle: agents complement BB's existing screens. No Sidekick-only pages, no extra sidebar entry, no custom composer. The sidebar is for day-to-day work; agent definitions live in Settings.
 
 ## Names and copy
 
@@ -22,7 +24,7 @@ Status: Phase 1 in progress (BB 0.43.1, Plugin SDK 0.4.87). Agents, the agents p
 | Mention one | `@handle` |
 | Mention all in thread | `@all`, with `@everyone` as an alias, scoped to the thread |
 
-UI copy follows BB: sentence case for actions and titles, for example "New agent", "New automation", "Start conversation", "Delete agent".
+UI copy follows BB: sentence case for actions and titles, for example "New agent", "New automation", "Edit", "Delete agent".
 
 ## The core decision: one agent per thread
 
@@ -36,7 +38,7 @@ Two agents in one provider session would share context and permissions, so that 
 - **Agent thread.** A thread spawned by Sidekick with `pluginMetadata: { agentId }` and the agent's `providerId`, `model`, `reasoningLevel`, and `permissionMode`. `configure` reads the metadata and adds the agent's instructions, tools, and memory.
 - **Conversation thread.** Any normal thread where the user mentions agents. Each mentioned agent gets one agent thread for that conversation.
 - **Conversation agent threads are hidden and have no BB parent.** Sidekick records the link in `thread_agents` and posts replies itself. See "Why not BB child threads".
-- **Direct conversation.** "Start conversation" on a profile opens BB's new thread composer for that agent and spawns one visible top-level agent thread.
+- **Choosing an agent.** Any thread picks its agent from the thread header. Starting a thread with an agent: create it as usual, then pick the agent. Starting straight from the compose screen with `@agent` as the first word is a candidate for Phase 2.
 
 No rooms, hidden projects, or separate thread database.
 
@@ -56,10 +58,10 @@ Cost: BB's parent permission ceiling no longer applies, so Sidekick clamps permi
 
 | Need | BB surface | Verified |
 | --- | --- | --- |
-| Sidebar page | `app.slots.navPanel` with `path: "agents"` | Yes, top-level "Sidekick" entry |
-| Agent list and detail | Page component, `useBbNavigate().toPluginPanel` | Page renders |
+| Agent registry | `app.slots.settingsSection` titled "Agents" on the plugin's settings page | Yes |
+| Editing an agent | Vendored dialog with host `experimental_ProviderModelPicker` and `experimental_PermissionModePicker` | Yes |
+| Choosing a thread's agent | `app.slots.experimental_threadHeaderAction` dropdown | Yes |
 | `@handle` menu | `bb.ui.registerMentionProvider`, `@` trigger | Yes, see mention notes |
-| Participants in a thread | `app.slots.experimental_threadHeaderAction` | Yes |
 | Agent identity on a thread | Thread plugin metadata | Yes, on the first `configure` pass |
 | Instructions, tools, memory | `bb.agents.configure` | Yes, first turn and follow-ups |
 | Keep agent model and permissions | `experimental_hooks.on("message.dispatch")` rejects | Yes, HTTP 409 with our message |
@@ -116,15 +118,20 @@ sidekick_automation_list / _get / _create / _update / _delete
 
 The CLI mirrors the tools: `bb sidekick list`, `bb sidekick automation update <id> --agent <id>`, and so on, plus `bb sidekick run`.
 
-## Sidebar page
+## Settings > Agents
 
-- **Left:** agent list with handle, name, and model. "New agent" at the top.
-- **Right:** the selected agent with sections for identity, instructions, memory, model and permissions, automations, and "Start conversation".
-- Fields are editable in place. Creation is conversational.
-- **New agent** spawns a normal thread in the personal project with a prompt to describe the agent. That thread's agent calls `sidekick_agent_create`.
-- **New automation** spawns a setup thread the same way, with the agent preselected.
-- Threads are not listed under agents. Participation shows in the thread header.
-- Use a valid host icon name. `Users` fell back to a default glyph.
+- BB titles a plugin's settings page with the plugin's name, so the page reads "Sidekick" and holds one section, "Agents". See open questions.
+- One card with a row per agent: icon, `@handle`, name, model, permission mode, description, and a `⋯` menu with Edit and Delete agent.
+- **New agent** opens BB's compose screen with a prompt to describe the agent; that thread's agent calls `sidekick_agent_create`.
+- **Edit** opens a dialog with handle, name, description, instructions, and BB's own model and permission pickers. The model picker only offers reasoning levels the model supports.
+
+## Thread header selector
+
+- A small dropdown in the thread header: "No agent", then every agent. Hidden when there are no agents.
+- Picking an agent tags the thread, sets its model and reasoning with `bb.sdk.threads.update`, and clears the model context with `bb.sdk.threads.clearContext`. The "Context cleared" row appears in the timeline; messages stay visible.
+- Tested: resuming or compacting keeps a session's old instructions. Only clearing context loads the new agent's instructions.
+- Refused while a turn is running, and when the agent uses a different provider than the thread.
+- The composer's model label can stay stale until the next send or reload. The send still uses the thread's new model.
 
 ## Routing
 
@@ -221,7 +228,7 @@ Phase 1 is single agents, complete. Phase 2 adds conversations with several agen
 
 1. ~~Spike.~~ Done. Results below.
 2. ~~**Agents.**~~ Done: storage, `sidekick_agent_*` tools, `bb sidekick` CLI, `configure`, dispatch hook with metadata fallback, forks.
-3. ~~**Page.**~~ Done: nav panel, list and detail, in-place editing, "New agent", "Start conversation" through BB's composer, agent chip in the thread header.
+3. ~~**Settings and header.**~~ Done: Settings > Agents with an edit dialog using BB pickers, and the thread header agent selector.
 4. **Memory.** Adapted store, tools, CLI, index in agent threads, profile section.
 5. **Automations.** Tools over the Automations RPC, `bb sidekick run`, profile list.
 6. **Skill, docs, tests.** `skills/sidekick/SKILL.md`, README and PLUGIN_OVERVIEW, repo README table, tests for handles, permission checks, and memory validation.
@@ -250,7 +257,9 @@ Out: a separate chat app, drafts, hidden projects, `@all` beyond the conversatio
 - Changing the model or permissions in an agent thread is blocked with a message pointing to Sidekick.
 - Silent marker: `::sidekick-no-reply{}`.
 - Agent memory lives in Sidekick, not the builtin Memory plugin.
-- **Start conversation** opens BB's own new thread composer (`experimental_NewThreadComposer`) on the agent's page at `/plugins/sidekick/agents/<agentId>/new`, seeded with the agent's provider, model, reasoning, and permission mode. The user picks project and environment as usual. `onSubmit` sends the `NewThreadRequest` to Sidekick, which spawns with `pluginMetadata: { agentId }` and opens the thread.
+- Agent definitions live in Settings > Agents. No sidebar entry, no Sidekick pages, no custom composer.
+- Agents are chosen per thread in the thread header. Switching clears the model context.
+- Permissions are a ceiling: an agent thread refuses a turn above the agent's mode and accepts lower ones. BB does not let plugins set a thread's permission mode.
 - New agents use BB's defaults when the user does not specify: the provider and model BB would pick for a new thread, reasoning `medium`, permission `auto`. Saved on the agent so they do not drift.
 - No tool scoping in Phase 1. Agents have every tool; the focus is behavior.
 
@@ -280,11 +289,14 @@ Out: a separate chat app, drafts, hidden projects, `@all` beyond the conversatio
 
 ## Follow-ups
 
-- Validate an agent's reasoning level against its model. BB's composer reconciles an unsupported level (Haiku has no `high`), so a stored level can differ from what runs.
-- The dispatch hook locks model and permissions, not reasoning, because reasoning reconciles per model.
+- Agents created by tool or CLI can store a reasoning level their model lacks (Haiku has no `high`). The edit dialog's picker corrects it; validate on write too.
+- The dispatch hook locks the model and caps permissions, not reasoning, because reasoning reconciles per model.
+- A handoff note when switching agents: store a short outline of the conversation so far and include it in the new agent's instructions for that thread.
+- Tested and rejected for starting threads: a thread with no first message (BB requires input), and forking a hidden seed thread (BB refuses to fork a thread that never ran, and forks copy history).
 
 ## Open questions
 
+0. The settings page title is the plugin's display name. Either keep "Sidekick" with an "Agents" section, or set the display name to "Agents" (plugin id, folder, and CLI stay `sidekick`).
 1. The posted reply card says "Message from Agent". Can a hidden sender thread show its title instead? Check with BB before building, or accept the handle in the text.
 2. Each posted reply costs one short turn in the conversation thread. Acceptable for B1; revisit if BB adds a way to post without a turn.
 3. Mention ordering puts Sidekick below BB's sections. Check whether BB offers ordering or a dedicated trigger later.

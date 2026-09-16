@@ -8,9 +8,9 @@
   },
   "bb": {
     "name": "Sidekick",
-    "description": "Reusable agents with their own instructions, model, permissions, and memory, called into threads with @handle.",
+    "description": "Reusable agents with their own instructions, model, and permissions. Define them in Settings and pick one from any thread header.",
     "branding": {
-      "icon": "Users"
+      "icon": "Bot"
     },
     "server": "./server.ts",
     "app": "./app.tsx",

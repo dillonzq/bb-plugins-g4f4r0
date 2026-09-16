@@ -3,9 +3,9 @@
 //
 // An agent thread is a normal BB thread carrying `pluginMetadata.agentId`.
 // `bb.agents.configure` turns that tag into the agent's instructions, and the
-// `message.dispatch` hook keeps the thread on the agent's model and
-// permissions. Everything else (sidebar page, CLI, agent tools) reads and
-// writes the same `agents` table.
+// `message.dispatch` hook keeps the thread on the agent's model and within its
+// permissions. The Agents settings page, the thread header selector, the CLI,
+// and the agent tools all read and write the same `agents` table.
 import { randomBytes } from "node:crypto";
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
@@ -56,19 +56,6 @@ const agentWriteSchema = z.object({
 
 const agentPatchSchema = agentWriteSchema.partial().extend({ id: z.string() });
 
-const newThreadRequestSchema = z.object({
-  projectId: z.string(),
-  providerId: z.string(),
-  model: z.string(),
-  reasoningLevel: reasoningLevelSchema,
-  permissionMode: permissionModeSchema,
-  serviceTier: z.enum(["default", "fast"]).optional(),
-  executionInputSources: z.unknown().optional(),
-  environment: z.unknown(),
-  input: z.array(z.unknown()),
-  sendAt: z.number().optional(),
-});
-
 export const rpcContract = defineRpcContract({
   agents_list: {
     input: z.null(),
@@ -90,13 +77,13 @@ export const rpcContract = defineRpcContract({
     input: z.object({ threadId: z.string() }),
     output: z.object({ agent: agentSchema.nullable() }),
   },
-  conversation_start: {
-    input: z.object({ agentId: z.string(), request: newThreadRequestSchema }),
-    output: z.object({ threadId: z.string() }),
+  thread_agent_set: {
+    input: z.object({ threadId: z.string(), agentId: z.string().nullable() }),
+    output: z.object({ agent: agentSchema.nullable() }),
   },
 });
 
-/** Realtime channel the agents page listens on. */
+/** Realtime channel the Agents settings and thread headers listen on. */
 const AGENTS_CHANGED = "agents-changed";
 
 type AgentRow = {
@@ -114,6 +101,12 @@ type AgentRow = {
 };
 
 class InputError extends Error {}
+
+const PERMISSION_RANK: Record<Agent["permissionMode"], number> = {
+  "accept-edits": 0,
+  auto: 1,
+  full: 2,
+};
 
 function toAgent(row: AgentRow): Agent {
   return {
@@ -329,13 +322,16 @@ export default async function plugin(bb: BbPluginApi) {
   // untrusted: the id only selects a stored agent, and its text is quoted.
   bb.agents.configure((context) => {
     const tagged = context.pluginMetadata.agentId;
+    // `agentId: null` means the user removed the agent from this thread.
     const agent =
-      typeof tagged === "string"
-        ? findAgent(tagged)
-        : (threadAgent(context.thread.id) ??
-          (context.thread.sourceThreadId === null
-            ? null
-            : threadAgent(context.thread.sourceThreadId)));
+      tagged === null
+        ? null
+        : typeof tagged === "string"
+          ? findAgent(tagged)
+          : (threadAgent(context.thread.id) ??
+            (context.thread.sourceThreadId === null
+              ? null
+              : threadAgent(context.thread.sourceThreadId)));
     if (agent === null) return { tools: [], skills: [] };
     if (threadAgent(context.thread.id) === null) rememberThreadAgent(context.thread.id, agent.id);
     return {
@@ -349,8 +345,8 @@ export default async function plugin(bb: BbPluginApi) {
     };
   });
 
-  // An agent thread stays on its agent's model and permissions. Changing them
-  // belongs in Sidekick, not in one thread's picker.
+  // An agent thread stays on its agent's model and never runs with more
+  // permission than the agent has. Changing either belongs in Agents settings.
   bb.experimental_hooks.on("message.dispatch", async (context) => {
     let agent = threadAgent(context.thread.id);
     if (agent === null) {
@@ -361,15 +357,60 @@ export default async function plugin(bb: BbPluginApi) {
     }
     if (agent === null) return { action: "proceed" };
     const { model, permissionMode } = context.requestedExecution;
-    const mismatch =
-      (model !== null && model !== agent.model) ||
-      (permissionMode !== null && permissionMode !== agent.permissionMode);
-    if (!mismatch) return { action: "proceed" };
-    return {
-      action: "reject",
-      message: `This thread belongs to @${agent.handle}. Change its model or permissions in Sidekick.`,
-    };
+    if (model !== null && model !== agent.model) {
+      return {
+        action: "reject",
+        message: `This thread uses @${agent.handle}, which runs on ${agent.model}. Change the agent's model in Settings > Agents.`,
+      };
+    }
+    if (
+      permissionMode !== null &&
+      PERMISSION_RANK[permissionMode] > PERMISSION_RANK[agent.permissionMode]
+    ) {
+      return {
+        action: "reject",
+        message: `@${agent.handle} allows up to ${agent.permissionMode} permissions. Pick a lower mode, or change the agent in Settings > Agents.`,
+      };
+    }
+    return { action: "proceed" };
   });
+
+  /**
+   * Attach an agent to a thread, or remove it. The model and reasoning follow
+   * the agent. Providers keep a session's instructions until its context is
+   * cleared (resuming or compacting keeps them), so switching clears the model
+   * context. The conversation stays visible. Only idle threads can switch.
+   */
+  async function setThreadAgent(threadId: string, agentId: string | null) {
+    const agent = agentId === null ? null : findAgent(agentId);
+    if (agentId !== null && agent === null) throw new InputError(`no agent ${agentId}`);
+    const thread = await bb.sdk.threads.get({ threadId });
+    if (thread.status === "active") {
+      throw new InputError("Wait for the current turn to finish before switching agents.");
+    }
+    if (agent !== null && thread.providerId !== agent.providerId) {
+      throw new InputError(
+        `@${agent.handle} runs on ${agent.providerId}, and this thread uses ${thread.providerId}. Start a new thread to use it.`,
+      );
+    }
+    await bb.sdk.threads.updatePluginMetadata({
+      threadId,
+      set: { agentId: agent === null ? null : agent.id },
+    });
+    if (agent === null) {
+      db.prepare("DELETE FROM thread_agents WHERE thread_id = ?").run(threadId);
+    } else {
+      rememberThreadAgent(threadId, agent.id);
+      await bb.sdk.threads.update({
+        threadId,
+        model: agent.model,
+        reasoningLevel: agent.reasoningLevel,
+      });
+    }
+    await bb.sdk.threads.clearContext({ threadId });
+    bb.realtime.publish(AGENTS_CHANGED, { threadId });
+    return { agent };
+  }
 
   bb.rpc.register(rpcContract, {
     agents_list: () => ({ agents: listAgents() }),
@@ -377,16 +418,7 @@ export default async function plugin(bb: BbPluginApi) {
     agents_update: (input) => ({ agent: updateAgent(input) }),
     agents_delete: ({ id }) => ({ deleted: deleteAgent(id) }),
     thread_agent: ({ threadId }) => ({ agent: threadAgent(threadId) }),
-    async conversation_start({ agentId, request }) {
-      const agent = findAgent(agentId);
-      if (agent === null) throw new InputError(`no agent ${agentId}`);
-      const thread = await bb.sdk.threads.spawn({
-        ...(request as Parameters<typeof bb.sdk.threads.spawn>[0]),
-        pluginMetadata: { agentId: agent.id },
-      });
-      rememberThreadAgent(thread.id, agent.id);
-      return { threadId: thread.id };
-    },
+    thread_agent_set: ({ threadId, agentId }) => setThreadAgent(threadId, agentId),
   });
 
   const agentSummary = (agent: Agent) =>
