@@ -314,7 +314,7 @@ const StatusRow = memo(function StatusRow({ thread, project, family, child, acti
             <Icon name="Clock" className="size-4" aria-hidden />
           </button></DropdownMenuTrigger>
             </TooltipTrigger>
-            <TooltipContent side="bottom">{snooze ? `Snoozed · ${wakeLabel(snooze.until, now)}` : 'Snooze'}</TooltipContent>
+            <TooltipContent side="bottom">{snooze ? 'Unsnooze' : 'Snooze'}</TooltipContent>
           </Tooltip>
           <DropdownMenuContent align="end" side="bottom"><SnoozeItems family={family} now={now} actions={actions} /></DropdownMenuContent>
         </DropdownMenu>}
@@ -355,7 +355,7 @@ const StatusRow = memo(function StatusRow({ thread, project, family, child, acti
       <span className="dusk-thread-location">{location}</span>
       <span className="dusk-thread-sep" aria-hidden>·</span>
       {snooze
-        ? <time dateTime={new Date(snooze.until).toISOString()} title={`Wakes ${new Date(snooze.until).toLocaleString()}`}>wakes in {wakeLabel(snooze.until, now)}</time>
+        ? <time dateTime={new Date(snooze.until).toISOString()} title={`Wakes ${new Date(snooze.until).toLocaleString()}`}>{wakeLabel(snooze.until, now)}</time>
         : <time dateTime={new Date(at).toISOString()}>{relativeMessageTime(at, now)}</time>}
     </span>
   </div>
