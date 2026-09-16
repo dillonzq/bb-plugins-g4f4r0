@@ -70,6 +70,37 @@ export default async function plugin(bb: BbPluginApi) {
       sessions.set(s.id, s);
     }
   }
+  // Released sessions only remain useful while a Browse panel still points at
+  // them (for example, to reconnect an idle profile). Remove stale records at
+  // startup so closed tabs do not accumulate in memory or plugin storage.
+  for (const threadId of new Set(
+    [...sessions.values()].map((s) => s.threadId),
+  )) {
+    try {
+      const state = await bb.sdk.threads.tabs.get({ threadId });
+      const referenced = new Set<string>();
+      for (const tab of state.tabs) {
+        if (
+          tab.kind !== "plugin-panel" ||
+          tab.pluginId !== "browse" ||
+          tab.actionId !== "live"
+        )
+          continue;
+        try {
+          const params = JSON.parse(tab.paramsJson ?? "null");
+          if (typeof params?.id === "string") referenced.add(params.id);
+        } catch {}
+      }
+      for (const s of [...sessions.values()]) {
+        if (s.threadId !== threadId || referenced.has(s.id)) continue;
+        await bb.storage.kv.delete(`session:${s.id}`);
+        sessions.delete(s.id);
+      }
+    } catch {
+      // Keep records when tab state cannot be read; reconnect is safer than
+      // treating an unavailable client as proof that its panels were closed.
+    }
+  }
   const panelNavigation = new Map<string, number>();
   const connectingRefresh = new Map<string, Promise<Session>>();
   const changed = () => bb.realtime.publish("browser-changed", {});
@@ -1536,7 +1567,13 @@ export default async function plugin(bb: BbPluginApi) {
           }
           for (const s of active.filter(s => s.threadId === threadId)) {
             if (open.has(s.id)) seenPanelSessions.add(s.id);
-            else if (seenPanelSessions.has(s.id)) { await release(s); seenPanelSessions.delete(s.id); }
+            else if (seenPanelSessions.has(s.id)) {
+              await release(s);
+              await bb.storage.kv.delete(`session:${s.id}`);
+              sessions.delete(s.id);
+              seenPanelSessions.delete(s.id);
+              changed();
+            }
           }
         } catch { /* A failed tab read is never treated as a closed tab. */ }
       }

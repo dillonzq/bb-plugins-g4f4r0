@@ -755,6 +755,9 @@ it("closes Chrome only after a previously observed session tab is removed", asyn
     options.tabReadFails = false;
     await vi.advanceTimersByTimeAsync(2000);
     expect(f.calls.filter(c => c.method === "release")).toHaveLength(1);
+    expect(
+      await f.harness.behavior.callRpc("list", { threadId: "thread_one" }),
+    ).toEqual([]);
   } finally { await f.harness.lifecycle.dispose(); vi.useRealTimers(); }
 });
 
