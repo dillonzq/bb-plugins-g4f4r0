@@ -1,5 +1,21 @@
 import {viewerTrace} from '../src/viewer-trace';
 import {it,expect,vi} from 'vitest';import {JSDOM} from 'jsdom';import {viewerHtml} from '../src/viewer';
+it('keeps the current frame ratio until the requested viewport frame arrives',()=>{
+ const dom=new JSDOM('<main id="viewport" style="padding:12px"><div id="viewport-skeleton"></div><div id="browser-surface"><canvas id="screen" data-frame="true"></canvas></div></main>',{runScripts:'outside-only',pretendToBeVisual:true});
+ Object.defineProperties(dom.window.document.querySelector('#viewport'),{clientWidth:{value:1400},clientHeight:{value:1000}});
+ (dom.window as any).ResizeObserver=class{observe(){}};
+ const code=viewerHtml.slice(viewerHtml.indexOf('const viewport='),viewerHtml.indexOf('const metrics=window.browseMetrics'));
+ dom.window.eval(`const screen=document.querySelector('#screen');let vw=1280,vh=800,responsiveEnabled=true,responsiveWidth=412,responsiveHeight=915,expectedFrameWidth=412,expectedFrameHeight=915;${code};window.fitViewer=fit;window.commitFrame=(w,h)=>{vw=w;vh=h;expectedFrameWidth=0;expectedFrameHeight=0;fit();};`);
+ try{
+  (dom.window as any).fitViewer();
+  const surface=dom.window.document.querySelector('#browser-surface') as HTMLElement;
+  expect(surface.style.width).toBe('1280px');
+  expect(surface.style.height).toBe('800px');
+  (dom.window as any).commitFrame(412,915);
+  expect(surface.style.width).toBe('412px');
+  expect(surface.style.height).toBe('915px');
+ }finally{dom.window.close();}
+});
 it('paints the freshest decoded frame and closes every replaced bitmap',async()=>{
  const dom=new JSDOM('<div id="viewport"></div><div id="viewport-skeleton"></div><canvas id="screen"></canvas><span id="resolution"></span>',{runScripts:'outside-only',pretendToBeVisual:true});
  const callbacks:Array<()=>void>=[],draw=vi.fn(),bitmaps=[1,2,3].map(n=>({width:1280,height:800,n,close:vi.fn()}));
