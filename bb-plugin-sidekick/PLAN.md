@@ -8,7 +8,7 @@ Automations owns schedules and runs.
 BB threads own conversation and execution.
 ```
 
-Status: spike done (2026-09-15, BB 0.43.1, Plugin SDK 0.4.87). Every assumption below was tested live. The package holds spike code, not the real plugin. The plugin is installed from this checkout and disabled.
+Status: Phase 1 in progress (BB 0.43.1, Plugin SDK 0.4.87). Agents, the agents page, and "Start conversation" are built and verified live. Memory and automations are next. Spike results are at the end.
 
 ## Names and copy
 
@@ -114,7 +114,7 @@ sidekick_automation_list / _get / _create / _update / _delete
 - `sidekick_automation_delete` deletes the real Automation. It confirms first and warns when other agents are linked. Unlinking is an update.
 - Tool output is bounded. Each tool has a `presentation.label` in sentence case.
 
-The CLI mirrors the tools: `bb sidekick agent list`, `bb sidekick automation update <id> --agent <id>`, and so on, plus `bb sidekick run`.
+The CLI mirrors the tools: `bb sidekick list`, `bb sidekick automation update <id> --agent <id>`, and so on, plus `bb sidekick run`.
 
 ## Sidebar page
 
@@ -220,8 +220,8 @@ Phase 1 is single agents, complete. Phase 2 adds conversations with several agen
 ### Phase 1: single agents
 
 1. ~~Spike.~~ Done. Results below.
-2. **Agents.** Replace spike code: storage, `sidekick_agent_*` tools and CLI, `configure`, dispatch hook with metadata fallback, forks.
-3. **Page.** Nav panel, list and detail, in-place editing, "New agent", "Start conversation".
+2. ~~**Agents.**~~ Done: storage, `sidekick_agent_*` tools, `bb sidekick` CLI, `configure`, dispatch hook with metadata fallback, forks.
+3. ~~**Page.**~~ Done: nav panel, list and detail, in-place editing, "New agent", "Start conversation" through BB's composer, agent chip in the thread header.
 4. **Memory.** Adapted store, tools, CLI, index in agent threads, profile section.
 5. **Automations.** Tools over the Automations RPC, `bb sidekick run`, profile list.
 6. **Skill, docs, tests.** `skills/sidekick/SKILL.md`, README and PLUGIN_OVERVIEW, repo README table, tests for handles, permission checks, and memory validation.
@@ -277,6 +277,11 @@ Out: a separate chat app, drafts, hidden projects, `@all` beyond the conversatio
 | 17 | Automations RPC callable from Sidekick | Pass (`list`, `get`) |
 | 18 | Sidebar page, header action, mention menu render | Pass, with icon and mention ordering notes |
 | 19 | Builtin Memory plugin can scope per agent | Fail: global and project only |
+
+## Follow-ups
+
+- Validate an agent's reasoning level against its model. BB's composer reconciles an unsupported level (Haiku has no `high`), so a stored level can differ from what runs.
+- The dispatch hook locks model and permissions, not reasoning, because reasoning reconciles per model.
 
 ## Open questions
 
