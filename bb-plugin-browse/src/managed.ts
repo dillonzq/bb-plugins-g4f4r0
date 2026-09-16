@@ -36,7 +36,7 @@ export function videoChromeArgs(profile: string, initialUrl: string) {
   return [
     ...chromeArgs(profile, initialUrl).filter((arg) => arg !== initialUrl),
     "--test-type",
-    "--start-fullscreen",
+    "--kiosk",
     "--disable-infobars",
     "--window-position=0,0",
     initialUrl,

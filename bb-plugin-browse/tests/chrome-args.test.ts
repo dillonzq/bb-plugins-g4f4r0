@@ -17,11 +17,11 @@ it("launches headed Chrome without a headless flag", () => {
   expect(args).toContain("--remote-debugging-port=0");
   expect(args.some((a) => a.startsWith("--user-data-dir="))).toBe(true);
 });
-it("uses a fullscreen browser window that can dock DevTools for live video", () => {
+it("uses kiosk presentation without Chrome's fullscreen exit toast", () => {
   const args = videoChromeArgs("/tmp/browse-profile", "https://example.com/");
-  expect(args).toContain("--start-fullscreen");
+  expect(args).toContain("--kiosk");
   expect(args).toContain("--test-type");
-  expect(args).not.toContain("--kiosk");
+  expect(args).not.toContain("--start-fullscreen");
   expect(args.some((arg) => arg.startsWith("--app="))).toBe(false);
   expect(args.at(-1)).toBe("https://example.com/");
 });
