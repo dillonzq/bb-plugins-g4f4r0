@@ -34,14 +34,15 @@ kbd {
   line-height: 12px;
 }
 
-/* Sidebar command shortcuts share Search threads' inset and trailing slot. */
+/* Sidebar command shortcuts end at the button's 8px inset, mirroring the
+   8px inset of the leading icon, so both edges share the same spacing. */
 [data-sidebar="sidebar"] :is(a, button):has(kbd) {
   padding-inline-end: 8px;
 }
 [data-sidebar="sidebar"] kbd {
   flex-shrink: 0;
   margin-inline-start: auto;
-  margin-inline-end: 8px;
+  margin-inline-end: 0;
 }
 
 /* Sidebar state artwork. BB retains its labels, state priority and hover controls.
@@ -657,6 +658,35 @@ button.dusk-panel-toggle[hidden] { display: none; }
   height: 16px;
 }
 .dusk-status-indicator > span { width: 16px; height: 16px; }
+/* Held-modifier shortcut badges mirror BB: the full shortcut replaces the
+   status dot and the hover actions stay hidden while badges show. The badge
+   ends at the row's 8px inset, matching the nav kbd and title insets. */
+.dusk-status-row[data-hints] .dusk-status-trailing, .dusk-status-row[data-hints] .dusk-status-state { width: auto; }
+.dusk-status-state .dusk-status-kbd { margin: 0 8px 0 0; }
+.dusk-status-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  padding: 4px 6px;
+  border-radius: 3px;
+  background-color: var(--state-hover);
+  color: var(--subtle-foreground);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.dusk-status-row[data-hints]:not(:hover):not(:focus-within):not([data-menu-open]) .dusk-status-actions { display: none; }
+.dusk-status-row[data-hints]:is(:hover, :focus-within, [data-menu-open]) .dusk-status-state { visibility: hidden; }
+.dusk-status-row[data-hints]:not([data-has-state]) .dusk-status-title {
+  grid-column: 1;
+  margin-right: 0;
+}
 .dusk-status-actions {
   position: absolute;
   top: 0;

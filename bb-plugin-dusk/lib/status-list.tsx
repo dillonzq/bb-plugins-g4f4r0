@@ -76,6 +76,57 @@ function useCollapsed() {
   return [collapsed, toggle] as const;
 }
 
+// BB reveals its sidebar shortcut badges after holding Cmd (macOS) or Ctrl
+// for ~700ms, and hides them on release, blur, or any other key. Mirror that
+// here so Dusk rows show the same number badges as native thread rows.
+const SHORTCUT_HINT_DELAY_MS = 700;
+const MAX_SHORTCUT_HINTS = 9;
+function isMacPlatform() {
+  return /Mac|iPhone|iPad|iPod/u.test(navigator.platform);
+}
+function isDesktopApp() {
+  return (window as unknown as { bbDesktop?: unknown }).bbDesktop != null;
+}
+// Badge text follows BB's own shortcut labels for thread.jump.N: the label
+// BB itself would show for this platform and surface.
+function jumpShortcut(n: number) {
+  if (isMacPlatform()) return isDesktopApp() ? { label: `⌘ ${n}`, aria: `Meta+${n}` } : { label: `⌃ ${n}`, aria: `Control+${n}` };
+  return isDesktopApp() ? { label: `Ctrl + ${n}`, aria: `Control+${n}` } : { label: `Ctrl + Shift + ${n}`, aria: `Control+Shift+${n}` };
+}
+function useShortcutHints() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const mac = isMacPlatform();
+    const isModifier = (key: string) => key === 'Control' || (mac && key === 'Meta');
+    const shown = { current: false };
+    let timer: number | null = null;
+    const hide = () => {
+      if (timer !== null) { window.clearTimeout(timer); timer = null; }
+      if (!shown.current) return;
+      shown.current = false;
+      setShow(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (!isModifier(event.key)) { hide(); return; }
+      if (timer !== null || shown.current) return;
+      if (event.shiftKey || event.altKey || (event.key === 'Meta' ? event.ctrlKey : event.metaKey)) return;
+      timer = window.setTimeout(() => { timer = null; shown.current = true; setShow(true); }, SHORTCUT_HINT_DELAY_MS);
+    };
+    const onKeyUp = (event: KeyboardEvent) => { if (isModifier(event.key)) hide(); };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', hide);
+    return () => {
+      hide();
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', hide);
+    };
+  }, []);
+  return show;
+}
+
 // Opening an unread thread marks it read at once. Keep its unread look for a
 // few seconds, and if the user leaves before then, mark it unread again, so a
 // mis-click doesn't file a result under Done.
@@ -201,7 +252,7 @@ function ThreadCard({ thread, location, details, now }: { thread: PluginSidebarT
   </div>;
 }
 
-const StatusRow = memo(function StatusRow({ thread, project, family, child, active, now, actions }: { thread: PluginSidebarThread; project: PluginSidebarProject | undefined; family: Family; child: boolean; active: boolean; now: number; actions: RowActions }) {
+const StatusRow = memo(function StatusRow({ thread, project, family, child, active, now, hint, actions }: { thread: PluginSidebarThread; project: PluginSidebarProject | undefined; family: Family; child: boolean; active: boolean; now: number; hint: number | null; actions: RowActions }) {
   const threadActions = experimental_useSidebarThreadActions();
   const split = experimental_useSidebarThreadSplit(thread.id);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -228,9 +279,9 @@ const StatusRow = memo(function StatusRow({ thread, project, family, child, acti
   const hasState = thread.indicator !== 'none' && !!thread.indicatorLabel;
   return <HoverCard open={cardOpen && !menuOpen} onOpenChange={setCardOpen} openDelay={400} closeDelay={60}>
   <HoverCardTrigger asChild>
-  <div className="dusk-status-row" data-child={child || undefined} data-active={active || undefined} data-menu-open={menuOpen || undefined} data-has-state={hasState || undefined} onPointerEnter={() => setWanted(true)}>
+  <div className="dusk-status-row" data-child={child || undefined} data-active={active || undefined} data-menu-open={menuOpen || undefined} data-has-state={hasState || undefined} data-hints={hint !== null || undefined} onPointerEnter={() => setWanted(true)}>
     <a className="dusk-status-link" href={`/projects/${thread.projectId}/threads/${thread.id}`} aria-label={`Open ${label}`} aria-current={active ? 'page' : undefined}
-      data-sidebar-thread-shortcut-target="" {...split.splitProps}
+      data-sidebar-thread-shortcut-target="" data-sidebar-thread-id={thread.id} aria-keyshortcuts={hint !== null ? jumpShortcut(hint).aria : undefined} {...split.splitProps}
       onClick={event => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
         event.preventDefault();
@@ -240,7 +291,9 @@ const StatusRow = memo(function StatusRow({ thread, project, family, child, acti
     <span className="dusk-status-title">{label}</span>
     <span className="dusk-status-trailing">
       <span className="dusk-status-state">
-        {hasState && <span data-sidebar-thread-trailing-indicator="" className="dusk-status-indicator">
+        {hint !== null
+          ? <kbd className="dusk-status-kbd" aria-hidden>{jumpShortcut(hint).label}</kbd>
+          : hasState && <span data-sidebar-thread-trailing-indicator="" className="dusk-status-indicator">
           <span role="img" aria-label={thread.indicatorLabel ?? undefined} />
         </span>}
       </span>
@@ -386,6 +439,26 @@ export function StatusThreadList({ activeThreadId, onNavigate, Original }: Plugi
   const [customFor, setCustomFor] = useState<string | null>(null);
   const snoozeMap = useMemo(() => new Map(snoozes.map(s => [s.threadId, s])), [snoozes]);
   const sections = useMemo(() => buildFamilies(threads, snoozeMap, pinKeys, now), [threads, snoozeMap, pinKeys, now]);
+  const showHints = useShortcutHints();
+  // Badge numbers follow BB's shortcut order: visible rows in DOM order,
+  // capped the same way BB caps its own thread shortcuts.
+  const hintNumbers = useMemo(() => {
+    if (!showHints) return new Map<string, number>();
+    const ids: string[] = [];
+    for (const { id } of SECTIONS) {
+      const families = sections.get(id)!;
+      if (families.length === 0) continue;
+      const holdsActive = families.some(f => f.root.id === activeThreadId || f.children.some(c => c.id === activeThreadId));
+      if (collapsed.has(id) && !holdsActive) continue;
+      for (const family of families) {
+        ids.push(family.root.id);
+        for (const child of family.children) ids.push(child.id);
+        if (ids.length >= MAX_SHORTCUT_HINTS) break;
+      }
+      if (ids.length >= MAX_SHORTCUT_HINTS) break;
+    }
+    return new Map(ids.slice(0, MAX_SHORTCUT_HINTS).map((id, i) => [id, i + 1]));
+  }, [showHints, sections, collapsed, activeThreadId]);
 
   const actions = useMemo<RowActions>(() => ({
     snooze: (threadId, until) => { rpc.call('snooze', { threadId, until }).then(setSnoozes, error => toast.error(error instanceof Error ? error.message : 'Could not snooze the thread.')); },
@@ -425,9 +498,9 @@ export function StatusThreadList({ activeThreadId, onNavigate, Original }: Plugi
           <Icon name="ChevronRight" className="dusk-status-chevron" aria-hidden />
         </button>
         {open && families.map(family => <div key={family.root.id} className="dusk-status-family" data-has-children={family.children.length > 0 || undefined}>
-          <StatusRow thread={family.root} project={projectsById.get(family.root.projectId)} family={family} child={false} active={family.root.id === activeThreadId} now={now} actions={actions} />
+          <StatusRow thread={family.root} project={projectsById.get(family.root.projectId)} family={family} child={false} active={family.root.id === activeThreadId} now={now} hint={hintNumbers.get(family.root.id) ?? null} actions={actions} />
           {family.children.length > 0 && <div className="dusk-status-children">
-            {family.children.map(child => <StatusRow key={child.id} thread={child} project={projectsById.get(child.projectId)} family={family} child active={child.id === activeThreadId} now={now} actions={actions} />)}
+            {family.children.map(child => <StatusRow key={child.id} thread={child} project={projectsById.get(child.projectId)} family={family} child active={child.id === activeThreadId} now={now} hint={hintNumbers.get(child.id) ?? null} actions={actions} />)}
           </div>}
         </div>)}
       </section>;
