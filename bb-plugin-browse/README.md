@@ -1,16 +1,16 @@
 # Browse for BB
 
-A browser automation plugin built around **Stagehand 4.1.0**. By default, Browse launches Chromium on **the machine where your BB thread executes**. An explicit `hostId` can select any other connected machine. Existing sessions stay on that host when the thread moves. It works independently of the client device. Explicit native mode can also control BB desktop tabs.
+A browser automation plugin built around **Fortress 151 with deterministic CDP control**. By default, Browse launches Fortress on **the machine where your BB thread executes**. An explicit `hostId` can select any other connected machine. Existing sessions stay on that host when the thread moves. It works independently of the client device. Explicit native mode can also control BB desktop tabs.
 
-**Browse** is the plugin name, ID (`browse`), CLI (`bb browse`), and agent tools (`browse_session`, `browse_action`, `browse_job`, `browse_discover`, `browse_credentials`). Stagehand is the Chromium driver.
+**Browse** is the plugin name, ID (`browse`), CLI (`bb browse`), and agent tools (`browse_session`, `browse_action`, `browse_job`, `browse_discover`, `browse_credentials`). Fortress is the browser engine; Browse drives it through deterministic CDP commands.
 
-No Browserbase, Browser Use Cloud, AI Gateway, Stagehand API, or second model is required. Your existing BB agent makes the decisions. Browse and its local Chromium driver execute them.
+No Browserbase, Browser Use Cloud, AI Gateway, Stagehand API, or second model is required. Your existing BB agent makes the decisions. Browse and its local Fortress engine execute them.
 
 ## Use it
 
 Browse runs through agent tools and the `bb browse` CLI. It adds a dependency page in Settings and a Browser tab in the thread side panel. The plugin remains visible in BB’s Installed plugins management list.
 
-Start with `bb browse start '{"url":"https://example.com"}'` from a BB thread. Browse resolves that thread’s environment host and opens headed Chrome. The live page appears in the thread panel. Run `probe` to check readiness and `setup` to install dependencies, including Xvfb, xkbcomp, and XKB keymap data on Linux hosts without a display. Settings lists all enrolled machines with independent checks and installation actions; offline machines are shown separately.
+Start with `bb browse start '{"url":"https://example.com"}'` from a BB thread. Browse resolves that thread’s environment host and opens headed Fortress. The live page appears in the thread panel. Run `probe` to check readiness and `setup` to install dependencies, including Xvfb, xkbcomp, and XKB keymap data on Linux hosts without a display. Settings lists all enrolled machines with independent checks and installation actions; offline machines are shown separately.
 
 The viewer is a custom authenticated web view. It streams binary JPEG frames into a canvas, with direct pointer movement, dragging, text selection, keyboard events, Unicode paste and scrolling. Each session opens as its own BB side-panel tab; the machine appears in the lower-right corner. The Open browser launcher lists this thread’s sessions across hosts. Routine refreshes preserve the selected tab. Relative viewer URLs resolve against the current BB web origin.
 
@@ -30,7 +30,7 @@ Tools and the bundled skill become available when BB refreshes the agent session
 
 ## Private login forms
 
-Managed Chrome disables password saving, automatic sign-in, password filling, and address/payment autofill before every launch and reconnect. Password filling uses Chromium’s `password_manager.password_manager_blocklist` with `*`; disabling saving alone still permits filling. Preferences are merged atomically without deleting cookies, saved credentials, or other profile settings. This applies to Browse-managed Chrome, not native BB tabs, device password managers, or suggestions implemented by websites. Verified with installed Chrome 153 using `npx tsx tests/profile-preferences-live.mts <host-data-path>`.
+Managed Fortress disables password saving, automatic sign-in, password filling, and address/payment autofill before every launch and reconnect. Password filling uses Chromium’s `password_manager.password_manager_blocklist` with `*`; disabling saving alone still permits filling. Preferences are merged atomically without deleting cookies, saved credentials, or other profile settings. This applies to Browse-managed Fortress, not native BB tabs, device password managers, or suggestions implemented by websites. Verified with the pinned Fortress 151 runtime using `npx tsx tests/profile-preferences-live.mts <host-data-path>`.
 
 Browse can request username, password, or verification-code fields through BB's private input UI, using the same SDK mechanism as the built-in Secrets plugin. Device password managers such as 1Password can fill this form. No vault connection or service account is required. Environment-variable requests still use Secrets.
 
@@ -61,13 +61,13 @@ BB agent / CLI / Settings / live viewer
                   │ resolves thread → environment → host
                   ▼
            Thread execution host
-   Host worker ── persistent Stagehand SDK + browser extension
-          └──── private CDP ── managed Chromium
+   Host worker ── persistent deterministic CDP control
+          └──── private CDP ── managed Fortress
 ```
 
-Chromium’s debugging endpoint binds to loopback and is never sent to the client. Viewer routes use BB’s origin authentication and only accept bounded actions, never arbitrary CDP. The native desktop backend keeps its scoped connection adapter and BB control leases.
+Fortress’s debugging endpoint binds to loopback and is never sent to the client. Viewer routes use BB’s origin authentication and only accept bounded actions, never arbitrary CDP. The native desktop backend keeps its scoped connection adapter and BB control leases.
 
-The pinned engine is integrity verified. Its browser installer downloads Chrome for Testing. On Debian/Ubuntu, Browse can download and extract missing Chromium libraries and FFmpeg into its private data directory without administrator access. Other operating systems use their installed browser libraries and FFmpeg. Dependency checks distinguish an installed executable from a successful browser launch. Close managed sessions before updating dependencies.
+The pinned engine is integrity verified. Its browser installer downloads Fortress. On Debian/Ubuntu, Browse can download and extract missing Chromium libraries and FFmpeg into its private data directory without administrator access. Other operating systems use their installed browser libraries and FFmpeg. Dependency checks distinguish an installed executable from a successful browser launch. Close managed sessions before updating dependencies.
 
 ## Action examples
 
@@ -83,7 +83,7 @@ The pinned engine is integrity verified. Its browser installer downloads Chrome 
 {"kind":"record","action":"stop","fps":20}
 ```
 
-`element` actions use Stagehand locators. Use `iframe >> selector` for cross-frame targeting and fresh snapshot references for closed shadow roots. Some compound CSS selectors do not cross closed roots; use the snapshot reference in that case. Upstream `eval`, DOM observations, and canvas exports use the top page; verify iframe values with `get value` or an explicit same-origin frame lookup. Gesture points remain relative to the top viewport; account for iframe offsets. Closed shadow roots and cross-origin frame restrictions can limit inspection/export.
+`element` actions use deterministic CDP element targeting in the top document. For frame commands, use `["frame","iframe#editor"]`, run the actions, then use `["frame","main"]`; this also works with cross-origin frames. Use fresh snapshot references for closed shadow roots. Some compound CSS selectors do not cross closed roots; use the snapshot reference in that case. `eval`, top-level DOM observations, and canvas exports use the top page. Gesture points remain relative to the top viewport; Browse applies the selected frame offset. Closed shadow roots and cross-origin frame restrictions can still limit inspection and export.
 
 `sequence` runs up to 50 known operations in one local job, stopping on the first failure and reporting completed step indexes, durations, and artifacts. It never retries completed steps. Use small sequences between decisions:
 
@@ -95,10 +95,11 @@ Element `waitMs` defaults to 3000 (maximum 30000; zero fails immediately when no
 
 ## Lifecycle and limits
 
-- Managed sessions last 15 minutes without user or agent actions; frame polling and inspection do not renew the timeout. Plugin reload or disable still stops Chrome. Expiry, release, or disconnection never silently reacquires control. Reconnect opens a new window at the last URL with cookies and storage, not the previous DOM.
-- Managed release/close and plugin reload/disable stop Chromium, keeping profile data and saved artifacts. Reconnect reopens the last known URL with cookies/local storage, not unsaved page state. Native release preserves the BB tab. A thread host change requires a new profile on that host; profiles are not silently copied.
+- Browse Settings defaults to three active browser sessions per thread, eight active sessions across the plugin, and a 15-minute managed-session idle timeout. The limits are configurable from 1–20 per thread, 1–100 total, and 1–1,440 idle minutes. Concurrent starts reserve capacity before creating a browser or native tab. Limit errors report the current count and tell the user to reuse, close, wait for cleanup, or change the named setting.
+- Managed sessions use the configured idle timeout (15 minutes by default); frame polling and inspection do not renew it. Plugin reload or disable still stops Fortress. Expiry, release, or disconnection never silently reacquires control. Reconnect opens a new window at the last URL with cookies and storage, not the previous DOM.
+- Managed release/close and plugin reload/disable stop Fortress, keeping profile data and saved artifacts. Reconnect reopens the last known URL with cookies/local storage, not unsaved page state. Native release preserves the BB tab. A thread host change requires a new profile on that host; profiles are not silently copied.
 - One job runs per session. Default deadline is 120 seconds; maximum 600. Ordinary output is bounded to 512 KB; observations inspect at most 12,000 DOM nodes and return at most 150 candidates.
-- Cancelling a continuous gesture releases its held pointer. Cancelling another operation closes the control channel and stops managed Chrome to prevent remaining browser-side work; reconnect before further actions. Already completed page changes are not rolled back.
+- Cancelling a continuous gesture releases its held pointer. Cancelling another operation closes the control channel and stops managed Fortress to prevent remaining browser-side work; reconnect before further actions. Already completed page changes are not rolled back.
 - Managed PDF uses Chromium printing and preserves text where supported. Native mode exports an image-based capture PDF.
 - Direct link downloads support accessible HTTP(S), blob and data URLs up to 16 MB through the authenticated page. CORS can block cross-origin files. Managed `downloadClick` captures one button-triggered browser download, up to 128 MB, with a 60-second completion deadline. Native mode supports link fetches only. CSS download selectors resolve against the top page’s base URI and support open shadow roots; absolute-href accessibility refs are also accepted.
 - Screenshots capture the web page, excluding BB/OS chrome. Full-page capture includes scrollable content. A tainted canvas may refuse PNG export.
@@ -121,12 +122,11 @@ bb plugin install . --yes
 
 After source changes: build, then `bb plugin reload browse`. Reload releases active control, so reconnect existing tabs afterward.
 
-See [EDGE-VALIDATION.md](EDGE-VALIDATION.md) for the latest edge-case and speed checks, and [VALIDATION.md](VALIDATION.md) for actual test results and known limitations. The project uses only public BB SDK entrypoints.
+See [FORTRESS-VALIDATION.md](FORTRESS-VALIDATION.md) for the engine/control A/B results, live bot-detection evidence, and direct-driver integration coverage. [EDGE-VALIDATION.md](EDGE-VALIDATION.md) and [VALIDATION.md](VALIDATION.md) contain the broader edge-case and viewer checks. The project uses only public BB SDK entrypoints.
 
 ## Upstream
 
-- [Stagehand](https://github.com/browserbase/stagehand), MIT
-- [Stagehand documentation](https://docs.stagehand.dev/)
+- [Fortress](https://github.com/tiliondev/fortress), BSD-3-Clause
 - `ws`, MIT
 
 This is an independently authored BB integration, not a Browserbase or BB official plugin.
@@ -137,7 +137,7 @@ See [managed implementation validation](MANAGED-VALIDATION.md) for live Settings
 
 Managed starts at the same current URL reuse a session belonging to the current thread and host, including concurrent starts. `newTab:true` requests a separate isolated browser. Navigate an existing session with an `open` action to avoid opening additional browsers for unrelated URLs. Reuse preserves the current page state and reports any active job.
 
-Release is idempotent and stops the owned Chromium process and its Stagehand SDK connection. Cancelled non-gesture actions invalidate and release their session; reconnect reopens its saved profile. Finished job results are evicted oldest-first above 200 entries or an 8 MiB serialized-payload budget, retaining the most recent result and running jobs. This is a history bound, not a total process-memory limit; profiles and saved artifacts remain on disk.
+Release is idempotent and stops the owned Fortress process and its browser control connection. Cancelled non-gesture actions invalidate and release their session; reconnect reopens its saved profile. Finished job results are evicted oldest-first above 200 entries or an 8 MiB serialized-payload budget, retaining the most recent result and running jobs. This is a history bound, not a total process-memory limit; profiles and saved artifacts remain on disk.
 
 ### Handoff and native recovery
 
@@ -145,7 +145,7 @@ Release is idempotent and stops the owned Chromium process and its Stagehand SDK
 
 Native leases use BB’s 30-minute maximum. Fresh discovery replaces stale generations before acquisition; a generation change during an active session requires explicit reconnect and never replays an action. Failed starts close newly created tabs where possible and report the tab identity and cleanup result. Existing tabs are preserved. Private login needs six minutes remaining on a native lease.
 
-Linux hosts need no desktop shell: managed Chrome uses a virtual display. Browse panels are streamed pages inside BB, not Electron-native tabs. Browse does not attach arbitrary existing Chrome windows or automatically expose website-created popup windows. Different managed sessions have isolated login cookies. Native capture can require the desktop tab to remain visible. CAPTCHA, passkeys and device-specific login may require manual interaction; website anti-bot restrictions are not removed by remote viewing.
+Linux hosts need no desktop shell: managed Fortress uses a virtual display. Browse panels are streamed pages inside BB, not Electron-native tabs. Browse does not attach arbitrary existing Fortress windows or automatically expose website-created popup windows. Different managed sessions have isolated login cookies. Native capture can require the desktop tab to remain visible. CAPTCHA, passkeys and device-specific login may require manual interaction; website anti-bot restrictions are not removed by remote viewing.
 
 See [multi-host validation](MULTI-HOST-VALIDATION.md) for the September 2026 browser handoff, login and recovery checks. macOS and Windows use their own desktop display; Xvfb is required only on Linux without a display. A native session’s panel offers a separate managed browser on the same host when native rendering is unavailable; that browser has a separate login profile.
 
@@ -160,23 +160,21 @@ While viewing a thread, ordinary clicks on absolute external HTTP(S) links in th
 Modified clicks, middle clicks, downloads, named frame targets, editable content, relative URLs, same-origin BB routes and links outside a thread keep their normal behavior. Viewer iframe links stay within that browser. A container can opt out with `data-browse-link-routing="off"`. Disabling Browse removes the listener. Programmatic core navigation, native shortcuts and the native engine remain available; this does not change BB's saved browser preference.
 
 
-### Stagehand runtime migration
+### Fortress runtime
 
-Browse now uses Stagehand 4.1.0 for deterministic automation: no Browserbase subscription, API key or model inference is required. The host installs the committed `runtime/package-lock.json` with `npm ci --ignore-scripts`, then connects one SDK instance to the exact owned page. Node >=22.18 and npm are required on each host. Setup installs Chrome for Testing 153.0.8010.36 using `@puppeteer/browsers`; no Agent Browser executable or daemon is used. Existing session IDs and profiles are retained for reconnect. Old downloaded runtime files are not deleted automatically.
+Browse installs the lockfile-pinned Fortress package metadata, downloads the matching Fortress 151 native release, and verifies its published SHA-256 checksum before extraction. Browse launches the binary directly with an isolated persistent profile and connects through loopback CDP. There is no Stagehand runtime, extension, Browserbase account, API key, hosted browser, or second model in production.
 
-Stagehand v4 requires its extension and extension-debugging support. Managed Chrome enables this and allows only the runtime extension's origin to connect. Native BB Desktop connections may reject extension installation; a failed native acquisition reports the reason and cleans up newly created tabs. Use managed mode on the same host when native extension support is unavailable; its login profile is separate. Secure login still binds and fills through Browse's private CDP channel.
+Automation refs such as `@0-19` come from Chromium's accessibility tree and stay bound to backend DOM nodes until navigation or a new snapshot. `snapshot -i` keeps common interactive roles; omit `-i` for a broader tree. Use `frame <selector>` and `frame main` to switch command context. Open shadow controls can use `>>>`; closed shadow controls use snapshot refs.
 
-Snapshot IDs are Stagehand IDs such as `[0-19]`; pass `@0-19` to actions. `snapshot -i` filters the tree to common interactive roles; omit `-i` for the full tree. Snapshots include iframe content. References are cleared on navigation and replaced by the next snapshot. `frame` changes locator scope; raw eval stays in the top page. Legacy `find` and `diff` CLI commands are not supported by the Stagehand adapter; inspect a scoped DOM observation or snapshot and use explicit locators instead. The command adapter is a Browse API, not a passthrough to a Stagehand CLI. Unsupported subcommands fail explicitly.
+Supported command families: open/back/forward/reload, snapshot, click/dblclick/hover/fill/type/press/keyboard, select/check/uncheck/upload, scroll/scrollintoview/drag, wait/frame, get/is/focus/eval, storage/cookies/dialog/console/errors, set viewport/headers, network requests/route/unroute, and a11y. Network route supports pass-through, `--abort`, or a fixed `--body` response. Console/error collection enables the Runtime event domain only when requested so ordinary sessions keep the smaller CDP surface.
 
-Supported command families: open/back/forward/reload, snapshot, click/dblclick/hover/fill/type/press/keyboard, select/check/uncheck/upload, scroll/scrollintoview/drag, wait/frame, get/is/focus/eval, storage/cookies/dialog/console/errors, set viewport/headers, network requests/route/unroute, and a11y. `get attr` and `focus` currently require a top-page DOM selector; use native locator operations for nested elements. Network route supports pass-through, `--abort`, or a fixed `--body` response.
-
-Streaming, secure credentials, exact gestures, canvas/link export and printing remain Browse-owned CDP features. Recording uses the shared screencast plus FFmpeg; requested FPS samples frames and does not guarantee that every frame is new. The interactive viewer targets the display refresh rate, but CDP capture, server load and network conditions determine the actual rate. See [interaction validation](INTERACTION-VALIDATION.md) for measurements; this is not a guarantee of 60 FPS.
+Streaming, secure credentials, gestures, canvas/link export and printing remain Browse-owned CDP features. Recording uses the shared screencast plus FFmpeg; requested FPS samples frames and does not guarantee every frame is new.
 
 ### Replacing the original browser entry points
 
 Browse hides BB's original New tab → Open browser action, including its row.
 Activation by click or keyboard in the current thread opens Browse's panel.
-The Browser action offers a website address field that launches Chrome on the
+The Browser action offers a website address field that launches Fortress on the
 thread host. Ordinary external web links also open Browse. Modified clicks,
 downloads, internal BB routes, and viewer navigation retain their own behavior.
 
@@ -184,7 +182,7 @@ This is a plugin UI override, not removal of BB's browser subsystem. Existing
 native tabs and core CLI/API calls remain available, and the DOM selector may
 need updating after a BB UI change. Browse does not automatically close existing
 native tabs or transfer their cookies. Streaming performance is independent of
-which automation SDK controls Chrome.
+which deterministic control layer drives Fortress.
 
 The new-tab page separates this thread's active Sessions from Recent closed
 pages (deduplicated by URL, eight entries). Local servers are host-wide web apps
@@ -195,12 +193,12 @@ can still be entered manually. This list does not include every running process.
 
 Browsers belonging to an actively working agent thread, active jobs, recordings, and pending secure login prompts are protected from idle shutdown. Profiles and artifacts survive expiry; unsaved page state does not.
 
-Closing a persisted Browse session tab stops its managed Chrome within a few seconds. Switching tabs or reloading BB does not remove the persisted tab and does not close the session. The blank launcher is not a session.
+Closing a persisted Browse session tab stops its managed Fortress within a few seconds. Switching tabs or reloading BB does not remove the persisted tab and does not close the session. The blank launcher is not a session.
 
 
 ## Interactive viewer performance
 
-Human input uses an authenticated, session-bound WebSocket and direct CDP input on the host. It bypasses agent job creation and polling. Agent automation continues to use Stagehand. Each input batch is bounded and ordered; pointer moves and compatible wheel events coalesce. Disconnect discards unsent input and releases held keys/buttons. A heartbeat supports long holds; its loss releases input after five seconds. Agent actions and credential entry exclude competing viewer input.
+Human input uses an authenticated, session-bound WebSocket and direct CDP input on the host. It bypasses agent job creation and polling. Agent automation uses the same deterministic CDP control path. Each input batch is bounded and ordered; pointer moves and compatible wheel events coalesce. Disconnect discards unsent input and releases held keys/buttons. A heartbeat supports long holds; its loss releases input after five seconds. Agent actions and credential entry exclude competing viewer input.
 
 The binary frame stream allows at most three unacknowledged frames and 4 MiB of unacknowledged JPEG payload. A single frame above 4 MiB is rejected. The server can temporarily retain one additional bounded frame while waiting for byte credit. The client decodes one frame at a time and retains only the newest pending frame. It draws on animation frames and closes decoded image bitmaps. The canvas allocation follows the encoded image size (capture capped at 1920 × 1080), while input coordinates use the actual browser viewport.
 

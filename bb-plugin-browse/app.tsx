@@ -118,23 +118,20 @@ function MachineDependencies({
   }
   const rows = [
     {
-      name: "Chromium / Chrome",
+      name: "Fortress browser",
       icon: "Globe",
-      ready: info?.chromeRunnable,
-      version: info?.chromeVersion?.replace(
-        /^Google Chrome for Testing\s*/,
-        "",
-      ),
+      ready: info?.browserRunnable,
+      version: info?.browserVersion?.replace(/^Fortress\s*/i, ""),
       status: info
-        ? info.chromeRunnable
+        ? info.browserRunnable
           ? "Launch verified"
-          : info.chromeInstalled
+          : info.browserInstalled
             ? "Installed, cannot launch"
             : "Not installed"
         : "Not checked",
     },
     {
-      name: "Stagehand engine",
+      name: "Browse control",
       icon: "Terminal",
       ready: info?.installed,
       version: info?.installed ? info.version : null,

@@ -1,4 +1,4 @@
-// Opt-in validation against installed Chrome; isolated throwaway profile.
+// Opt-in validation against installed Fortress; isolated throwaway profile.
 import { launchManaged } from "../src/managed";
 import { Cdp } from "../src/cdp";
 import { promises as fs } from "node:fs";

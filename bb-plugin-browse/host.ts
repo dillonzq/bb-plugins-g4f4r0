@@ -19,7 +19,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 import {
   hostContract,
   VERSION,
-  SESSION_TTL_MS,
   CREDENTIAL_TIMEOUT_MS,
   type Job,
   type Artifact,
@@ -35,7 +34,7 @@ import {
 import { downloadFromClick } from "./src/native-download";
 import { safeUrl } from "./src/policy";
 import { pruneJobHistory } from "./src/job-history";
-import { StagehandDriver } from "./src/stagehand";
+import { BrowserDriver } from "./src/driver";
 import { Recorder } from "./src/recorder";
 import { Cdp } from "./src/cdp";
 import { drawStrokes } from "./src/gesture";
@@ -76,7 +75,8 @@ type LocalSession = {
   cdp?: Cdp;
   bridge?: Bridge;
   root: string;
-  driver?: StagehandDriver;
+  driver?: BrowserDriver;
+  idleTimeoutMs: number;
   recorder?: Recorder;
   retain: ExperimentalHostWorkerLease;
   busy?: string;
@@ -103,7 +103,7 @@ function scheduleExpiry(s: LocalSession) {
 }
 function touchSession(s: LocalSession) {
   if (s.mode !== "managed" || s.status === "released" || s.closing) return;
-  s.expiresAt = Date.now() + SESSION_TTL_MS;
+  s.expiresAt = Date.now() + s.idleTimeoutMs;
   scheduleExpiry(s);
 }
 async function runDirect({id,clientId,events}:z.infer<typeof directBatch>){
@@ -242,7 +242,7 @@ async function command(
   stdin?: string,
   limit?: number,
 ) {
-  if (!s.driver) throw new Error("Stagehand is not connected.");
+  if (!s.driver) throw new Error("Browser control is not connected.");
   if (args[0] === "batch" && stdin) {
     const results = [];
     for (const step of JSON.parse(stdin) as string[][]) {
@@ -722,7 +722,7 @@ export default experimental_defineHostEntry({
     probe: async (_, ctx) => {
       const root = ctx.experimental_paths.dataDir,
         info = await diagnostics(root);
-      if (info.chromeRunnable)
+      if (info.browserRunnable)
         try {
           const browser = await launchManaged(
             root,
@@ -741,7 +741,7 @@ export default experimental_defineHostEntry({
             })
             .catch(() => {});
         } catch (e) {
-          info.chromeRunnable = false;
+          info.browserRunnable = false;
           info.launchError = redact(String(e));
         }
       return { ...info, version: VERSION, installed: info.runtime };
@@ -767,10 +767,10 @@ export default experimental_defineHostEntry({
             signal,
           );
           const info = await diagnostics(ctx.experimental_paths.dataDir);
-          if (!info.chromeRunnable)
+          if (!info.browserRunnable)
             throw new Error(
               info.launchError ??
-                "Chrome installation did not produce a runnable executable",
+                "Fortress installation did not produce a runnable executable",
             );
           if (info.display === "missing")
             throw new Error(
@@ -890,6 +890,7 @@ export default experimental_defineHostEntry({
         artifactRoot,
         endpoint: input.endpoint,
         expiresAt: input.expiresAt,
+        idleTimeoutMs: input.idleTimeoutMs,
         root,
         retain: ctx.experimental_retainWorker(),
       };
@@ -963,16 +964,11 @@ export default experimental_defineHostEntry({
               );
             }
             try {
-              s.driver = await StagehandDriver.connect(
-                root,
-                s.endpoint,
-                s.cdp,
-                signal,
-              );
+              s.driver = await BrowserDriver.connect(root, s.cdp, signal);
             } catch (e) {
               if (input.mode !== "managed")
                 throw new Error(
-                  "Stagehand requires extension-capable Chrome. This native desktop connection could not load it. Start a managed Browse session on the same host (separate login). " +
+                  "The native desktop connection could not attach browser control. Start a managed Browse session on the same host (separate login). " +
                     redact(String(e), s.endpoint),
                 );
               throw e;
@@ -984,7 +980,7 @@ export default experimental_defineHostEntry({
             if (input.mode === "managed" && !input.video)
               await s.cdp.startLiveCast().catch(() => {});
             s.status = "ready";
-            j.output = `Stagehand connected. Chrome: ${chromeReadyAt-startupAt}ms; control: ${driverReadyAt-chromeReadyAt}ms; navigation and first capture setup: ${Date.now()-driverReadyAt}ms.`;
+            j.output = `Fortress connected. Browser: ${chromeReadyAt-startupAt}ms; control: ${driverReadyAt-chromeReadyAt}ms; navigation and first capture setup: ${Date.now()-driverReadyAt}ms.`;
           } catch (e) {
             s.status = "error";
             s.error = redact(

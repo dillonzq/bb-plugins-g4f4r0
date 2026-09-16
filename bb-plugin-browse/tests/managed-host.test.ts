@@ -20,8 +20,8 @@ const mock = vi.hoisted(() => ({
   commands: [] as string[][],
   driverClose: vi.fn(async () => {}),
 }));
-vi.mock("../src/stagehand", () => ({
-  StagehandDriver: {
+vi.mock("../src/driver", () => ({
+  BrowserDriver: {
     connect: async () => ({
       execute: async () => '{"success":true,"data":{}}',
       element: async () => '{"success":true,"data":{}}',
@@ -72,7 +72,7 @@ vi.mock("../src/bridge", () => ({
   },
 }));
 import entry from "../host";
-it("owns managed Chrome, blocks viewer input during a job, and stops Chrome after pointer cancellation", async () => {
+it("owns managed Fortress, blocks viewer input during a job, and stops it after pointer cancellation", async () => {
   const root = await mkdtemp(join(tmpdir(), "browse-managed-host-")),
     h = experimental_createHostEntryHarness(entry, {
       experimental_paths: { dataDir: root, tempDir: root },

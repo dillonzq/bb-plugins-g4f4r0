@@ -6,9 +6,8 @@ import { runProcess } from "./process";
 import { configureProfilePreferences } from "./profile-preferences";
 import {
   installed,
-  chromeExecutable,
-  installChrome,
-  stagehandExtensionOrigin,
+  fortressExecutable,
+  installFortress,
 } from "./runtime";
 
 export function managedEnv(root: string) {
@@ -35,22 +34,22 @@ export function managedEnv(root: string) {
 }
 export async function diagnostics(root: string) {
   const runtime = await installed(root);
-  let chromePath: string | undefined,
-    chromeVersion: string | undefined,
+  let browserPath: string | undefined,
+    browserVersion: string | undefined,
     launchError: string | undefined;
   const env = managedEnv(root);
   if (runtime) {
-    chromePath = await chromeExecutable(root);
-    if (chromePath)
+    browserPath = await fortressExecutable(root);
+    if (browserPath)
       try {
-        await fs.access(chromePath);
-        chromeVersion = await runProcess(chromePath, ["--version"], {
+        await fs.access(browserPath);
+        browserVersion = await runProcess(browserPath, ["--version"], {
           env,
           signal: AbortSignal.timeout(10000),
         });
       } catch (e) {
         launchError = String(e);
-        chromePath = undefined;
+        browserPath = undefined;
       }
   }
   const ffmpeg = await runProcess("ffmpeg", ["-version"], {
@@ -65,10 +64,10 @@ export async function diagnostics(root: string) {
     platform: process.platform,
     arch: process.arch,
     runtime,
-    chromeInstalled: !!chromePath,
-    chromeRunnable: !!chromeVersion,
-    chromePath: chromePath ?? null,
-    chromeVersion: chromeVersion ?? null,
+    browserInstalled: !!browserPath,
+    browserRunnable: !!browserVersion,
+    browserPath: browserPath ?? null,
+    browserVersion: browserVersion ?? null,
     launchError: launchError ?? null,
     ffmpeg,
     ...display,
@@ -130,7 +129,7 @@ export async function installManaged(
       "Close managed browsers and wait for dependency checks before updating dependencies.",
     );
   install = (async () => {
-    await installChrome(root, signal);
+    await installFortress(root, signal);
     if (dependencies && process.platform === "linux") {
       const dir = join(root, "linux-deps"),
         archives = join(dir, "archives"),
@@ -166,13 +165,11 @@ export async function installManaged(
     install = undefined;
   }
 }
-export function chromeArgs(profile: string, extensionOrigin?: string) {
+export function chromeArgs(profile: string) {
   return [
     "--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port=0",
     `--user-data-dir=${profile}`,
-    "--enable-unsafe-extension-debugging",
-    ...(extensionOrigin ? [`--remote-allow-origins=${extensionOrigin}`] : []),
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-dev-shm-usage",
@@ -425,10 +422,10 @@ async function launchBrowser(
   signal: AbortSignal,
   video = false,
 ): Promise<ManagedBrowser> {
-  const chromePath = await chromeExecutable(root);
-  if (!chromePath || !existsSync(chromePath))
+  const browserPath = await fortressExecutable(root);
+  if (!browserPath || !existsSync(browserPath))
     throw new Error(
-      "Chrome is not installed on this thread host. Open Browse Settings and install the browser/dependencies.",
+      "Fortress is not installed on this thread host. Open Browse Settings and install the browser/dependencies.",
     );
   if (!/^ab-[a-z0-9-]+$/.test(profileId)) throw new Error("Invalid profile ID");
   const profile = join(root, "profiles", profileId);
@@ -443,10 +440,10 @@ async function launchBrowser(
     video,
   );
   const child = spawn(
-    chromePath,
+    browserPath,
     video
       ? [
-          ...chromeArgs(profile, stagehandExtensionOrigin(root)).filter(
+          ...chromeArgs(profile).filter(
             (a) => a !== "about:blank",
           ),
           "--kiosk",
@@ -454,7 +451,7 @@ async function launchBrowser(
           "--window-position=0,0",
           "--app=about:blank",
         ]
-      : chromeArgs(profile, stagehandExtensionOrigin(root)),
+      : chromeArgs(profile),
     {
       env: display.env,
       stdio: ["ignore", "ignore", "pipe"],
@@ -497,7 +494,7 @@ async function launchBrowser(
     for (;;) {
       signal.throwIfAborted();
       if (spawnError) throw spawnError;
-      if (child.exitCode !== null) throw new Error("Chrome exited: " + stderr);
+      if (child.exitCode !== null) throw new Error("Fortress exited: " + stderr);
       try {
         const [port, path] = (
           await fs.readFile(join(profile, "DevToolsActivePort"), "utf8")
@@ -518,7 +515,7 @@ async function launchBrowser(
         }
       } catch {}
       if (Date.now() > deadline)
-        throw new Error("Chrome startup timed out: " + stderr);
+        throw new Error("Fortress startup timed out: " + stderr);
       await sleep(80, undefined, { signal });
     }
   } catch (e) {

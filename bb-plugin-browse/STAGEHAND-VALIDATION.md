@@ -1,5 +1,7 @@
 # Stagehand migration — 2026-09-14
 
+> Historical validation only. Production Browse moved to Fortress with deterministic CDP control on 2026-09-16. See [FORTRESS-VALIDATION.md](FORTRESS-VALIDATION.md).
+
 The runtime is Stagehand 4.1.0, using deterministic Page/Locator APIs. The BB host worker retains one SDK connection per session, bound by Chromium target id. No Agent Browser binary is downloaded or executed. `runtime/package-lock.json` pins the host installation, including extension assets. Chrome for Testing is pinned at 153.0.8010.36.
 
 ## Verified before deployment

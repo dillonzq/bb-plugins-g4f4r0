@@ -160,6 +160,27 @@ export class Cdp {
     page = true,
     timeoutMs = 15000,
   ): Promise<any> {
+    return this.sendWithSession(
+      method,
+      params,
+      page && this.sessionId ? this.sessionId : undefined,
+      timeoutMs,
+    );
+  }
+  sendToSession(
+    method: string,
+    params: Record<string, unknown>,
+    sessionId: string,
+    timeoutMs = 15000,
+  ): Promise<any> {
+    return this.sendWithSession(method, params, sessionId, timeoutMs);
+  }
+  private sendWithSession(
+    method: string,
+    params: Record<string, unknown>,
+    sessionId: string | undefined,
+    timeoutMs: number,
+  ): Promise<any> {
     if (this.ws.readyState !== WebSocket.OPEN)
       return Promise.reject(
         new Error("Browser disconnected; reconnect this session."),
@@ -176,7 +197,7 @@ export class Cdp {
           id,
           method,
           params,
-          ...(page && this.sessionId ? { sessionId: this.sessionId } : {}),
+          ...(sessionId ? { sessionId } : {}),
         }),
       );
     });

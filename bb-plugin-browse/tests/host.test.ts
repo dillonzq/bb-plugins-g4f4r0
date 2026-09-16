@@ -9,8 +9,8 @@ const mock = vi.hoisted(() => ({
   close: vi.fn(),
   evaluate: vi.fn(),
 }));
-vi.mock("../src/stagehand", () => ({
-  StagehandDriver: {
+vi.mock("../src/driver", () => ({
+  BrowserDriver: {
     connect: async () => ({
       execute: async () => '{"success":true,"data":{}}',
       element: async () => '{"success":true,"data":{}}',

@@ -2,7 +2,7 @@ import { directBatch } from "./direct-input";
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { credentialRequest, credentialValues } from "./credentials";
-export const VERSION = "4.1.0";
+export const VERSION = "Fortress 151";
 export const SESSION_TTL_MS = 15 * 60 * 1000;
 export const NATIVE_LEASE_TTL_MS = 30 * 60 * 1000;
 export const CREDENTIAL_TIMEOUT_MS = 300000;
@@ -134,10 +134,10 @@ export const health = z.object({
   version: z.string(),
   installed: z.boolean(),
   ffmpeg: z.boolean(),
-  chromeInstalled: z.boolean(),
-  chromeRunnable: z.boolean(),
-  chromePath: z.string().nullable(),
-  chromeVersion: z.string().nullable(),
+  browserInstalled: z.boolean(),
+  browserRunnable: z.boolean(),
+  browserPath: z.string().nullable(),
+  browserVersion: z.string().nullable(),
   launchError: z.string().nullable(),
   display: z.enum(["host", "virtual", "missing"]),
   xvfb: z.boolean(),
@@ -203,6 +203,7 @@ export const hostContract = defineRpcContract({
       id,
       endpoint: z.string().default(""),
       expiresAt: z.number(),
+      idleTimeoutMs: z.number().int().min(60_000).max(86_400_000).default(SESSION_TTL_MS),
       mode: z.enum(["native", "managed"]).default("native"),
       video: z.boolean().optional(),
       profileId: id.optional(),

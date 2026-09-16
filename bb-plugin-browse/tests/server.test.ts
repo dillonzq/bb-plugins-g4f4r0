@@ -132,7 +132,7 @@ async function fixture(
       if (call.method === "job") return {
         id: input.id, kind:"connect", status:options.connectJobFails?"failed":"succeeded",
         startedAt:Date.now(),durationMs:1,artifacts:[],
-        ...(options.connectJobFails?{error:"Stagehand extension rejected by scoped browser bridge"}:{})
+        ...(options.connectJobFails?{error:"Browser connection was rejected by the scoped bridge"}:{})
       };
       if (call.method === "inspect" || call.method === "keepalive")
         return {
@@ -645,14 +645,66 @@ it("provides native viewer frames and identity through the selected host", async
 });
 
 
-it("cleans up an asynchronously failed native connection and blocks repeated unsupported acquisition", async () => {
+it("cleans up every asynchronously failed native connection without caching an extension limitation", async () => {
  const f=await fixture({connectJobFails:true});
  try {
   await expect(f.harness.behavior.callRpc("start",{...base})).rejects.toThrow('"cleanup":"closed"');
   expect(f.close).toHaveBeenCalledOnce();expect(f.release).toHaveBeenCalledOnce();
-  await expect(f.harness.behavior.callRpc("start",{...base})).rejects.toThrow('mode:managed');
-  expect(f.create).toHaveBeenCalledOnce();
+  await expect(f.harness.behavior.callRpc("start",{...base})).rejects.toThrow('"cleanup":"closed"');
+  expect(f.create).toHaveBeenCalledTimes(2);
+  expect(f.close).toHaveBeenCalledTimes(2);
+  expect(f.release).toHaveBeenCalledTimes(2);
  } finally {await f.harness.lifecycle.dispose();}
+});
+
+it("limits managed sessions per thread and tells the user how to recover", async () => {
+  const f = await fixture();
+  try {
+    for (let index = 0; index < 3; index++)
+      await f.harness.behavior.callRpc("start", {
+        mode: "managed",
+        threadId: "thread_one",
+        url: `https://example.com/${index}`,
+        newTab: true,
+      });
+    await expect(
+      f.harness.behavior.callRpc("start", {
+        mode: "managed",
+        threadId: "thread_one",
+        url: "https://example.com/limit",
+        newTab: true,
+      }),
+    ).rejects.toThrow("Reuse an existing browser tab or close one");
+    const connects = f.calls.filter((call) => call.method === "connect");
+    expect(connects).toHaveLength(3);
+    expect(connects.every((call) => call.input.idleTimeoutMs === 15 * 60_000)).toBe(true);
+  } finally {
+    await f.harness.lifecycle.dispose();
+  }
+});
+
+it("limits total managed sessions across threads", async () => {
+  const f = await fixture();
+  try {
+    for (let index = 0; index < 8; index++)
+      await f.harness.behavior.callRpc("start", {
+        mode: "managed",
+        threadId: `thread_${Math.floor(index / 3)}`,
+        url: `https://example.com/${index}`,
+        newTab: true,
+      });
+    await expect(
+      f.harness.behavior.callRpc("start", {
+        mode: "managed",
+        threadId: "thread_final",
+        url: "https://example.com/limit",
+        newTab: true,
+      }),
+    ).rejects.toThrow("Reuse or close an idle browser tab");
+    expect(f.calls.filter((call) => call.method === "connect")).toHaveLength(8);
+  } finally {
+    await f.harness.lifecycle.dispose();
+  }
 });
 
 it("keeps browsers alive only while their owning agent thread is active", async () => {

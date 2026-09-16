@@ -15,10 +15,10 @@ function health(hostId: string) {
     version: "4.1.0",
     installed: true,
     ffmpeg: true,
-    chromeInstalled: true,
-    chromeRunnable: true,
-    chromePath: "/chrome",
-    chromeVersion: "Chrome 153",
+    browserInstalled: true,
+    browserRunnable: true,
+    browserPath: "/fortress",
+    browserVersion: "Fortress 151",
     launchError: null,
     display: "virtual",
     xvfb: true,
@@ -42,7 +42,7 @@ it("shows every machine, probes connected hosts independently, and keeps offline
           hostId === "host_client"
             ? {
                 ...health(hostId),
-                chromeRunnable: false,
+                browserRunnable: false,
                 launchError: "Missing libnss3",
               }
             : health(hostId),

@@ -1,5 +1,7 @@
 # Browse interaction and performance validation
 
+> Historical transport validation from the former Stagehand-controlled runtime. Production Browse now uses Fortress with deterministic CDP control; the viewer transport findings remain relevant.
+
 Validated on the Linux server on 2026-09-15 (Berlin). This work targets interactive viewing of the same browser session used by the agent. It does not establish an absolute performance optimum or exhaustive website compatibility.
 
 ## Shipped design
