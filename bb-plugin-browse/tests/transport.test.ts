@@ -151,13 +151,20 @@ it("waits for the managed video page without weakening native tab checks", async
   upstream.on("connection", (ws) => ws.on("message", (raw) => {
     const m = JSON.parse(raw.toString());
     const result = m.method === "Target.getTargets"
-      ? { targetInfos: ++reads < 3 ? [] : [{ type: "page", targetId: "video-page" }] }
+      ? { targetInfos: ++reads < 3
+        ? [{ type: "page", targetId: "temporary", url: "about:blank" }]
+        : [{ type: "page", targetId: "video-page", url: "https://example.com/ready" }] }
       : m.method === "Target.attachToTarget" ? { sessionId: "attached" } : {};
     ws.send(JSON.stringify({ id: m.id, result }));
   }));
   const endpoint = `ws://127.0.0.1:${(upstream.address() as any).port}`;
   try {
-    const c = await Cdp.connect(endpoint, false, true);
+    const c = await Cdp.connect(
+      endpoint,
+      false,
+      true,
+      "https://example.com/ready",
+    );
     expect(c.targetId).toBe("video-page");
     expect(reads).toBe(3);
     c.close();

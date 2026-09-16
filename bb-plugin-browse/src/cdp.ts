@@ -120,12 +120,21 @@ export class Cdp {
     });
     try {
       let pages: any[] = [], deadline = Date.now() + 5000;
+      let startupPage: any | undefined;
       do {
         const { targetInfos } = await c.send("Target.getTargets", {}, false);
         pages = targetInfos.filter(
           (t: any) => t.type === "page" || t.type === "webview",
         );
-        if (pages.length || !waitForPage) break;
+        if (waitForPage && initialUrl !== "about:blank") {
+          const nonBlank = pages.filter(
+            (page: any) => page.url && page.url !== "about:blank",
+          );
+          startupPage =
+            nonBlank.find((page: any) => page.url === initialUrl) ??
+            (nonBlank.length === 1 ? nonBlank[0] : undefined);
+          if (startupPage) break;
+        } else if (pages.length || !waitForPage) break;
         await new Promise((resolve) => setTimeout(resolve, 40));
       } while (Date.now() < deadline);
       if (managed) {
@@ -143,9 +152,13 @@ export class Cdp {
             false,
           );
       } else {
-        if (pages.length !== 1)
+        if (startupPage) {
+          c.targetId = startupPage.targetId;
+        } else if (pages.length !== 1) {
           throw new Error(`Expected one leased tab; found ${pages.length}.`);
-        c.targetId = pages[0].targetId;
+        } else {
+          c.targetId = pages[0].targetId;
+        }
       }
       const r = await c.send(
         "Target.attachToTarget",
