@@ -2,7 +2,7 @@ import { it, expect } from "vitest";
 import { liveFrameFromEvent } from "../src/cdp";
 import { viewerHtml } from "../src/viewer";
 import { browserIcons } from "../src/browser-icons";
-import { ChevronDownIcon, OrientationPotraitToLandscapeIcon } from "@hugeicons/core-free-icons";
+import { ChevronDownIcon, CleanIcon, CookieIcon, OrientationPotraitToLandscapeIcon } from "@hugeicons/core-free-icons";
 
 it("reads viewport size from a screencast event", () => {
   expect(
@@ -23,6 +23,10 @@ it("opens a same-origin screencast websocket from the viewer", () => {
 it("offers docked DevTools in the browser options", () => {
   expect(viewerHtml).toContain('data-maintenance="open-devtools"');
   expect(viewerHtml).toContain("Open DevTools");
+  expect(viewerHtml).toContain('details[open]>summary');
+  expect(viewerHtml).toContain('width:184px');
+  expect(browserIcons.Cookie).toBe(CookieIcon);
+  expect(browserIcons.Clean).toBe(CleanIcon);
 });
 it("offers a responsive-mode toolbar toggle and compact viewport controls", () => {
   expect(viewerHtml).toContain('id="responsive-toggle"');
