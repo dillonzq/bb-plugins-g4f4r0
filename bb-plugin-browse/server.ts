@@ -56,7 +56,7 @@ export default async function plugin(bb: BbPluginApi) {
     (await bb.storage.kv.get<string>("preference:preferredHost")) ?? "pro";
   const sessions = new Map<string, Session>(),
     leases = new Map<string, string>(),
-    humanControls = new Map<string, string>();
+    humanControls = new Map<string, {clientId:string;touch:()=>void;close:()=>void}>();
   for (const key of await bb.storage.kv.list("session:")) {
     const s = await bb.storage.kv.get<Session>(
       typeof key === "string" ? key : (key as any).key,
@@ -193,7 +193,7 @@ export default async function plugin(bb: BbPluginApi) {
         leases.delete(s.id);
       }
       s.status = "released";
-      presence.delete(s.id);viewerTelemetry.delete(s.id);humanControls.delete(s.id);
+      presence.delete(s.id);viewerTelemetry.delete(s.id);humanControls.get(s.id)?.close();humanControls.delete(s.id);
       delete s.busy;
       s.recording = false;
       await persist(s);
@@ -439,7 +439,7 @@ export default async function plugin(bb: BbPluginApi) {
   async function startCredentialJob(input: z.infer<typeof credentialRequest>) {
     const s = get(input.id);
     if (humanControls.has(s.id))
-      throw new Error("You have control of this browser. Return control before asking the agent to enter credentials.");
+      throw new Error("You have control of this browser. Wait for the idle handoff before asking the agent to enter credentials.");
     await ensurePlacement(s);
     if (s.status !== "ready")
       throw new Error("Browser is not ready. Reconnect the session.");
@@ -928,7 +928,7 @@ export default async function plugin(bb: BbPluginApi) {
     run: async (input) => {
       const s = get(input.id);
       if (humanControls.has(s.id))
-        throw new Error("You have control of this browser. Return control before the agent continues.");
+        throw new Error("You have control of this browser. Wait for the idle handoff before the agent continues.");
       await ensurePlacement(s);
       if (s.status === "released")
         throw new Error(
@@ -1118,9 +1118,10 @@ export default async function plugin(bb: BbPluginApi) {
   });
   bb.http.experimental_websocket("/control", ctx => {
     const sid=id.parse(ctx.url.searchParams.get('id')),clientId=randomUUID();
-    const s=get(sid);let closed=false,controlled=false,acquiring=false,pending=0,chain=Promise.resolve();
+    const s=get(sid);let closed=false,controlled=false,acquiring=false,pending=0,chain=Promise.resolve(),idleTimer:ReturnType<typeof setTimeout>|undefined;
     let relay:Awaited<ReturnType<typeof connectControlRelay>>|undefined,setup:Promise<void>|undefined;
     const ensureRelay=()=>setup??=(async()=>{try{const endpoint=await host.call('controlStart',{id:sid,clientId},{hostId:s.hostId,timeoutMs:3000});relay=await connectControlRelay(endpoint);if(closed)relay.close();}catch{/* Remote hosts retain RPC input. */}})();
+    const touchControl=(socket:any)=>{clearTimeout(idleTimer);idleTimer=setTimeout(()=>socket.close(1000,'Control idle'),60000);idleTimer.unref?.();};
     return {
       onOpen(){},
       onMessage(socket,raw){
@@ -1129,8 +1130,8 @@ export default async function plugin(bb: BbPluginApi) {
           if(controlled){socket.send(JSON.stringify({type:'control',state:'human'}));return;}
           if(acquiring)return;
           const owner=humanControls.get(sid);
-          if(owner&&owner!==clientId){socket.send(JSON.stringify({type:'control',state:'busy'}));return;}
-          humanControls.set(sid,clientId);acquiring=true;
+          if(owner&&owner.clientId!==clientId){socket.send(JSON.stringify({type:'control',state:'busy'}));return;}
+          humanControls.set(sid,{clientId,touch:()=>touchControl(socket),close:()=>socket.close(1001,'Session closed')});acquiring=true;
           void (async()=>{
             const deadline=Date.now()+30000;
             while(!closed){
@@ -1143,15 +1144,15 @@ export default async function plugin(bb: BbPluginApi) {
             if(closed)return;
             await ensureRelay();
             if(closed)return;
-            acquiring=false;controlled=true;socket.send(JSON.stringify({type:'control',state:'human'}));
-          })().catch(e=>{if(humanControls.get(sid)===clientId)humanControls.delete(sid);acquiring=false;controlled=false;if(!closed)socket.send(JSON.stringify({type:'control',state:'agent',error:redact(String(e))}));});
+            acquiring=false;controlled=true;touchControl(socket);socket.send(JSON.stringify({type:'control',state:'human'}));
+          })().catch(e=>{if(humanControls.get(sid)?.clientId===clientId)humanControls.delete(sid);acquiring=false;controlled=false;if(!closed)socket.send(JSON.stringify({type:'control',state:'agent',error:redact(String(e))}));});
           return;
         }
-        if(!controlled||humanControls.get(sid)!==clientId){socket.close(1008,'Take control first');return;}
+        if(!controlled||humanControls.get(sid)?.clientId!==clientId){socket.close(1008,'Take control first');return;}
         if(typeof raw!=='string'||raw.length>65536||pending>=4){socket.close(1008,'Input queue exceeded');return;}
         let message:{seq:number;events:unknown};
         try{message=JSON.parse(raw);if(!Number.isSafeInteger(message.seq))throw Error('Invalid sequence');directBatch.parse({id:sid,clientId,events:message.events});}catch{socket.close(1008,'Invalid input');return;}
-        pending++;
+        humanControls.get(sid)?.touch();pending++;
         chain=chain.then(async()=>{if(closed)return;try{
           const batch=directBatch.parse({id:sid,clientId,events:message.events});
           await ensureRelay();
@@ -1160,7 +1161,7 @@ export default async function plugin(bb: BbPluginApi) {
           if(!closed)socket.send(JSON.stringify({seq:message.seq,...result,transport:relay?"direct":"rpc"}));
         }catch(e){if(!closed)socket.send(JSON.stringify({seq:message.seq,error:redact(String(e))}));}finally{pending--;}});
       },
-      onClose(){closed=true;relay?.close();if(humanControls.get(sid)===clientId)humanControls.delete(sid);void chain.finally(()=>host.call('direct',{id:sid,clientId,events:[{kind:'reset'}]},{hostId:s.hostId,timeoutMs:5000}).catch(()=>{}));},
+      onClose(){closed=true;clearTimeout(idleTimer);relay?.close();if(humanControls.get(sid)?.clientId===clientId)humanControls.delete(sid);void chain.finally(()=>host.call('direct',{id:sid,clientId,events:[{kind:'reset'}]},{hostId:s.hostId,timeoutMs:5000}).catch(()=>{}));},
     };
   });
   bb.http.experimental_websocket("/video", ctx => {
@@ -1234,8 +1235,10 @@ export default async function plugin(bb: BbPluginApi) {
     try {
       const raw = await c.req.json() as Record<string, unknown>;
       const sid=id.parse(raw.id),clientId=id.parse(raw.clientId);
-      if(humanControls.get(sid)!==clientId)
+      const owner=humanControls.get(sid);
+      if(owner?.clientId!==clientId)
         throw new Error("Take control before interacting with the browser.");
+      owner.touch();
       return c.json(
         await handlers.input(rpcContract.input.input.parse(raw)),
       );

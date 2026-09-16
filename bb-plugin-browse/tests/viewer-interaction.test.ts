@@ -15,12 +15,12 @@ function viewer(){
  `);
  return {dom,test:(dom.window as any).test};
 }
-it('stays view-only until control is explicitly taken and releases on return',()=>{
+it('stays view-only until control is explicitly taken and releases on disconnect',()=>{
  const {dom,test}=viewer();
  try{
   expect(test.control).toBeNull();
   test.take();expect(test.control).not.toBeNull();
-  (dom.window.document.querySelector('#control-toggle') as HTMLButtonElement).click();
+  test.control.close();
   expect(test.control).toBeNull();
   expect(dom.window.document.querySelector('#viewport')?.getAttribute('data-control')).toBe('agent');
  }finally{dom.window.close();}
