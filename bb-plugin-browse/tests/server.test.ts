@@ -367,6 +367,26 @@ describe("Thread-host routing", () => {
     expect(f.close).not.toHaveBeenCalled();
     await f.harness.lifecycle.dispose();
   });
+  it("reuses an already reconnected profile instead of launching it twice", async () => {
+    const f = await fixture();
+    try {
+      const original: any = await f.harness.behavior.callRpc("start", {
+        threadId: "thread_one",
+        url: "https://example.com",
+      });
+      const first: any = await f.harness.behavior.callRpc("reconnect", {
+        id: original.session.id,
+      });
+      const connects = f.calls.filter((c) => c.method === "connect").length;
+      const retry: any = await f.harness.behavior.callRpc("reconnect", {
+        id: original.session.id,
+      });
+      expect(retry.session.id).toBe(first.session.id);
+      expect(f.calls.filter((c) => c.method === "connect")).toHaveLength(connects);
+    } finally {
+      await f.harness.lifecycle.dispose();
+    }
+  });
 });
 
 it("keeps existing sessions on their host after a thread move and defaults new sessions to the new host", async () => {
@@ -747,7 +767,7 @@ it("closes Chrome only after a previously observed session tab is removed", asyn
   const f = await fixture(options);
   try {
     const result = await f.harness.behavior.callRpc("start", { threadId: "thread_one", url: "https://example.com" }) as any;
-    options.panelTabs = [{ kind: "plugin-panel", pluginId: "browse", actionId: "live", paramsJson: JSON.stringify({ id: result.session.id }) }];
+    options.panelTabs = [{ kind: "plugin-panel", pluginId: "browse", actionId: "live", paramsJson: JSON.stringify({ id: result.session.id, url: result.session.url }) }];
     await vi.advanceTimersByTimeAsync(2000);
     await vi.advanceTimersByTimeAsync(2000);
     expect(f.calls.filter(c => c.method === "release")).toHaveLength(0);
@@ -860,7 +880,7 @@ it("opens an address in the existing blank panel and preserves other tabs", asyn
   try {
     const result: any = await f.harness.behavior.callRpc("open-address", { threadId: "thread_one", url: "https://example.com", paramsJson: "{}" });
     expect(options.panelTabs).toHaveLength(2);
-    expect(options.panelTabs[0]).toMatchObject({ id: "blank", title: "example.com", paramsJson: JSON.stringify({ id: result.session.id }) });
+    expect(options.panelTabs[0]).toMatchObject({ id: "blank", title: "example.com", paramsJson: JSON.stringify({ id: result.session.id, url: result.session.url }) });
     expect(options.panelTabs[1]).toEqual({ id: "other", kind: "thread-info" });
     expect(await f.harness.behavior.callRpc("list", { threadId: "thread_one", onlyUnshown: true })).toEqual([]);
     expect(await f.harness.behavior.callRpc("list", { threadId: "thread_one" })).toHaveLength(1);
@@ -877,7 +897,7 @@ it("opens an existing session in the current panel without starting another brow
     expect(result.session.id).toBe(existing.session.id);
     expect(f.calls.filter(c => c.method === "connect")).toHaveLength(connects);
     expect(options.panelTabs).toHaveLength(1);
-    expect(options.panelTabs[0]).toMatchObject({ id: "blank", paramsJson: JSON.stringify({ id: existing.session.id }) });
+    expect(options.panelTabs[0]).toMatchObject({ id: "blank", paramsJson: JSON.stringify({ id: existing.session.id, url: existing.session.url }) });
   } finally { await f.harness.lifecycle.dispose(); }
 });
 

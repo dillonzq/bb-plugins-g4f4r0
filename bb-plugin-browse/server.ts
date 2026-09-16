@@ -387,6 +387,7 @@ export default async function plugin(bb: BbPluginApi) {
               !!s.video === video &&
               s.threadId === threadId &&
               s.hostId === hostId &&
+              (!profileId || s.profileId === profileId) &&
               s.expiresAt > Date.now() &&
               ["ready", "connecting"].includes(s.status) &&
               !releasing.has(s.id),
@@ -762,7 +763,7 @@ export default async function plugin(bb: BbPluginApi) {
         for (let attempt = 0; attempt < 4; attempt++) {
           const state = await bb.sdk.threads.tabs.get({ threadId });
           if (!state.tabs.some(t => t.id === original.id)) throw new Error("This browser tab was closed while opening the page.");
-          const targetParams = JSON.stringify({ id: result.session.id });
+          const targetParams = JSON.stringify({ id: result.session.id, url: result.session.url });
           const tabs = state.tabs.filter(t => t.id === original.id || !(t.kind === "plugin-panel" && t.pluginId === "browse" && t.actionId === "live" && t.paramsJson === targetParams)).map(t => t.id === original.id ? { ...original, paramsJson: targetParams, title: new URL(result.session.url).hostname } : t);
           try {
             await bb.sdk.threads.tabs.update({ threadId, expectedRevision: state.revision, tabs });
@@ -936,7 +937,7 @@ export default async function plugin(bb: BbPluginApi) {
           s.threadId,
           s.url,
           s.profileId ?? s.id,
-          false,
+          true,
           s.hostId,
           true,
         );

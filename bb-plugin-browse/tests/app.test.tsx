@@ -191,7 +191,7 @@ it("opens a live thread panel when a managed session starts", async () => {
           method: "openThreadPanel",
           options: expect.objectContaining({
             actionId: "live",
-            params: { id: "ab-live-1" },
+            params: { id: "ab-live-1", url: "https://example.com/path" },
             title: "example.com",
           }),
         }),
@@ -235,7 +235,7 @@ it("routine refresh preserves focus; explicit reveal reopens the selected panel"
         method: "openThreadPanel",
         options: expect.objectContaining({
           actionId: "live",
-          params: { id: "ab-live-1" },
+          params: { id: "ab-live-1", url: "https://example.com/path" },
         }),
       }),
     );
@@ -292,12 +292,12 @@ it("opens separate tabs for sessions on different hosts and keeps the newest sel
     expect(slot.inspection.navigateCalls.map((c: any) => c.options)).toEqual([
       {
         actionId: "live",
-        params: { id: "ab-old" },
+        params: { id: "ab-old", url: "https://example.com" },
         title: "example.com",
       },
       {
         actionId: "live",
-        params: { id: "ab-new" },
+        params: { id: "ab-new", url: "https://example.com" },
         title: "example.com",
       },
     ]);
@@ -326,7 +326,7 @@ it("routes ordinary external clicks to the thread and reports recoverable launch
     expect(slot.inspection.rpcCalls.find(c => c.method === "open-link")?.input).toEqual({ threadId: "thread_one", url: link.href });
     fail = false;
     fireEvent.click(slot.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(slot.inspection.navigateCalls).toContainEqual(expect.objectContaining({ options: expect.objectContaining({ params: { id: "clicked" } }) })));
+    await waitFor(() => expect(slot.inspection.navigateCalls).toContainEqual(expect.objectContaining({ options: expect.objectContaining({ params: { id: "clicked", url: "https://example.com/" } }) })));
   } finally { slot.lifecycle.unmount(); link.remove(); }
 });
 
@@ -449,6 +449,18 @@ it("reopens a closed browser in place and shows the loading frame immediately", 
     expect(slot.inspection.navigateCalls).toHaveLength(0);
     expect(slot.inspection.rpcCalls.find(c => c.method === "open-address")?.input).toEqual({ threadId: "thread_one", url: "https://example.com/", sessionId: "closed", paramsJson: '{"id":"closed"}' });
     finish({ session: { id: "reopened" } });
+  } finally { slot.lifecycle.unmount(); }
+});
+it("does not leave a removed browser session on an infinite loading frame", async () => {
+  const app = await loadPluginApp(() => import("../app"));
+  const slot = renderSlot(app.threadPanelActions[0]!, {
+    threadId: "thread_one",
+    params: { id: "missing", url: "https://example.com/" },
+  }, { rpc: { list: () => [] } });
+  try {
+    expect(await slot.findByText("Browser closed")).toBeTruthy();
+    expect(slot.queryByTitle("Live browser")).toBeNull();
+    expect(slot.getByRole("button", { name: "Reopen page" })).toBeTruthy();
   } finally { slot.lifecycle.unmount(); }
 });
 it('sends Command-click to the client desktop and routes same-origin viewer links to their session', async () => {

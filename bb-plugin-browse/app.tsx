@@ -521,6 +521,14 @@ function SessionBrowser({
     "id" in params
       ? String((params as { id: unknown }).id)
       : "";
+  const rememberedUrl =
+    params &&
+    typeof params === "object" &&
+    !Array.isArray(params) &&
+    "url" in params &&
+    typeof (params as { url?: unknown }).url === "string"
+      ? (params as { url: string }).url
+      : "";
   const sync = useCallback(async () => {
     try {
       setSessions((await rpc.call("list", { threadId })).filter(s => s.threadId === threadId));
@@ -640,12 +648,15 @@ function SessionBrowser({
         </div>
       </div>
     );
-  if (current && ["error", "released"].includes(current.status))
+  const unavailable =
+    !!id && sessionsLoaded && (!current || ["error", "released"].includes(current.status));
+  const reopenUrl = current?.url || rememberedUrl;
+  if (unavailable)
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-auto bg-sidebar p-6 text-center text-sidebar-foreground">
         <BrowseIcon name="Globe" className="mb-3 size-6 text-muted-foreground" />
-        <h2 className="text-sm font-medium">{current.status === "released" ? "Browser closed" : "Browser disconnected"}</h2>
-          <Button
+        <h2 className="text-sm font-medium">{current?.status === "error" ? "Browser disconnected" : "Browser closed"}</h2>
+        {reopenUrl && <Button
             className="mt-4"
             variant="outline"
             size="sm"
@@ -656,7 +667,12 @@ function SessionBrowser({
               setOpening(true);
               setError("");
               try {
-                await rpc.call("open-address", { threadId, url: current.url, sessionId: id, paramsJson: JSON.stringify(params ?? {}) });
+                await rpc.call("open-address", {
+                  threadId,
+                  url: reopenUrl,
+                  ...(current ? { sessionId: id } : {}),
+                  paramsJson: JSON.stringify(params ?? {}),
+                });
               } catch (e) {
                 setError(String(e));
                 setOpening(false);
@@ -666,7 +682,7 @@ function SessionBrowser({
             }}
           >
             Reopen page
-          </Button>
+          </Button>}
         {error && <p role="alert" className="mt-3 max-w-sm break-words text-xs text-muted-foreground">{error}</p>}
       </div>
     );
@@ -720,7 +736,7 @@ function AutoShowBrowsers({ threadId }: { threadId: string }) {
         if (
           !result.reused && !nav.openThreadPanel({
             actionId: "live",
-            params: { id: result.session.id },
+            params: { id: result.session.id, url: result.session.url },
             title: browserTitle(result.session),
           })
         ) {
@@ -796,7 +812,7 @@ function AutoShowBrowsers({ threadId }: { threadId: string }) {
           if (
             nav.openThreadPanel({
               actionId: "live",
-              params: { id: s.id },
+              params: { id: s.id, url: s.url },
               title: browserTitle(s),
             })
           )
