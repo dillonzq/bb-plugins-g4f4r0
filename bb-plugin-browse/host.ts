@@ -919,8 +919,6 @@ export default experimental_defineHostEntry({
                 const videoInput = s.videoInput;
                 if (!videoInput || videoInput.isClosed)
                   throw new Error("The live browser view could not reconnect for DevTools.");
-                await s.cdp!.send("Emulation.clearDeviceMetricsOverride").catch(() => {});
-                s.viewport = { width: 1280, height: 800, mobile: false };
                 await videoInput.runInput(`devtools:${s.id}`, [
                   { kind: "keyboard", type: "down", key: "Control", code: "ControlLeft", modifiers: 2, repeat: false },
                   { kind: "keyboard", type: "down", key: "Shift", code: "ShiftLeft", modifiers: 10, repeat: false },

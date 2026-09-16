@@ -153,11 +153,11 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
       binary: false,
     });
     expect((await wait(devtools)).status).toBe("succeeded");
-    expect(mock.send).toHaveBeenCalledWith(
+    expect(mock.send).not.toHaveBeenCalledWith(
       "Emulation.clearDeviceMetricsOverride",
     );
     expect(await h.experimental_call("inspect", { id: "ab-managed-host" })).toMatchObject({
-      viewport: { width: 1280, height: 800, mobile: false },
+      viewport: { width: 390, height: 844, mobile: true },
     });
     expect(mock.videoInput.runInput).toHaveBeenCalledWith(
       "devtools:ab-managed-host",
