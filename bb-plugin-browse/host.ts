@@ -941,7 +941,11 @@ export default experimental_defineHostEntry({
               s.endpoint = s.bridge.endpoint;
             }
             const chromeReadyAt = Date.now();
-            s.cdp = await Cdp.connect(s.endpoint, input.mode === "managed" && !input.video);
+            s.cdp = await Cdp.connect(
+              s.endpoint,
+              input.mode === "managed" && !input.video,
+              input.mode === "managed" && !!input.video,
+            );
             s.targetId = s.cdp.targetId;
             s.cdp.onDisconnect = () => {
               if (s.status !== "released") {

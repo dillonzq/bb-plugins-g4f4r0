@@ -140,6 +140,30 @@ it("reconnects managed profiles with restored tabs but keeps native leases stric
   }
 });
 
+it("waits for the managed video page without weakening native tab checks", async () => {
+  const { Cdp } = await import("../src/cdp");
+  const upstream = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+  await once(upstream, "listening");
+  let reads = 0;
+  upstream.on("connection", (ws) => ws.on("message", (raw) => {
+    const m = JSON.parse(raw.toString());
+    const result = m.method === "Target.getTargets"
+      ? { targetInfos: ++reads < 3 ? [] : [{ type: "page", targetId: "video-page" }] }
+      : m.method === "Target.attachToTarget" ? { sessionId: "attached" } : {};
+    ws.send(JSON.stringify({ id: m.id, result }));
+  }));
+  const endpoint = `ws://127.0.0.1:${(upstream.address() as any).port}`;
+  try {
+    const c = await Cdp.connect(endpoint, false, true);
+    expect(c.targetId).toBe("video-page");
+    expect(reads).toBe(3);
+    c.close();
+  } finally {
+    for (const ws of upstream.clients) ws.terminate();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
+});
+
 it("reports a detached page even when the browser websocket remains connected", async () => {
   const { Cdp } = await import("../src/cdp");
   const upstream = new WebSocketServer({ port: 0, host: "127.0.0.1" });
