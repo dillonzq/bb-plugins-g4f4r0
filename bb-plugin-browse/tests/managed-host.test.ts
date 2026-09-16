@@ -209,9 +209,11 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
         message: "Your name?",
         defaultPrompt: "Ada",
       });
+    const evaluationsBeforeDialogInspect = mock.evaluate.mock.calls.length;
     expect(await h.experimental_call("inspect", { id: "ab-managed-host" })).toMatchObject({
       dialog: { type: "prompt", message: "Your name?", defaultPrompt: "Ada" },
     });
+    expect(mock.evaluate).toHaveBeenCalledTimes(evaluationsBeforeDialogInspect);
     const dialog = await h.experimental_call("input", {
       id: "ab-managed-host",
       input: { kind: "dialog", accept: true, promptText: "Grace" },

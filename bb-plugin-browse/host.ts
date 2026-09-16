@@ -1159,13 +1159,13 @@ export default experimental_defineHostEntry({
           artifactRoot: join(ctx.experimental_paths.dataDir, "artifacts", id),
         };
 
-      return {
-        ...publicSession(s),
-        url:
-          s.status === "ready"
-            ? await s.cdp?.evaluate("location.href").catch(() => undefined)
-            : undefined,
-      };
+      // Runtime evaluation is blocked while a JavaScript dialog is open. Return
+      // the last streamed URL so viewer-info can surface the dialog immediately.
+      const url =
+        s.status === "ready" && !s.dialog
+          ? await s.cdp?.evaluate("location.href").catch(() => s.frameInfo?.url)
+          : s.frameInfo?.url;
+      return { ...publicSession(s), url };
     },
     submit: async ({ id, operation, timeoutMs }, ctx) => {
       const s = session(id);
