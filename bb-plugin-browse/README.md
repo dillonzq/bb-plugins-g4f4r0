@@ -51,6 +51,10 @@ On iPhone, use AutoFill → Passwords and choose 1Password. Since the form is on
 
 This improves the execution and observation layer. It is not a claim that every model or website will achieve a particular success rate or benchmark score.
 
+## Agent capability benchmark
+
+The reproducible [MiniWoB++ benchmark harness](benchmarks/agent-capability/README.md) covers twelve representative browser tasks with pinned source, deterministic seeds, action budgets, and direct reward scoring. Run its local site with `npm run benchmark:site`.
+
 ## Architecture
 
 ```text

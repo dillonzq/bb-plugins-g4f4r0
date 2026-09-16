@@ -23,6 +23,7 @@
     "zod": "^4.3.6"
   },
   "scripts": {
+    "benchmark:site": "tsx scripts/miniwob-site.mts",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "build": "bb plugin build"
