@@ -127,7 +127,9 @@ it("streams native frames and accepts viewer input without extending the desktop
     experimental_paths: { dataDir: root, tempDir: root },
   });
   const expiresAt = Date.now() + 60000;
-  mock.evaluate.mockResolvedValue("https://example.com");
+  mock.evaluate.mockImplementation(async (expression: string) =>
+    expression === "document.readyState" ? "complete" : "https://example.com",
+  );
   mock.send.mockResolvedValue({});
   try {
     let j = await h.experimental_call("connect", {
@@ -181,7 +183,9 @@ it("expires idle managed Chrome despite frame polling, and renews on actual inpu
   const root = await mkdtemp(join(tmpdir(), "browse-idle-"));
   const h = experimental_createHostEntryHarness(entry, { experimental_paths: { dataDir: root, tempDir: root } });
   mock.send.mockResolvedValue({});
-  mock.evaluate.mockResolvedValue("https://example.com");
+  mock.evaluate.mockImplementation(async (expression: string) =>
+    expression === "document.readyState" ? "complete" : "https://example.com",
+  );
   vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
   try {
     let j = await h.experimental_call("connect", { id: "ab-idle-test", mode: "managed", endpoint: "", url: "https://example.com", expiresAt: Date.now() + 900000 });

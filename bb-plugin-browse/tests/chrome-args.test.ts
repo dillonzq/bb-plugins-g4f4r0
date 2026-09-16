@@ -16,6 +16,11 @@ it("launches headed Chrome without a headless flag", () => {
   expect(args).toContain("--remote-debugging-port=0");
   expect(args.some((a) => a.startsWith("--user-data-dir="))).toBe(true);
 });
+it("can begin loading the requested page during browser startup", () => {
+  expect(chromeArgs("/tmp/browse-profile", "https://example.com/").at(-1)).toBe(
+    "https://example.com/",
+  );
+});
 it("installs the headed display stack with other Linux dependencies", () => {
   expect(LINUX_DEP_PACKAGES).toContain("xvfb");
   expect(LINUX_DEP_PACKAGES).toContain("x11-xkb-utils");

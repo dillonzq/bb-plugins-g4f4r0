@@ -126,8 +126,11 @@ it("reconnects managed profiles with restored tabs but keeps native leases stric
       "Expected one leased tab",
     );
     expect(calls.some((c) => c.method === "Target.createTarget")).toBe(false);
-    const c = await Cdp.connect(endpoint, true);
+    const c = await Cdp.connect(endpoint, true, false, "https://example.com/ready");
     expect(c.targetId).toBe("fresh");
+    expect(calls.find((call) => call.method === "Target.createTarget")?.params).toEqual({
+      url: "https://example.com/ready",
+    });
     expect(
       calls
         .filter((c) => c.method === "Target.closeTarget")

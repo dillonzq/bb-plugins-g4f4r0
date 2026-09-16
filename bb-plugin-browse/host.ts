@@ -87,6 +87,18 @@ type LocalSession = {
 type Task = { view: Job; controller: AbortController; promise: Promise<void> };
 const sessions = new Map<string, LocalSession>(),
   jobs = new Map<string, Task>();
+async function waitForDocumentReady(cdp: Cdp, signal: AbortSignal) {
+  const deadline = Date.now() + 10000;
+  for (;;) {
+    signal.throwIfAborted();
+    try {
+      const state = await cdp.evaluate("document.readyState", 2000);
+      if (state === "interactive" || state === "complete") return;
+    } catch {}
+    if (Date.now() >= deadline) throw new Error("Initial page load timed out.");
+    await sleep(25, undefined, { signal });
+  }
+}
 function scheduleExpiry(s: LocalSession) {
   clearTimeout(s.timer);
   s.timer = setTimeout(
@@ -914,12 +926,14 @@ export default experimental_defineHostEntry({
 
             const startupAt = Date.now();
             signal.throwIfAborted();
+            const initialUrl = input.mode === "managed" ? safeUrl(input.url) : input.url;
             if (input.mode === "managed") {
               s.managed = await launchManaged(
                 root,
                 input.profileId ?? input.id,
                 signal,
                 input.video,
+                input.video ? initialUrl : "about:blank",
               );
               s.endpoint = s.managed.endpoint;
               s.managed.process.once("exit", () => {
@@ -945,6 +959,7 @@ export default experimental_defineHostEntry({
               s.endpoint,
               input.mode === "managed" && !input.video,
               input.mode === "managed" && !!input.video,
+              initialUrl,
             );
             s.targetId = s.cdp.targetId;
             s.cdp.onDisconnect = () => {
@@ -978,13 +993,13 @@ export default experimental_defineHostEntry({
               throw e;
             }
             const driverReadyAt = Date.now();
-            if (input.mode === "managed" && input.url !== "about:blank")
-              await command(s, ["open", safeUrl(input.url)], signal);
+            if (input.mode === "managed" && initialUrl !== "about:blank")
+              await waitForDocumentReady(s.cdp, signal);
             await command(s, ["get", "title"], signal);
             if (input.mode === "managed" && !input.video)
               await s.cdp.startLiveCast().catch(() => {});
             s.status = "ready";
-            j.output = `Fortress connected. Browser: ${chromeReadyAt-startupAt}ms; control: ${driverReadyAt-chromeReadyAt}ms; navigation and first capture setup: ${Date.now()-driverReadyAt}ms.`;
+            j.output = `Fortress connected. Browser: ${chromeReadyAt-startupAt}ms; control: ${driverReadyAt-chromeReadyAt}ms; page readiness and capture setup: ${Date.now()-driverReadyAt}ms.`;
           } catch (e) {
             s.status = "error";
             s.error = redact(

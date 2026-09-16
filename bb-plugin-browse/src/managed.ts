@@ -165,7 +165,7 @@ export async function installManaged(
     install = undefined;
   }
 }
-export function chromeArgs(profile: string) {
+export function chromeArgs(profile: string, initialUrl = "about:blank") {
   return [
     "--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port=0",
@@ -177,7 +177,7 @@ export function chromeArgs(profile: string) {
     ...(process.platform === "linux" ? ["--ozone-platform=x11"] : []),
     "--disable-backgrounding-occluded-windows",
     "--disable-renderer-backgrounding",
-    "about:blank",
+    initialUrl,
   ];
 }
 export function xvfbArgs(display: number) {
@@ -384,6 +384,7 @@ export async function launchManaged(
   profileId: string,
   signal: AbortSignal,
   video = false,
+  initialUrl = "about:blank",
 ): Promise<ManagedBrowser> {
   signal.throwIfAborted();
   // Unavailable video hosts keep the ordinary browser and JPEG viewer.
@@ -398,7 +399,7 @@ export async function launchManaged(
     throw new Error("This browser profile is already running or connecting.");
   activeProfiles.add(key);
   try {
-    const browser = await launchBrowser(root, profileId, signal, video);
+    const browser = await launchBrowser(root, profileId, signal, video, initialUrl);
     const stop = browser.close;
     let closing: Promise<void> | undefined;
     browser.process.once("exit", () => activeProfiles.delete(key));
@@ -421,6 +422,7 @@ async function launchBrowser(
   profileId: string,
   signal: AbortSignal,
   video = false,
+  initialUrl = "about:blank",
 ): Promise<ManagedBrowser> {
   const browserPath = await fortressExecutable(root);
   if (!browserPath || !existsSync(browserPath))
@@ -443,15 +445,13 @@ async function launchBrowser(
     browserPath,
     video
       ? [
-          ...chromeArgs(profile).filter(
-            (a) => a !== "about:blank",
-          ),
+          ...chromeArgs(profile, initialUrl).filter((a) => a !== initialUrl),
           "--kiosk",
           "--disable-infobars",
           "--window-position=0,0",
-          "--app=about:blank",
+          `--app=${initialUrl}`,
         ]
-      : chromeArgs(profile),
+      : chromeArgs(profile, initialUrl),
     {
       env: display.env,
       stdio: ["ignore", "ignore", "pipe"],

@@ -98,7 +98,7 @@ export class Cdp {
     this.ws.on("close", () => this.fail());
     this.ws.on("error", () => this.fail());
   }
-  static async connect(endpoint: string, managed = false, waitForPage = false): Promise<Cdp> {
+  static async connect(endpoint: string, managed = false, waitForPage = false, initialUrl = "about:blank"): Promise<Cdp> {
     const c = new Cdp(endpoint);
     await new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => {
@@ -132,7 +132,7 @@ export class Cdp {
         // Managed profiles may restore old tabs after a crash. Own a fresh target explicitly.
         const fresh = await c.send(
           "Target.createTarget",
-          { url: "about:blank" },
+          { url: initialUrl },
           false,
         );
         c.targetId = fresh.targetId;
