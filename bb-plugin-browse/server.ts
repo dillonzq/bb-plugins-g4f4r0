@@ -1160,7 +1160,8 @@ export default async function plugin(bb: BbPluginApi) {
     }
   });
   bb.http.experimental_websocket("/control", ctx => {
-    const sid=id.parse(ctx.url.searchParams.get('id')),clientId=randomUUID();
+    const sid=id.parse(ctx.url.searchParams.get('id')),
+      clientId=id.parse(ctx.url.searchParams.get('clientId')??randomUUID());
     const s=get(sid);let closed=false,controlled=false,acquiring=false,pending=0,chain=Promise.resolve(),idleTimer:ReturnType<typeof setTimeout>|undefined;
     let relay:Awaited<ReturnType<typeof connectControlRelay>>|undefined,setup:Promise<void>|undefined;
     const ensureRelay=()=>setup??=(async()=>{try{const endpoint=await host.call('controlStart',{id:sid,clientId},{hostId:s.hostId,timeoutMs:3000});relay=await connectControlRelay(endpoint);if(closed)relay.close();}catch{/* Remote hosts retain RPC input. */}})();

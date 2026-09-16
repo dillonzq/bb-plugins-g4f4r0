@@ -802,6 +802,25 @@ it('orders direct input and releases controller state when its socket disconnect
  }finally{await f.harness.lifecycle.dispose();}
 });
 
+it('shares the viewer control identity with toolbar maintenance actions',async()=>{
+ const f=await fixture();
+ try{
+  const r:any=await f.harness.behavior.callRpc('start',{threadId:'thread_one',url:'https://example.com'});
+  const clientId='viewer-client';
+  const control=await f.harness.behavior.experimental_openWebSocket(`/control?id=${r.session.id}&clientId=${clientId}`);
+  await control.receive(JSON.stringify({type:'take'}));
+  await vi.waitFor(()=>expect(control.sent.map(value=>JSON.parse(String(value)))).toContainEqual({type:'control',state:'human'}));
+  const response=await f.harness.behavior.fetchHttp('POST','/input',{
+   headers:{'content-type':'application/json'},
+   body:JSON.stringify({id:r.session.id,clientId,input:{kind:'maintenance',action:'hard-reload'}}),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({status:'succeeded'});
+  expect(f.calls.find(c=>c.method==='input')?.input).toMatchObject({id:r.session.id,input:{kind:'maintenance',action:'hard-reload'}});
+  await control.close();
+ }finally{await f.harness.lifecycle.dispose();}
+});
+
 it('gives one viewer exclusive control and returns control to the agent on disconnect',async()=>{
  const f=await fixture();
  try{

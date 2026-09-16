@@ -6,12 +6,12 @@ function viewer(){
  const dom=new JSDOM('<main id="viewport"><canvas id="screen"></canvas><button id="control-toggle"><span data-kind="cursor"></span><span data-kind="loading" hidden></span><span>Take control</span></button></main><input id="url"><button id="back"></button><button id="forward"></button><button id="reload"></button>',{url:'http://localhost/viewer?id=test',runScripts:'outside-only',pretendToBeVisual:true});
  dom.window.eval(`${viewerTrace}
  let closed=false,inViewport=true,statusErrorUntil=0,cast=null,pendingFrame=null,decodedFrame=null;
- const id='test',screen=document.querySelector('#screen'),viewport=document.querySelector('#viewport'),address=document.querySelector('#url'),status={textContent:''},metrics={inputLatencyMs:0,maxInputQueue:0};
+ const id='test',clientId='test-client',screen=document.querySelector('#screen'),viewport=document.querySelector('#viewport'),address=document.querySelector('#url'),status={textContent:''},metrics={inputLatencyMs:0,maxInputQueue:0};
  const vh=800;function point(){return{x:0,y:0}}function openCast(){}
- class Socket {static OPEN=1;readyState=1;sent=[];constructor(){queueMicrotask(()=>this.onopen?.());}send(v){this.sent.push(JSON.parse(v));}close(){this.readyState=3;this.onclose?.();}}
+ class Socket {static OPEN=1;static urls=[];readyState=1;sent=[];constructor(url){Socket.urls.push(url);queueMicrotask(()=>this.onopen?.());}send(v){this.sent.push(JSON.parse(v));}close(){this.readyState=3;this.onclose?.();}}
  window.WebSocket=Socket;
  ${viewerInteraction}
- window.test={keyboard,screen,directQueue,flushDirect,take(){controlToggle.click();control.onopen();control.onmessage({data:JSON.stringify({type:'control',state:'human'})});control.sent.length=0;},get control(){return control},ack(){control.onmessage({data:JSON.stringify({seq:inflight.keys().next().value})})}};
+ window.test={keyboard,screen,directQueue,flushDirect,socketUrls:Socket.urls,take(){controlToggle.click();control.onopen();control.onmessage({data:JSON.stringify({type:'control',state:'human'})});control.sent.length=0;},get control(){return control},ack(){control.onmessage({data:JSON.stringify({seq:inflight.keys().next().value})})}};
  `);
  return {dom,test:(dom.window as any).test};
 }
@@ -23,6 +23,15 @@ it('stays view-only until control is explicitly taken and releases on disconnect
   test.control.close();
   expect(test.control).toBeNull();
   expect(dom.window.document.querySelector('#viewport')?.getAttribute('data-control')).toBe('agent');
+ }finally{dom.window.close();}
+});
+it('uses the viewer identity for both control and toolbar input',()=>{
+ const {dom,test}=viewer();
+ try{
+  test.take();
+  expect(test.socketUrls[0]).toContain('id=test');
+  expect(test.socketUrls[0]).toContain('clientId=');
+  expect(new URL(test.socketUrls[0]).searchParams.get('clientId')).toBe('test-client');
  }finally{dom.window.close();}
 });
 it('keeps the takeover label while showing a disabled loading icon',()=>{
