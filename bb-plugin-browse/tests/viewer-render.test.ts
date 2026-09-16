@@ -26,7 +26,7 @@ it('paints the freshest decoded frame and closes every replaced bitmap',async()=
  dom.window.requestAnimationFrame=(cb:any)=>{callbacks.push(cb);return callbacks.length;};
  (dom.window.document.querySelector('canvas') as any).getContext=()=>({drawImage:draw});
  const code=viewerHtml.slice(viewerHtml.indexOf('let statusErrorUntil=0,'),viewerHtml.indexOf('function show(frame)'));
- dom.window.eval(`${viewerTrace}const screen=document.querySelector('canvas'),metrics={bytes:0,dropped:0,displayed:0},status={textContent:''},address={value:''};let closed=false,inViewport=true,vw=1280,vh=800,lastFrame=0,seq=0,pageLoading=false,currentUrl='',acting=false,responsiveEnabled=false,responsiveWidth=412,responsiveHeight=915,expectedFrameWidth=0,expectedFrameHeight=0;function fit(){}function renderCopy(){};${code};window.accept=acceptFrame;window.metrics=metrics;window.enableResponsive=()=>responsiveEnabled=true;window.expectDesktop=()=>{responsiveEnabled=false;expectedFrameWidth=1280;expectedFrameHeight=800;};`);
+ dom.window.eval(`${viewerTrace}const screen=document.querySelector('canvas'),metrics={bytes:0,dropped:0,displayed:0},status={textContent:''},address={value:''};let closed=false,inViewport=true,vw=1280,vh=800,lastFrame=0,seq=0,pageLoading=false,currentUrl='',acting=false,responsiveEnabled=false,responsiveWidth=412,responsiveHeight=915,responsiveMobile=true,responsivePreset='responsive',responsivePending=null,expectedFrameWidth=0,expectedFrameHeight=0;function fit(){}function renderCopy(){}function renderResponsive(){}function setResponsiveTransport(){};${code};window.accept=acceptFrame;window.metrics=metrics;window.startMobile=()=>{responsivePending={enabled:true,width:412,height:915,mobile:true,preset:'responsive'};expectedFrameWidth=412;expectedFrameHeight=915;};window.startDesktop=()=>{responsivePending={enabled:false,width:1280,height:800,mobile:false,preset:'responsive'};expectedFrameWidth=1280;expectedFrameHeight=800;};window.responsiveState=()=>({enabled:responsiveEnabled,pending:!!responsivePending,width:responsiveWidth,height:responsiveHeight});`);
  try{
   const accept=(dom.window as any).accept;
   accept({size:1},{seq:1,width:1280,height:800},acks[0]);
@@ -39,15 +39,20 @@ it('paints the freshest decoded frame and closes every replaced bitmap',async()=
   callbacks[0]();expect((dom.window.document.querySelector("#viewport-skeleton") as HTMLElement).hidden).toBe(true);expect(draw).toHaveBeenCalledWith(bitmaps[2],0,0,1280,800);
   expect(bitmaps[2].close).toHaveBeenCalledOnce();for(const ack of acks.slice(0,3))expect(ack).toHaveBeenCalledOnce();
   expect((dom.window as any).metrics).toMatchObject({displayed:1,dropped:2});
-  (dom.window as any).enableResponsive();
+  (dom.window as any).startMobile();
+  expect((dom.window as any).responsiveState()).toEqual({enabled:false,pending:true,width:412,height:915});
   accept({size:1},{seq:4,width:1280,height:800},acks[3]);await new Promise(r=>setTimeout(r,0));callbacks.shift()?.();
   expect(draw).toHaveBeenCalledTimes(1);expect(wide.close).toHaveBeenCalledOnce();expect(acks[3]).toHaveBeenCalledOnce();
+  expect((dom.window as any).responsiveState()).toEqual({enabled:false,pending:true,width:412,height:915});
   accept({size:1},{seq:5,width:412,height:915},acks[4]);await new Promise(r=>setTimeout(r,0));callbacks.shift()?.();
   expect(draw).toHaveBeenLastCalledWith(mobile,0,0,412,915);expect(mobile.close).toHaveBeenCalledOnce();expect(acks[4]).toHaveBeenCalledOnce();
-  (dom.window as any).expectDesktop();
+  expect((dom.window as any).responsiveState()).toEqual({enabled:true,pending:false,width:412,height:915});
+  (dom.window as any).startDesktop();
   accept({size:1},{seq:6,width:412,height:915},acks[5]);await new Promise(r=>setTimeout(r,0));callbacks.shift()?.();
   expect(draw).toHaveBeenCalledTimes(2);expect(staleMobile.close).toHaveBeenCalledOnce();expect(acks[5]).toHaveBeenCalledOnce();
+  expect((dom.window as any).responsiveState()).toEqual({enabled:true,pending:true,width:412,height:915});
   accept({size:1},{seq:7,width:1280,height:800},acks[6]);await new Promise(r=>setTimeout(r,0));callbacks.shift()?.();
   expect(draw).toHaveBeenLastCalledWith(desktop,0,0,1280,800);expect(desktop.close).toHaveBeenCalledOnce();expect(acks[6]).toHaveBeenCalledOnce();
+  expect((dom.window as any).responsiveState()).toEqual({enabled:false,pending:false,width:1280,height:800});
  }finally{dom.window.close();}
 });

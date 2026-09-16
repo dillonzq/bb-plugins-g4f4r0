@@ -31,16 +31,19 @@ it("offers docked DevTools in the browser options", () => {
 it("offers a responsive-mode toolbar toggle and compact viewport controls", () => {
   expect(viewerHtml).toContain('id="responsive-toggle"');
   expect(viewerHtml).toContain('aria-pressed="false"');
+  expect(viewerHtml).toContain('aria-pressed="false" disabled');
+  expect(viewerHtml).toContain('.toolbar-group[aria-label="Page actions"]{width:92px}');
   expect(viewerHtml).toContain('id="responsive-controls"');
   expect(viewerHtml).toContain('iPhone 17 Pro Max');
   expect(viewerHtml).toContain("kind:'viewport'");
   expect(viewerHtml).toContain("responsiveToggle.onclick=()=>withToolbarControl");
-  expect(viewerHtml).toContain("withToolbarControl(()=>input({kind:'viewport'");
+  expect(viewerHtml).toContain("requestResponsive(!responsiveEnabled");
   expect(viewerHtml).not.toContain("Take control before changing the viewport.");
-  expect(viewerHtml).toContain("()=>setResponsiveTransport(enabled)");
+  expect(viewerHtml).toContain("responsivePending={enabled,width,height,mobile,preset}");
+  expect(viewerHtml).toContain("responsiveAvailable=info.mode==='managed'");
   expect(viewerHtml).toContain("frameWidth=hasFrame?vw:expectedFrameWidth||");
-  expect(viewerHtml).toContain("frame.width!==responsiveWidth");
-  expect(viewerHtml).toContain("prepareViewportFrame(1280,800)");
+  expect(viewerHtml).toContain("!expectedFrameWidth&&responsiveEnabled");
+  expect(viewerHtml).toContain("const completed=responsivePending");
   expect(viewerHtml).toContain("frame.width!==expectedFrameWidth");
   expect(viewerHtml).toContain("if(!screen.dataset.frame)");
   expect(viewerHtml).not.toContain("delete screen.dataset.frame");
