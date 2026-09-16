@@ -141,6 +141,9 @@ async function fixture(
             : {}),
           id: input.id,
           status: options.connectingOnce && calls.filter(c => c.method === "inspect").length === 1 ? "connecting" : "ready",
+          ...(options.connectingOnce && calls.filter(c => c.method === "inspect").length === 1
+            ? { url: "about:blank" }
+            : {}),
           recording: false,
           artifactRoot: "/private/artifacts/session",
         };
