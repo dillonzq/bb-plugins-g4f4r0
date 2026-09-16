@@ -243,6 +243,24 @@ describe("BB browser lifecycle", () => {
     expect(JSON.stringify(result) + String(result)).toMatch(/another thread/);
     await f.harness.lifecycle.dispose();
   });
+  it("keeps released session history out of agent discovery", async () => {
+    const f = await fixture();
+    const released: any = await f.harness.behavior.callRpc("start", { ...base });
+    await f.harness.behavior.callRpc("release", { id: released.session.id });
+    const active: any = await f.harness.behavior.callRpc("start", { ...base });
+    const discovered = JSON.parse(
+      (await f.harness.behavior.callAgentTool(
+        "browse_discover",
+        {},
+        { threadId: base.threadId },
+      )) as string,
+    );
+    expect(discovered.sessions.map((session: any) => session.id)).toEqual([
+      active.session.id,
+    ]);
+    expect(discovered.releasedSessionCount).toBe(1);
+    await f.harness.lifecycle.dispose();
+  });
   it("rejects invalid URLs before creating tabs", async () => {
     const f = await fixture();
     await expect(

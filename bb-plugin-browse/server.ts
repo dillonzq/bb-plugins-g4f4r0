@@ -1345,6 +1345,10 @@ export default async function plugin(bb: BbPluginApi) {
     parameters: z.object({}),
     execute: async (_, ctx) => {
       const policy = await sessionPolicy();
+      const threadSessions = await handlers.list({ threadId: ctx.threadId });
+      const visibleSessions = threadSessions.filter(
+        (session) => session.status !== "released",
+      );
       return JSON.stringify({
         threadHostId: await threadHost(ctx.threadId).catch(() => null),
         nativePreferredHost: await preferredHost(),
@@ -1371,7 +1375,8 @@ export default async function plugin(bb: BbPluginApi) {
             "Discover connected app capabilities first and filter names/descriptions before emitting schemas. Browse discovery lists browsers, not account connections.",
         },
         machines: await handlers.discover(null),
-        sessions: await handlers.list({ threadId: ctx.threadId }),
+        sessions: visibleSessions,
+        releasedSessionCount: threadSessions.length - visibleSessions.length,
       });
     },
   });
