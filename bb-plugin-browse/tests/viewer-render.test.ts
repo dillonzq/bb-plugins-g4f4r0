@@ -53,6 +53,6 @@ it('paints the freshest decoded frame and closes every replaced bitmap',async()=
   expect((dom.window as any).responsiveState()).toEqual({enabled:true,pending:true,width:412,height:915});
   accept({size:1},{seq:7,width:1280,height:800},acks[6]);await new Promise(r=>setTimeout(r,0));callbacks.shift()?.();
   expect(draw).toHaveBeenLastCalledWith(desktop,0,0,1280,800);expect(desktop.close).toHaveBeenCalledOnce();expect(acks[6]).toHaveBeenCalledOnce();
-  expect((dom.window as any).responsiveState()).toEqual({enabled:false,pending:false,width:1280,height:800});
+  expect((dom.window as any).responsiveState()).toEqual({enabled:false,pending:false,width:412,height:915});
  }finally{dom.window.close();}
 });
