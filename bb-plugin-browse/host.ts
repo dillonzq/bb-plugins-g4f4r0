@@ -912,11 +912,15 @@ export default experimental_defineHostEntry({
               } else if (input.action === "open-devtools") {
                 if (s.mode !== "managed" || !s.videoMode)
                   throw new Error("DevTools is available only in an isolated live Browse session.");
-                if (!s.videoInput)
-                  throw new Error("Open the live browser view before opening DevTools.");
+                const videoDeadline = Date.now() + 5000;
+                while (!s.videoInput && Date.now() < videoDeadline)
+                  await sleep(25, undefined, { signal });
+                const videoInput = s.videoInput;
+                if (!videoInput)
+                  throw new Error("The live browser view could not reconnect for DevTools.");
                 await s.cdp!.send("Emulation.clearDeviceMetricsOverride").catch(() => {});
                 s.viewport = { width: 1280, height: 800, mobile: false };
-                await s.videoInput.runInput(`devtools:${s.id}`, [
+                await videoInput.runInput(`devtools:${s.id}`, [
                   { kind: "keyboard", type: "down", key: "Control", code: "ControlLeft", modifiers: 2, repeat: false },
                   { kind: "keyboard", type: "down", key: "Shift", code: "ShiftLeft", modifiers: 10, repeat: false },
                   { kind: "keyboard", type: "down", key: "i", code: "KeyI", modifiers: 10, repeat: false },

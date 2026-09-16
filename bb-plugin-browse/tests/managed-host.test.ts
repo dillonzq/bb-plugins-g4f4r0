@@ -134,9 +134,19 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
       clientId: "viewer",
       binary: false,
     });
+    await h.experimental_call("videoStop", {
+      id: "ab-managed-host",
+      clientId: "viewer",
+    });
     const devtools = await h.experimental_call("input", {
       id: "ab-managed-host",
       input: { kind: "maintenance", action: "open-devtools" },
+    });
+    await new Promise((r) => setTimeout(r, 25));
+    await h.experimental_call("videoStart", {
+      id: "ab-managed-host",
+      clientId: "viewer-reconnected",
+      binary: false,
     });
     expect((await wait(devtools)).status).toBe("succeeded");
     expect(mock.send).toHaveBeenCalledWith(
