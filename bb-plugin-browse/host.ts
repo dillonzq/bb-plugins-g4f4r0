@@ -914,10 +914,10 @@ export default experimental_defineHostEntry({
                 if (s.mode !== "managed" || !s.videoMode)
                   throw new Error("DevTools is available only in an isolated live Browse session.");
                 const videoDeadline = Date.now() + 5000;
-                while (!s.videoInput && Date.now() < videoDeadline)
+                while ((!s.videoInput || s.videoInput.isClosed) && Date.now() < videoDeadline)
                   await sleep(25, undefined, { signal });
                 const videoInput = s.videoInput;
-                if (!videoInput)
+                if (!videoInput || videoInput.isClosed)
                   throw new Error("The live browser view could not reconnect for DevTools.");
                 await s.cdp!.send("Emulation.clearDeviceMetricsOverride").catch(() => {});
                 s.viewport = { width: 1280, height: 800, mobile: false };

@@ -21,6 +21,7 @@ const mock = vi.hoisted(() => ({
   commands: [] as string[][],
   driverClose: vi.fn(async () => {}),
   videoInput: {
+    isClosed: false,
     runInput: vi.fn(async () => ({})),
     resetInput: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),
@@ -166,6 +167,14 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
         expect.objectContaining({ kind: "keyboard", type: "down", key: "i" }),
       ]),
     );
+    mock.videoInput.isClosed = true;
+    const staleDevtools = await h.experimental_call("input", {
+      id: "ab-managed-host",
+      input: { kind: "maintenance", action: "open-devtools" },
+    });
+    await new Promise((r) => setTimeout(r, 25));
+    mock.videoInput.isClosed = false;
+    expect((await wait(staleDevtools)).status).toBe("succeeded");
     mock.videoInput.runInput.mockClear();
     await h.experimental_call("direct", {
       id: "ab-managed-host",
