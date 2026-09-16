@@ -36,10 +36,9 @@ export function videoChromeArgs(profile: string, initialUrl: string) {
   return [
     ...chromeArgs(profile, initialUrl).filter((arg) => arg !== initialUrl),
     "--test-type",
-    "--kiosk",
     "--disable-infobars",
     "--window-position=0,0",
-    initialUrl,
+    `--app=${initialUrl}`,
   ];
 }
 export async function diagnostics(root: string) {
