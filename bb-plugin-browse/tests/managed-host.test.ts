@@ -19,6 +19,15 @@ const mock = vi.hoisted(() => ({
   events: [] as string[],
   commands: [] as string[][],
   driverClose: vi.fn(async () => {}),
+  videoInput: {
+    runInput: vi.fn(async () => ({})),
+    resetInput: vi.fn(async () => {}),
+    stop: vi.fn(async () => {}),
+    read: vi.fn(async () => []),
+    timing: vi.fn(() => ({ queueMs: 0, packetGapMs: 0 })),
+    controlBusy: false,
+    controlHeld: false,
+  },
 }));
 vi.mock("../src/driver", () => ({
   BrowserDriver: {
@@ -42,8 +51,12 @@ vi.mock("../src/managed", () => ({
     endpoint: "ws://owned",
     profile: "/owned/profile",
     process: new EventEmitter(),
+    displayEnv: { DISPLAY: ":99" },
     close: mock.close,
   }),
+}));
+vi.mock("../src/selkies", () => ({
+  SelkiesStream: { start: async () => mock.videoInput },
 }));
 vi.mock("../src/process", () => ({
   runProcess: async (_binary: string, args: string[]) => {
@@ -116,6 +129,11 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
     expect(await h.experimental_call("inspect", { id: "ab-managed-host" })).toMatchObject({
       viewport: { width: 390, height: 844, mobile: true },
     });
+    await h.experimental_call("videoStart", {
+      id: "ab-managed-host",
+      clientId: "viewer",
+      binary: false,
+    });
     const devtools = await h.experimental_call("input", {
       id: "ab-managed-host",
       input: { kind: "maintenance", action: "open-devtools" },
@@ -127,10 +145,44 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
     expect(await h.experimental_call("inspect", { id: "ab-managed-host" })).toMatchObject({
       viewport: { width: 1280, height: 800, mobile: false },
     });
-    expect(mock.send).toHaveBeenCalledWith(
-      "Target.openDevTools",
-      { targetId: "managed", panelId: "elements" },
-      false,
+    expect(mock.videoInput.runInput).toHaveBeenCalledWith(
+      "devtools:ab-managed-host",
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "keyboard", type: "down", key: "Control" }),
+        expect.objectContaining({ kind: "keyboard", type: "down", key: "Shift" }),
+        expect.objectContaining({ kind: "keyboard", type: "down", key: "i" }),
+      ]),
+    );
+    mock.videoInput.runInput.mockClear();
+    await h.experimental_call("direct", {
+      id: "ab-managed-host",
+      clientId: "viewer",
+      events: [{
+        kind: "pointer",
+        type: "down",
+        x: 780,
+        y: 420,
+        button: "left",
+        buttons: 1,
+        clickCount: 1,
+        modifiers: 0,
+      }, {
+        kind: "pointer",
+        type: "up",
+        x: 780,
+        y: 420,
+        button: "left",
+        buttons: 0,
+        clickCount: 1,
+        modifiers: 0,
+      }],
+    });
+    expect(mock.videoInput.runInput).toHaveBeenCalledWith(
+      "viewer",
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "pointer", type: "down" }),
+        expect.objectContaining({ kind: "pointer", type: "up" }),
+      ]),
     );
     const running = await h.experimental_call("submit", {
       id: "ab-managed-host",
