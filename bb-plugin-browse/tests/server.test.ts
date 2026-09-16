@@ -865,6 +865,7 @@ it("streams the first frame after host startup without a session-list refresh", 
   try {
     const started: any = await f.harness.behavior.callRpc("start", { threadId: "thread_one", url: "https://example.com" });
     expect(started.session.status).toBe("connecting");
+    expect(started.session.url).toBe("https://example.com/");
     const frame: any = await f.harness.behavior.callRpc("frame", { id: started.session.id });
     expect(frame.seq).toBe(1);
     expect(f.calls.filter(c => c.method === "inspect")).toHaveLength(2);

@@ -188,7 +188,9 @@ export default async function plugin(bb: BbPluginApi) {
       );
       delete s.busy;
       delete s.error;
+      const requestedUrl = s.url;
       Object.assign(s, state);
+      if (!state.url) s.url = requestedUrl;
     } catch (e) {
       s.status = "error";
       s.error = redact(String(e));
@@ -296,7 +298,9 @@ export default async function plugin(bb: BbPluginApi) {
         { hostId },
       );
       s.connectJobId = job.id;
-      Object.assign(s, await host.call("inspect", { id: sid }, { hostId }));
+      const state = await host.call("inspect", { id: sid }, { hostId });
+      Object.assign(s, state);
+      if (!state.url) s.url = safeUrl(url);
       await persist(s);
       await showLive(threadId, s.id);
       return { session: s, job };
