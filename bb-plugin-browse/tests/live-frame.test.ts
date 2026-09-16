@@ -40,6 +40,8 @@ it("offers a responsive-mode toolbar toggle and compact viewport controls", () =
   expect(viewerHtml).toContain("frame.width!==responsiveWidth");
   expect(viewerHtml).toContain("prepareViewportFrame(1280,800)");
   expect(viewerHtml).toContain("frame.width!==expectedFrameWidth");
+  expect(viewerHtml).toContain("if(!screen.dataset.frame)");
+  expect(viewerHtml).not.toContain("delete screen.dataset.frame");
   expect(viewerHtml).toContain("background:var(--popover");
   expect(viewerHtml).not.toContain('id="fit-viewport"');
   expect(viewerHtml).not.toContain("fitMode");
