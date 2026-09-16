@@ -480,7 +480,6 @@ export default async function plugin(bb: BbPluginApi) {
             title: "Credentials",
             payload: {
               origin: prepared.origin,
-              sessionLabel: `${s.hostLabel} · ${s.mode} · ${s.id}`,
               purpose: input.purpose,
               fields: input.fields.map(({ label, kind }) => ({ label, kind })),
             },

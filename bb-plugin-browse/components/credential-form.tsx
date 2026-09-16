@@ -6,7 +6,6 @@ import { Button } from "./ui/button";
 const payloadSchema = z.object({
   origin: z.string().url(),
   purpose: z.string(),
-  sessionLabel: z.string().optional(),
   fields: z.array(
     z.object({
       label: z.string(),
@@ -30,7 +29,7 @@ export function CredentialForm({
         <Button onClick={() => void cancel()}>Cancel</Button>
       </p>
     );
-  const { origin, purpose, fields, sessionLabel } = parsed.data;
+  const { origin, purpose, fields } = parsed.data;
   return (
     <form
       key={interaction.id}
@@ -64,9 +63,6 @@ export function CredentialForm({
         Sign in to {new URL(origin).host}
       </strong>
       <p className="text-sm">{purpose}</p>
-      {sessionLabel && (
-        <p className="text-xs text-muted-foreground">{sessionLabel}</p>
-      )}
       {fields.map((field, i) => (
         <label key={i} className="block text-sm space-y-1">
           <span>{field.label}</span>

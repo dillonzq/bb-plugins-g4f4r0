@@ -467,7 +467,6 @@ describe("private browser credential requests", () => {
         const interaction = f.harness.inspection.pendingInteractions[0];
         expect(interaction.payload).toEqual({
           origin: "https://accounts.shopify.com",
-          sessionLabel: expect.stringContaining(started.session.id),
           purpose: "Sign in for the requested task",
           fields: [{ label: "Password", kind: "password" }],
         });
