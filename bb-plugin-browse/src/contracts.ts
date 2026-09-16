@@ -104,6 +104,11 @@ export const hostSession = z.object({
   busy: z.string().optional(),
   url: z.string().optional(),
   expiresAt: z.number().optional(),
+  viewport: z.object({
+    width: z.number().int().min(320).max(2560),
+    height: z.number().int().min(320).max(2560),
+    mobile: z.boolean(),
+  }).optional(),
 });
 export const scope = z.object({
   hostId: id,
@@ -168,6 +173,12 @@ export const viewerInput = z.discriminatedUnion("kind", [
       "ArrowDown",
       "Delete",
     ]),
+  }),
+  z.object({
+    kind: z.literal("viewport"),
+    width: z.number().int().min(320).max(2560),
+    height: z.number().int().min(320).max(2560),
+    mobile: z.boolean(),
   }),
   z.object({ kind: z.literal("maintenance"), action: z.enum(["hard-reload", "open-devtools", "clear-cookies", "clear-cache"]) }),
   z.object({ kind: z.literal("history"), action: z.enum(["back", "forward", "reload"]) }),

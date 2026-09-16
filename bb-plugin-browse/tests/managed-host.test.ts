@@ -99,6 +99,23 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
       expiresAt: Date.now() + 60000,
     });
     expect((await wait(j)).status).toBe("succeeded");
+    const responsive = await h.experimental_call("input", {
+      id: "ab-managed-host",
+      input: { kind: "viewport", width: 390, height: 844, mobile: true },
+    });
+    expect((await wait(responsive)).status).toBe("succeeded");
+    expect(mock.send).toHaveBeenCalledWith(
+      "Emulation.setDeviceMetricsOverride",
+      expect.objectContaining({
+        width: 390,
+        height: 844,
+        mobile: true,
+        screenOrientation: { type: "portraitPrimary", angle: 0 },
+      }),
+    );
+    expect(await h.experimental_call("inspect", { id: "ab-managed-host" })).toMatchObject({
+      viewport: { width: 390, height: 844, mobile: true },
+    });
     const devtools = await h.experimental_call("input", {
       id: "ab-managed-host",
       input: { kind: "maintenance", action: "open-devtools" },
@@ -107,6 +124,9 @@ it("owns managed Fortress, blocks viewer input during a job, and stops it after 
     expect(mock.send).toHaveBeenCalledWith(
       "Emulation.clearDeviceMetricsOverride",
     );
+    expect(await h.experimental_call("inspect", { id: "ab-managed-host" })).toMatchObject({
+      viewport: { width: 1280, height: 800, mobile: false },
+    });
     expect(mock.send).toHaveBeenCalledWith(
       "Target.openDevTools",
       { targetId: "managed", panelId: "elements" },

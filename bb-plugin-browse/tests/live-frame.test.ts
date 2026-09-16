@@ -22,6 +22,13 @@ it("offers docked DevTools in the browser options", () => {
   expect(viewerHtml).toContain('data-maintenance="open-devtools"');
   expect(viewerHtml).toContain("Open DevTools");
 });
+it("offers a responsive-mode toolbar toggle and compact viewport controls", () => {
+  expect(viewerHtml).toContain('id="responsive-toggle"');
+  expect(viewerHtml).toContain('aria-pressed="false"');
+  expect(viewerHtml).toContain('id="responsive-controls"');
+  expect(viewerHtml).toContain('iPhone 17 Pro Max');
+  expect(viewerHtml).toContain("kind:'viewport'");
+});
 it("uses the BB sidebar surface for the browser shell", () => {
   expect(viewerHtml).toContain("var(--sidebar,var(--background");
   expect(viewerHtml).toContain("sidebar-foreground");

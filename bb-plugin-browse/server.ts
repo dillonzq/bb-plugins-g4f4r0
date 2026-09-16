@@ -1100,6 +1100,7 @@ export default async function plugin(bb: BbPluginApi) {
     c.header("Cache-Control", "no-store");
     try {
       const s = get(id.parse(c.req.query("id")));
+      const current = await host.call("inspect", { id: s.id }, { hostId: s.hostId, timeoutMs: 3000 }).catch(() => undefined);
       return c.json({
         id: s.id,
         url: s.url,
@@ -1108,6 +1109,7 @@ export default async function plugin(bb: BbPluginApi) {
         hostLabel: s.hostLabel,
         status: s.status,
         expiresAt: s.expiresAt,
+        viewport: current?.viewport,
       });
     } catch (e) {
       return c.json({ error: redact(String(e)) }, 404);

@@ -60,6 +60,7 @@ type LocalSession = {
   videoMode?: boolean;
   videoInput?: SelkiesStream;
   devtoolsOpen?: boolean;
+  viewport?: { width: number; height: number; mobile: boolean };
   mode?: "managed" | "native";
   framing?: boolean;
   streamDemands?: StreamDemands;
@@ -149,6 +150,7 @@ function publicSession(s: LocalSession) {
     targetId: s.targetId,
     busy: s.busy,
     expiresAt: s.expiresAt,
+    viewport: s.viewport,
   };
 }
 function session(id: string) {
@@ -889,6 +891,23 @@ export default experimental_defineHostEntry({
             case "key":
               await command(s, ["press", input.key], signal);
               break;
+            case "viewport":
+              if (s.mode !== "managed")
+                throw new Error("Responsive mode is available only in an isolated Browse session.");
+              await s.cdp!.send("Emulation.setDeviceMetricsOverride", {
+                width: input.width,
+                height: input.height,
+                deviceScaleFactor: 1,
+                mobile: input.mobile,
+                screenWidth: input.width,
+                screenHeight: input.height,
+                screenOrientation: {
+                  type: input.width > input.height ? "landscapePrimary" : "portraitPrimary",
+                  angle: input.width > input.height ? 90 : 0,
+                },
+              });
+              s.viewport = input;
+              break;
             case "maintenance":
               if (input.action === "hard-reload") {
                 await s.cdp!.send("Page.reload", { ignoreCache: true });
@@ -897,6 +916,7 @@ export default experimental_defineHostEntry({
                   throw new Error("DevTools is available only in an isolated live Browse session.");
                 if (!s.targetId) throw new Error("The browser tab is unavailable.");
                 await s.cdp!.send("Emulation.clearDeviceMetricsOverride").catch(() => {});
+                s.viewport = { width: 1280, height: 800, mobile: false };
                 const existing = await s.cdp!
                   .send("Target.getDevToolsTarget", { targetId: s.targetId }, false)
                   .catch(() => undefined);
@@ -1030,6 +1050,7 @@ export default experimental_defineHostEntry({
                   false,
                 ),
               ]);
+              s.viewport = { width: 1280, height: 800, mobile: false };
             }
             try {
               s.driver = await BrowserDriver.connect(root, s.cdp, signal);
