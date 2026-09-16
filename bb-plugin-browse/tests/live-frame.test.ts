@@ -34,7 +34,8 @@ it("offers a responsive-mode toolbar toggle and compact viewport controls", () =
   expect(viewerHtml).toContain('id="responsive-controls"');
   expect(viewerHtml).toContain('iPhone 17 Pro Max');
   expect(viewerHtml).toContain("kind:'viewport'");
-  expect(viewerHtml).toContain("responsiveToggle.onclick=()=>withHumanControl");
+  expect(viewerHtml).toContain("responsiveToggle.onclick=()=>withToolbarControl");
+  expect(viewerHtml).toContain("withToolbarControl(()=>input({kind:'viewport'");
   expect(viewerHtml).not.toContain("Take control before changing the viewport.");
   expect(viewerHtml).toContain("setResponsiveTransport(responsiveEnabled)");
   expect(viewerHtml).toContain("frame.width!==responsiveWidth");

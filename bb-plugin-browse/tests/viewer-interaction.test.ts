@@ -11,7 +11,7 @@ function viewer(){
  class Socket {static OPEN=1;static urls=[];readyState=1;sent=[];constructor(url){Socket.urls.push(url);queueMicrotask(()=>this.onopen?.());}send(v){this.sent.push(JSON.parse(v));}close(){this.readyState=3;this.onclose?.();}}
  window.WebSocket=Socket;
  ${viewerInteraction}
- window.test={keyboard,screen,directQueue,flushDirect,socketUrls:Socket.urls,request(action){withHumanControl(action);},grant(){control.onopen();control.onmessage({data:JSON.stringify({type:'control',state:'human'})});},take(){controlToggle.click();this.grant();control.sent.length=0;},get control(){return control},ack(){control.onmessage({data:JSON.stringify({seq:inflight.keys().next().value})})}};
+ window.test={keyboard,screen,directQueue,flushDirect,socketUrls:Socket.urls,request(action,options){withHumanControl(action,options);},grant(){control.onopen();control.onmessage({data:JSON.stringify({type:'control',state:'human'})});},take(){controlToggle.click();this.grant();control.sent.length=0;},get control(){return control},ack(){control.onmessage({data:JSON.stringify({seq:inflight.keys().next().value})})}};
  `);
  return {dom,test:(dom.window as any).test};
 }
@@ -51,6 +51,20 @@ it('runs a toolbar action immediately after it acquires human control',()=>{
   test.request(()=>applied++);expect(applied).toBe(0);
   test.grant();expect(applied).toBe(1);
   expect(dom.window.document.querySelector('#viewport')?.getAttribute('data-control')).toBe('human');
+ }finally{dom.window.close();}
+});
+it('acquires control for toolbar actions without showing takeover loading or stealing focus',()=>{
+ const {dom,test}=viewer();let applied=0;
+ try{
+  const button=dom.window.document.querySelector('#control-toggle') as HTMLButtonElement;
+  test.request(()=>applied++,{silent:true});
+  expect(applied).toBe(0);
+  expect(dom.window.document.querySelector('#viewport')?.getAttribute('data-control')).toBe('agent');
+  expect(button.disabled).toBe(false);
+  expect((button.querySelector('[data-kind="cursor"]') as HTMLElement).hidden).toBe(false);
+  expect((button.querySelector('[data-kind="loading"]') as HTMLElement).hidden).toBe(true);
+  test.grant();expect(applied).toBe(1);
+  expect(dom.window.document.activeElement).not.toBe(test.keyboard);
  }finally{dom.window.close();}
 });
 it('splits paste bursts below the server message limit without losing order',()=>{
