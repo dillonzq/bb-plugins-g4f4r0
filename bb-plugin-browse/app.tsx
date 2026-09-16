@@ -121,7 +121,7 @@ function MachineDependencies({
       name: "Fortress browser",
       icon: "Globe",
       ready: info?.browserRunnable,
-      version: info?.browserVersion?.replace(/^Fortress\s*/i, ""),
+      version: info?.browserVersion?.replace(/^(Fortress|Chromium)\s*/i, ""),
       status: info
         ? info.browserRunnable
           ? "Launch verified"

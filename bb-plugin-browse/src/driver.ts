@@ -340,12 +340,28 @@ const el=nodes[0];return ${expression}})()`;
     this.refs = {};
     const lines: string[] = [];
     let index = 0;
-    const interactiveRoles = /button|link|textbox|combobox|checkbox|radio|slider|spinbutton|menuitem|tab|searchbox|switch/i;
+    const interactiveRoles = new Set([
+      "button",
+      "link",
+      "textbox",
+      "combobox",
+      "checkbox",
+      "radio",
+      "slider",
+      "spinbutton",
+      "menuitem",
+      "menuitemcheckbox",
+      "menuitemradio",
+      "tab",
+      "searchbox",
+      "switch",
+    ]);
     for (const node of nodes ?? []) {
       const role = String(node.role?.value ?? "");
       const name = String(node.name?.value ?? "").replace(/\s+/g, " ").trim();
-      if (!role || role === "none" || role === "generic" || (!name && !interactiveRoles.test(role))) continue;
-      if (interactive && !interactiveRoles.test(role)) continue;
+      const isInteractive = interactiveRoles.has(role.toLowerCase());
+      if (!role || role === "none" || role === "generic" || (!name && !isInteractive)) continue;
+      if (interactive && !isInteractive) continue;
       const id = `0-${index++}`;
       const url = node.properties?.find((p: any) => p.name === "url")?.value?.value;
       if (node.backendDOMNodeId)

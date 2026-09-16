@@ -14,6 +14,18 @@ function fixture() {
             backendDOMNodeId: 42,
             properties: [],
           },
+          {
+            role: { value: "InlineTextBox" },
+            name: { value: "Large page text must not leak into interactive snapshots" },
+            backendDOMNodeId: 43,
+            properties: [],
+          },
+          {
+            role: { value: "table" },
+            name: { value: "A data table" },
+            backendDOMNodeId: 44,
+            properties: [],
+          },
         ],
       };
     if (method === "DOM.getContentQuads") return { quads: [[0, 0, 20, 0, 20, 10, 0, 10]] };
@@ -37,6 +49,8 @@ it("binds accessibility refs without enabling Runtime event instrumentation", as
   const driver = await BrowserDriver.connect("/tmp", cdp, new AbortController().signal);
   const snapshot = JSON.parse(await driver.execute(["snapshot", "-i"]));
   expect(snapshot.data.snapshot).toContain('@0-0 button: "Save"');
+  expect(snapshot.data.snapshot).not.toContain("Large page text");
+  expect(snapshot.data.snapshot).not.toContain("data table");
   await driver.execute(["click", "@0-0"]);
   expect(send).toHaveBeenCalledWith("DOM.getContentQuads", { backendNodeId: 42 });
   expect(send.mock.calls.some(([method]) => method === "Runtime.enable")).toBe(false);
