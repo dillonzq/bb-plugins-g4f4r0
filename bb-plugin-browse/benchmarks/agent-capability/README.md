@@ -30,3 +30,7 @@ This suite measures interaction primitives and short planning. It does not repla
 ## Validated smoke trial
 
 The harness was validated through a managed Fortress session with the `login-user` task and seed `smoke-login-1`. Session startup took 4.418 seconds (browser 506 ms, control 1.051 seconds, navigation and first capture 2.856 seconds). The three browser actions completed in 447 ms and MiniWoB returned `done: true` with reward `1`. These numbers are one local smoke run, not benchmark aggregates.
+
+## Browser primitive regression
+
+Run `BROWSE_TEST_ROOT=/path/to/browse/host-data npm run benchmark:capabilities`. The opt-in live test executes five seeded trials each for `use-autocomplete`, `click-tab-2`, and `book-flight`, the widget patterns that failed the first model trial. It checks direct MiniWoB rewards through the real Fortress runtime and removes its disposable profile. This is a browser/control regression with no model calls; do not compare its completion times with agent planning times.

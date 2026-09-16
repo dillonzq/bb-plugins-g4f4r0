@@ -1,6 +1,6 @@
 # Browse interaction and performance validation
 
-> Historical transport validation from the former Stagehand-controlled runtime. Production Browse now uses Fortress with deterministic CDP control; the viewer transport findings remain relevant.
+> Historical transport validation from the former Stagehand-controlled runtime. Production Browse now uses Fortress with deterministic CDP control; the viewer transport findings remain relevant. References below to Stagehand describe the historical test configuration only.
 
 Validated on the Linux server on 2026-09-15 (Berlin). This work targets interactive viewing of the same browser session used by the agent. It does not establish an absolute performance optimum or exhaustive website compatibility.
 
@@ -109,6 +109,14 @@ Deployment validation: typecheck and all 150 tests passed (26 files, two test wo
 The installed `/cast` path delivered 697 frames during a 35-second controlled-acknowledgement check, stepped from tier 0 through 1 to 2, and recovered to tier 0. JPEG headers confirmed 960 × 600 capture at the reduced tier while logical dimensions remained 1280 × 800. A frame already in flight can retain the preceding tier's raster size at a transition. The served viewer contained the updated acknowledgement protocol. No remote-client telemetry was available (`clients: []`), so this validates the installed transport, not user-perceived smoothness. See [installed check](validation/transport-2026-09-15/installed-adaptive.json) and [reusable live check](tests/live-adaptive.mjs).
 
 The disposable installed test session was released and removed from Browse history; its loopback fixture server was stopped. All temporary transport-benchmark Chrome profiles/processes were cleaned up. Adaptive streaming is enabled; WebRTC remains an isolated benchmark, not a production transport.
+
+## Agent interaction regression — September 16
+
+The first GPT-6 MiniWoB pass completed 9 of 12 selected tasks. The failures exposed missing controls rather than a browser-engine crash: custom clickable spans were absent from the compact accessibility snapshot, autocomplete lacked an exact-option primitive, and a read-only calendar field needed widget interaction.
+
+Browse now keeps semantic accessibility references first and appends at most the already bounded visible DOM candidates for custom controls. The new `choose` command fills a query and clicks an exact visible autocomplete option; `date` navigates a visible calendar widget using `YYYY-MM-DD`. Covered-target errors identify the covering element to make inspection actionable.
+
+The live Fortress regression ran five deterministic trials for each former failure: `use-autocomplete`, `click-tab-2`, and `book-flight`. All 15 trials passed MiniWoB's direct reward check. Median complete-task time was 1,368 ms and p95 was 2,944 ms. These timings measure scripted browser primitives on loopback with no model calls; they do not revise the earlier model score or predict remote-client latency. The JSON result is retained as `agent-capability-regression.json` in this thread's storage.
 
 ### Display-engine comparison (2026-09-15)
 

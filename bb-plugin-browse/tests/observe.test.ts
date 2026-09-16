@@ -53,7 +53,7 @@ it("checks occlusion before a shadow element click", async () => {
   (f.w.document as any).elementFromPoint = () => f.w.document.body;
   await expect(
     f.w.eval(elementExpression("custom-app >>> #field")),
-  ).rejects.toThrow("covers");
+  ).rejects.toThrow(/covers this target: <body>/);
   f.dom.window.close();
 });
 

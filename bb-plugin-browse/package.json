@@ -24,6 +24,7 @@
   },
   "scripts": {
     "benchmark:site": "tsx scripts/miniwob-site.mts",
+    "benchmark:capabilities": "tsx tests/agent-capability-live.mts",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "build": "bb plugin build"

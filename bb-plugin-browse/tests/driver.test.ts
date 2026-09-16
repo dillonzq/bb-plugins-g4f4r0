@@ -64,6 +64,21 @@ it("rejects stale accessibility references", async () => {
   await expect(driver.execute(["click", "@missing"])).rejects.toThrow("Unknown or stale reference");
 });
 
+it("supplements interactive snapshots with visible non-semantic controls", async () => {
+  const { cdp } = fixture();
+  (cdp.evaluate as any).mockImplementation(async (expression: string) => expression.includes("DOM observations supplement") ? {
+    elements: [
+      { selector: "#save", tag: "button", label: "Save" },
+      { selector: "#area span:nth-of-type(2)", tag: "span", label: "Custom link" },
+    ],
+  } : "complete");
+  const driver = await BrowserDriver.connect("/tmp", cdp, new AbortController().signal);
+  const snapshot = JSON.parse(await driver.execute(["snapshot", "-i"]));
+  expect(snapshot.data.snapshot.match(/Save/g)).toHaveLength(1);
+  expect(snapshot.data.snapshot).toContain('selector "#area span:nth-of-type(2)" span: "Custom link"');
+  expect(snapshot.data.referenceSyntax).toContain("DOM selectors");
+});
+
 it("reports dialog state without dismissing it", async () => {
   const { cdp, send, listeners } = fixture();
   const driver = await BrowserDriver.connect("/tmp", cdp, new AbortController().signal);

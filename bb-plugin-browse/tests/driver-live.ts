@@ -24,8 +24,9 @@ const signal = AbortSignal.timeout(90_000);
 let browser: Awaited<ReturnType<typeof launchManaged>> | undefined;
 let driver: BrowserDriver | undefined;
 let cdp: Cdp | undefined;
+const profileId = `ab-fortress-validation-${Date.now()}`;
 try {
-  browser = await launchManaged(root, `ab-fortress-validation-${Date.now()}`, signal);
+  browser = await launchManaged(root, profileId, signal);
   cdp = await Cdp.connect(browser.endpoint, true);
   driver = await BrowserDriver.connect(root, cdp, signal);
   await driver.execute(["open", `http://127.0.0.1:${(server.address() as any).port}/`], signal);
@@ -77,5 +78,6 @@ try {
   await driver?.close();
   cdp?.close();
   await browser?.close();
+  await rm(join(root, "profiles", profileId), { recursive: true, force: true });
   await new Promise<void>((resolve) => server.close(() => resolve()));
 }

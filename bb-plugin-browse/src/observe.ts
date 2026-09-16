@@ -40,7 +40,7 @@ if(right<=left||bottom<=top)throw new Error('AB_WAIT: Element is outside the vie
 const x=(left+right)/2,y=(top+bottom)/2;
 let hit=document.elementFromPoint(x,y);while(hit?.shadowRoot){const next=hit.shadowRoot.elementFromPoint(x,y);if(!next||next===hit)break;hit=next;}
 let inside=false;for(let n=hit;n;n=n.parentElement??n.getRootNode()?.host){if(n===e){inside=true;break;}}
-if(!inside)throw new Error('AB_WAIT: Another element covers this target');
+if(!inside){const cover=hit?'<'+hit.localName+(hit.id?'#'+hit.id:'')+(typeof hit.className==='string'&&hit.className.trim()?'.'+hit.className.trim().split(/\\s+/).slice(0,3).join('.'):'')+'> '+(hit.getAttribute?.('aria-label')||hit.getAttribute?.('title')||hit.innerText||'').trim().replace(/\\s+/g,' ').slice(0,120):'unknown';throw new Error('AB_WAIT: Another element covers this target: '+cover);}
 const token='__bbAgentBrowserFillTarget';if(action==='fill')globalThis[token]=e;
 return{x,y,tag:e.localName,editable,token};})()`;
 }

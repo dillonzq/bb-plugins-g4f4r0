@@ -53,7 +53,7 @@ This improves the execution and observation layer. It is not a claim that every 
 
 ## Agent capability benchmark
 
-The reproducible [MiniWoB++ benchmark harness](benchmarks/agent-capability/README.md) covers twelve representative browser tasks with pinned source, deterministic seeds, action budgets, and direct reward scoring. Run its local site with `npm run benchmark:site`.
+The reproducible [MiniWoB++ benchmark harness](benchmarks/agent-capability/README.md) covers twelve representative browser tasks with pinned source, deterministic seeds, action budgets, and direct reward scoring. Run its local site with `npm run benchmark:site`. `npm run benchmark:capabilities` runs five live Fortress trials for each previously weak widget pattern: custom clickable controls, autocomplete, and datepicker workflows. It measures browser primitives without model calls.
 
 ## Architecture
 
@@ -170,7 +170,7 @@ Browse installs the lockfile-pinned Fortress package metadata, downloads the mat
 
 Automation refs such as `@0-19` come from Chromium's accessibility tree and stay bound to backend DOM nodes until navigation or a new snapshot. `snapshot -i` keeps common interactive roles; omit `-i` for a broader tree. Use `frame <selector>` and `frame main` to switch command context. Open shadow controls can use `>>>`; closed shadow controls use snapshot refs.
 
-Supported command families: open/back/forward/reload, snapshot, click/dblclick/hover/fill/type/press/keyboard, select/check/uncheck/upload, scroll/scrollintoview/drag, wait/frame, get/is/focus/eval, storage/cookies/dialog/console/errors, set viewport/headers, network requests/route/unroute, and a11y. Network route supports pass-through, `--abort`, or a fixed `--body` response. Console/error collection enables the Runtime event domain only when requested so ordinary sessions keep the smaller CDP surface.
+Supported command families: open/back/forward/reload, snapshot, click/dblclick/hover/fill/type/press/keyboard, select/choose/date/check/uncheck/upload, scroll/scrollintoview/drag, wait/frame, get/is/focus/eval, storage/cookies/dialog/console/errors, set viewport/headers, network requests/route/unroute, and a11y. `choose <field> <query> <exact option>` selects a visible autocomplete result. `date <field> YYYY-MM-DD` operates a visible calendar widget. Network route supports pass-through, `--abort`, or a fixed `--body` response. Console/error collection enables the Runtime event domain only when requested so ordinary sessions keep the smaller CDP surface.
 
 Streaming, secure credentials, gestures, canvas/link export and printing remain Browse-owned CDP features. Recording uses the shared screencast plus FFmpeg; requested FPS samples frames and does not guarantee every frame is new.
 

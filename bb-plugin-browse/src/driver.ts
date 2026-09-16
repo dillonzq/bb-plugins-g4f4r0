@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Cdp } from "./cdp";
 import { actOnElement } from "./element";
-import { deepQuerySource } from "./observe";
+import { deepQuerySource, observeExpression } from "./observe";
 import { safeUrl } from "./policy";
 import { runtimePath } from "./runtime";
 import { boundedDiagnostic, diagnosticUrl } from "./diagnostic-history";
@@ -339,6 +339,7 @@ const el=nodes[0];return ${expression}})()`;
         );
     this.refs = {};
     const lines: string[] = [];
+    const accessibleNames = new Set<string>();
     let index = 0;
     const interactiveRoles = new Set([
       "button",
@@ -362,6 +363,7 @@ const el=nodes[0];return ${expression}})()`;
       const isInteractive = interactiveRoles.has(role.toLowerCase());
       if (!role || role === "none" || role === "generic" || (!name && !isInteractive)) continue;
       if (interactive && !isInteractive) continue;
+      if (isInteractive && name) accessibleNames.add(name.toLocaleLowerCase());
       const id = `0-${index++}`;
       const url = node.properties?.find((p: any) => p.name === "url")?.value?.value;
       if (node.backendDOMNodeId)
@@ -377,9 +379,21 @@ const el=nodes[0];return ${expression}})()`;
       lines.push(`${node.backendDOMNodeId ? `@${id} ` : ""}${role}${name ? `: ${JSON.stringify(name.slice(0, 300))}` : ""}${state ? ` (${state})` : ""}`);
       if (lines.length >= 1200) break;
     }
+    if (interactive && lines.length < 1200) {
+      // Accessibility trees omit non-semantic custom controls. Keep the
+      // compact semantic snapshot, then add bounded visible DOM selectors.
+      const observed = await this.evaluate(observeExpression).catch(() => null);
+      for (const element of observed?.elements ?? []) {
+        const label = String(element.label ?? "").replace(/\s+/g, " ").trim();
+        const role = String(element.role || element.tag || "control").toLowerCase();
+        if (!label || !element.selector || accessibleNames.has(label.toLocaleLowerCase())) continue;
+        lines.push(`selector ${JSON.stringify(element.selector)} ${role}: ${JSON.stringify(label.slice(0, 300))}`);
+        if (lines.length >= 1200) break;
+      }
+    }
     return {
       snapshot: lines.join("\n"),
-      referenceSyntax: "Use @<id>, for example @0-19, from this snapshot.",
+      referenceSyntax: "Use @<id> refs or quoted DOM selectors. Reinspect after page changes.",
     };
   }
 
@@ -456,6 +470,37 @@ const el=nodes[0];return ${expression}})()`;
     await this.cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key, modifiers, windowsVirtualKeyCode: code });
   }
 
+  private async choose(field: string, query: string, option: string, signal?: AbortSignal) {
+    await this.element("fill", field, query, 3000, signal);
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      signal?.throwIfAborted();
+      const candidate = await this.evaluate(`(()=>{const wanted=${JSON.stringify(option)}.trim().toLocaleLowerCase();const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'};const text=e=>(e.getAttribute('aria-label')||e.getAttribute('data-value')||e.value||e.innerText||e.textContent||'').replace(/\\s+/g,' ').trim();const candidates=[...document.querySelectorAll('[role="option"],[role="menuitem"],.ui-autocomplete li,.ui-menu-item,datalist option')].filter(visible);const exact=candidates.find(e=>text(e).toLocaleLowerCase()===wanted);if(!exact)return null;const target=exact.matches('option')?exact:(exact.querySelector('a,[role="option"]')||exact);target.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});const r=target.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2,label:text(exact)}})()`);
+      if (candidate) {
+        await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: candidate.x, y: candidate.y, buttons: 0 });
+        await this.cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: candidate.x, y: candidate.y, button: "left", buttons: 1, clickCount: 1 });
+        await this.cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: candidate.x, y: candidate.y, button: "left", buttons: 0, clickCount: 1 });
+        return { value: await this.dom(field, "el.value"), selected: candidate.label };
+      }
+      if (Date.now() >= deadline) throw new Error(`Autocomplete option ${JSON.stringify(option)} was not visible.`);
+      await sleep(50, undefined, signal ? { signal } : undefined);
+    }
+  }
+
+  private async setDate(field: string, value: string, signal?: AbortSignal) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Date must use YYYY-MM-DD.");
+    const [year, month, day] = value.split("-").map(Number);
+    await this.pointer(field);
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      signal?.throwIfAborted();
+      const result = await this.evaluate(`(()=>{const year=${year},month=${month},day=${day};const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'};const picker=[...document.querySelectorAll('[role="dialog"],.ui-datepicker,[class*="datepicker"]')].find(visible);if(!picker)return null;const title=(picker.querySelector('.ui-datepicker-title,[class*="datepicker-title"]')?.textContent||'').trim();const parsed=new Date(Date.parse('1 '+title));if(!Number.isNaN(parsed.valueOf())){const delta=(year-parsed.getFullYear())*12+(month-1-parsed.getMonth());if(delta!==0){const next=delta>0;const nav=picker.querySelector(next?'.ui-datepicker-next,[aria-label*="next" i]':'.ui-datepicker-prev,[aria-label*="prev" i]');if(nav){nav.click();return{navigating:true}}}}const cells=[...picker.querySelectorAll('[data-date],td a,button')].filter(visible);const match=cells.find(e=>{const t=(e.getAttribute('data-date')||e.textContent||'').trim();const parent=e.closest('[data-year],[data-month]');const py=Number(parent?.getAttribute('data-year')),pm=Number(parent?.getAttribute('data-month'));return Number(t)===day&&(!Number.isFinite(py)||py===year)&&(!Number.isFinite(pm)||pm===month-1)&&!e.closest('.ui-datepicker-other-month')});if(!match)return{waiting:true};match.click();return{selected:true}})()`);
+      if (result?.selected) return { value: await this.dom(field, "el.value") };
+      if (Date.now() >= deadline) throw new Error(`Date ${value} was not available in the visible picker.`);
+      await sleep(result?.navigating ? 20 : 50, undefined, signal ? { signal } : undefined);
+    }
+  }
+
   async execute(args: string[], signal?: AbortSignal): Promise<string> {
     signal?.throwIfAborted();
     const [cmd, ...a] = args;
@@ -520,6 +565,12 @@ const el=nodes[0];return ${expression}})()`;
         data = { values: await this.dom(a[0], `(()=>{const values=${JSON.stringify(values)};for(const o of el.options)o.selected=values.includes(o.value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return [...el.selectedOptions].map(o=>o.value)})()`) };
         break;
       }
+      case "choose":
+        data = await this.choose(a[0], a[1] ?? "", a.slice(2).join(" "), signal);
+        break;
+      case "date":
+        data = await this.setDate(a[0], a[1], signal);
+        break;
       case "check":
       case "uncheck": {
         const checked = await this.dom(a[0], "!!el.checked");

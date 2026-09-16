@@ -17,6 +17,8 @@ const commands = new Set([
   "check",
   "uncheck",
   "select",
+  "choose",
+  "date",
   "drag",
   "scroll",
   "scrollintoview",
