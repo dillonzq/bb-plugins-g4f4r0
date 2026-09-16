@@ -91,8 +91,8 @@ export function SidebarDetails() {
     const location = branch || thread.environment?.name || thread.host?.name;
     const at = Math.max(thread.updatedAt, thread.latestAttentionAt);
     return <span key={m.id + '-' + mounts.indexOf(m)} style={{ display: 'contents' }}>
-      {createPortal(<>{location && <><Icon name={branch ? 'GitBranch' : thread.environment?.name ? 'Folder' : 'Laptop'} aria-hidden /><span className="dusk-thread-location">{location}</span></>}
-        {location && <span aria-hidden>·</span>}
+      {createPortal(<>{location && <><span className="dusk-thread-loc-icon" aria-hidden><Icon name={branch ? 'GitBranch' : thread.environment?.name ? 'Folder' : 'Laptop'} className="size-3" /></span><span className="dusk-thread-location" title={location}>{location}</span></>}
+        {location && <span className="dusk-thread-sep" aria-hidden>·</span>}
         <time dateTime={new Date(at).toISOString()} title={`Last update: ${new Date(at).toLocaleString()}`}>{relativeMessageTime(at, now)}</time>
       </>, m.meta)}
       {m.pin && createPortal(<PinAction id={m.id} pinned={thread.isPinned} className={m.pinClass} />, m.pin)}
