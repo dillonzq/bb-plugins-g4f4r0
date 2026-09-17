@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
-import plugin, { calculateCpuUsage, calculateNetworkRates, parseProcesses } from "../server.ts";
+import plugin, { calculateCpuUsage, calculateNetworkRates, parseNetstatInterfaces, parseProcesses } from "../server.ts";
 
 test("CPU deltas handle warmup, idle, full utilization, and counter resets", () => {
   assert.equal(calculateCpuUsage(null, { idle: 0, total: 100 }), null);
@@ -21,6 +21,23 @@ test("process results and names are bounded and ties have deterministic order", 
   const result = parseProcesses(Array.from({ length: 200 }, (_, i) => `${200 - i} 5.0 1.0 100 S ${"n".repeat(200)}`).join("\n"));
   assert.equal(result.total, 200); assert.equal(result.top.length, 6);
   assert.equal(result.top[0].pid, 1); assert.ok(result.top.every((p) => p.name.length === 128));
+});
+
+test("netstat parsing skips loopback/inactive rows and ranks by traffic", () => {
+  const source = [
+    "Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll",
+    "lo0 16384 <Link#1> 2085336 0 1314274984 2085336 0 1314274984 0",
+    "gif0* 1280 <Link#2> 0 0 0 0 0 0 0",
+    "en0 1500 <Link#15> 02:00:00:00:00:00 11963783 0 10437412649 15981632 0 20307530479 0",
+    "en0 1500 192.168.1 192.168.1.5 11963783 - 10437412649 15981632 - 20307530479 -",
+    "utun4 1500 <Link#20> 100 0 500 200 0 600 0",
+    "bad* 1500 <Link#21> x y z",
+  ].join("\n");
+  assert.deepEqual(parseNetstatInterfaces(source), [
+    { interface: "en0", rxBytes: 10437412649, txBytes: 20307530479 },
+    { interface: "utun4", rxBytes: 500, txBytes: 600 },
+  ]);
+  assert.deepEqual(parseNetstatInterfaces("nothing here\n"), []);
 });
 
 test("network rates use actual elapsed time and reject warmup, resets and interface changes", () => {

@@ -200,7 +200,33 @@ async function readDisk() {
   }
 }
 
+export function parseNetstatInterfaces(source: string): NetworkTotals[] {
+  // macOS `netstat -ibn`: one <Link row per interface. Address may be empty,
+  // so counters are read from the end (Ibytes = last-4, Obytes = last-2).
+  const rows: NetworkTotals[] = [];
+  for (const line of source.split("\n")) {
+    if (!line.includes("<Link")) continue;
+    const tokens = line.trim().split(/\s+/);
+    if (tokens.length < 6) continue;
+    const name = tokens[0];
+    if (name.startsWith("lo") || name.includes("*")) continue;
+    const rxBytes = Number(tokens[tokens.length - 5]);
+    const txBytes = Number(tokens[tokens.length - 2]);
+    if (![rxBytes, txBytes].every((value) => Number.isFinite(value) && value >= 0)) continue;
+    rows.push({ interface: name, rxBytes, txBytes });
+  }
+  return rows.sort((left, right) => right.rxBytes + right.txBytes - (left.rxBytes + left.txBytes));
+}
+
 async function readNetworkTotals(signal: AbortSignal): Promise<NetworkTotals | null> {
+  if (platform() === "darwin") {
+    try {
+      const { stdout } = await execFileAsync("netstat", ["-ibn"], { timeout: 1500, maxBuffer: 512 * 1024, signal });
+      return parseNetstatInterfaces(stdout)[0] ?? null;
+    } catch {
+      return null;
+    }
+  }
   if (platform() !== "linux") return null;
   try {
     const source = await readFile("/proc/net/dev", { encoding: "utf8", signal });
