@@ -72,7 +72,7 @@ CPU percent is the change between samples. The first sample has no percent. Per-
 
 Load averages are 1, 5, and 15 minutes. They are not CPU percents.
 
-Memory used is total minus available. On Linux, available is `MemAvailable`. Cache includes `Cached` and `SReclaimable`. Cache and buffers are supporting counters, not extra used memory.
+Memory used is total minus available. On Linux, available is `MemAvailable`. On macOS, available is free plus inactive, speculative and purgeable pages, so cached files are not counted as used; cache is the file-backed page count. Apple's Memory Used is app, wired and compressed memory instead, so the two figures may differ; Beacon is not calibrated against Activity Monitor. Cache and buffers are supporting counters, not extra used memory. If those counters cannot be read, memory shows as unavailable and is left out of health and alerts.
 
 Swap appears only when a swap total greater than zero is readable. Beacon never creates it.
 
@@ -130,6 +130,10 @@ For a UI change, open Status, wait for two samples, try a 390px width, then hide
 Charts reset or show skeletons. History expired. CPU and network need a second sample. Logs are separate from charts.
 
 Memory is amber with no toast. Amber starts at 75%. Memory alerts need 90% for a full minute of samples.
+
+Memory may differ from Activity Monitor. Beacon treats inactive and purgeable pages as available; Apple's Memory Used is app, wired and compressed memory. Neither counts cached files as used.
+
+Memory says unavailable. The counters could not be read. Health and alerts skip memory in that state.
 
 No toast appeared. Check both settings, keep BB visible, try `test-alert`. Real alerts also wait on confirmation and cooldown.
 
