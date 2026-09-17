@@ -8,7 +8,7 @@ Status sits in the sidebar footer. Open it while you work. An optional backgroun
 
 Beacon reads system counters. It does not change server settings, enable swap, kill processes, or call a monitoring service. It watches the BB server host only, not other enrolled machines or a container's cgroup limit.
 
-Needs BB 0.43 and Plugin SDK 0.4.87. Network rates are Linux-only.
+Needs BB 0.43 and Plugin SDK 0.4.87. Network rates need Linux or macOS.
 
 ## Install
 
@@ -78,7 +78,7 @@ Swap appears only when a swap total greater than zero is readable. Beacon never 
 
 Disk is `/`. The row shows used space on the filesystem mounted at `/`, the meter's basis: total minus free blocks. On Linux that excludes separate mounts and partitions. On macOS, where `/` is one volume of an APFS container whose volumes share space, the same call reports container-wide usage and matches `diskutil info /`; `df` on `/` reports only the read-only system volume, and the volume that fills is `/System/Volumes/Data`. Reserved blocks can make used plus writable free space add up to less than total.
 
-Network is received and sent bytes per second on the non-loopback interface with the most cumulative traffic. Not a sum of interfaces. Rates go unavailable when the interface changes or counters reset. Linux only.
+Network is received and sent bytes per second on the non-loopback interface with the most cumulative traffic. Not a sum of interfaces. Rates go unavailable when the interface changes or counters reset. Linux and macOS; other platforms report no interface.
 
 Snapshots list six PIDs by lifetime-average CPU, PID as tie-break. The popover shows the first three. Process CPU is relative to one core and can exceed 100%. That is not the sampled host CPU.
 
@@ -139,7 +139,7 @@ No toast appeared. Check both settings, keep BB visible, try `test-alert`. Real 
 
 Logs are empty. Monitoring is off by default.
 
-Network says unavailable. Needs Linux and a readable non-loopback interface, then two samples.
+Network says unavailable. Needs Linux or macOS and a readable non-loopback interface, then two samples.
 
 A process shows more than 100% CPU. Lifetime average on more than one core.
 

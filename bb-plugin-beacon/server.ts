@@ -165,10 +165,12 @@ export function parseVmStatMemory(source: string): Pick<MemoryDetails, "availabl
   const freePages = counts.get("Pages free");
   const inactivePages = counts.get("Pages inactive");
   const speculativePages = counts.get("Pages speculative");
-  // Truncated vm_stat output would silently drop cache, so require every counter
-  // that decides availability and let the caller report memory as unknown instead.
-  if (freePages === undefined || inactivePages === undefined || speculativePages === undefined) return null;
-  const reclaimablePages = freePages + inactivePages + speculativePages + (counts.get("Pages purgeable") ?? 0);
+  const purgeablePages = counts.get("Pages purgeable");
+  // Truncated vm_stat output would silently drop reclaimable and cache pages, so
+  // require every counter that decides availability and let the caller report memory
+  // as unknown instead. Only the informational cache counter may be missing.
+  if (freePages === undefined || inactivePages === undefined || speculativePages === undefined || purgeablePages === undefined) return null;
+  const reclaimablePages = freePages + inactivePages + speculativePages + purgeablePages;
   return { availableBytes: reclaimablePages * pageSize, cachedBytes: (counts.get("File-backed pages") ?? 0) * pageSize };
 }
 
@@ -373,20 +375,16 @@ export default async function plugin(bb: BbPluginApi) {
     let current: CpuTimes;
     let availableBytes: number | null;
     if (platform() === "linux") {
-      const [stat, meminfo] = await Promise.all([
+      const [stat, memory] = await Promise.all([
         readFile("/proc/stat", { encoding: "utf8", signal }),
-        readFile("/proc/meminfo", { encoding: "utf8", signal }),
+        readMemoryDetails(signal),
       ]);
       const times = stat.split("\n", 1)[0].trim().split(/\s+/).slice(1, 9).map(Number);
       if (times.length < 8 || !times.every(Number.isFinite)) throw new Error("CPU counters unavailable");
       current = { idle: times[3] + times[4], total: times.reduce((sum, value) => sum + value, 0) };
-      const available = /^MemAvailable:\s+(\d+)\s+kB$/m.exec(meminfo);
-      if (!available) throw new Error("Available memory counter unavailable");
-      availableBytes = Number(available[1]) * 1024;
+      availableBytes = memory?.availableBytes ?? null;
     } else {
       current = readCpuTimes(cpus());
-      // Same accounting as the snapshot, so alerts match the meter. Unknown counters
-      // skip the sample rather than feed a free-page guess into alert thresholds.
       availableBytes = (await readMemoryDetails(signal))?.availableBytes ?? null;
     }
     signal.throwIfAborted();
