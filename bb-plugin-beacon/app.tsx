@@ -117,7 +117,7 @@ function StatusPopover({ snapshot }: { snapshot: ServerSnapshot }) {
       <Section label="Disk" value={disk ? formatPercent(disk.usagePercent) : "Unavailable"}>
         {disk ? <>
           <Meter value={disk.usagePercent} label="Disk usage" />
-          <Row label="Free" value={`${formatBytes(disk.freeBytes)} of ${formatBytes(disk.totalBytes)}`} />
+          <Row label="Used" value={`${formatBytes(disk.usedBytes)} of ${formatBytes(disk.totalBytes)}`} />
         </> : null}
       </Section>
       <Section label="Network" value={network ? undefined : "Unavailable"}>

@@ -76,7 +76,7 @@ Memory used is total minus available. On Linux, available is `MemAvailable`. On 
 
 Swap appears only when a swap total greater than zero is readable. Beacon never creates it.
 
-Disk is `/`. Used space is allocated blocks. Available excludes reserved blocks, so used plus available may not equal total.
+Disk is `/`. The row shows used space on the filesystem mounted at `/`, the meter's basis: total minus free blocks. On Linux that excludes separate mounts and partitions. On macOS, where `/` is one volume of an APFS container whose volumes share space, the same call reports container-wide usage and matches `diskutil info /`; `df` on `/` reports only the read-only system volume, and the volume that fills is `/System/Volumes/Data`. Reserved blocks can make used plus writable free space add up to less than total.
 
 Network is received and sent bytes per second on the non-loopback interface with the most cumulative traffic. Not a sum of interfaces. Rates go unavailable when the interface changes or counters reset. Linux only.
 
